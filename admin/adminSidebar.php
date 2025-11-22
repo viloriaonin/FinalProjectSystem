@@ -98,21 +98,10 @@ try {
         <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right">
           <a href="myProfile.php" class="dropdown-item">
             <!-- Message Start -->
-            <div class="media">
-              <?php 
-                if($user_image != '' || $user_image != null || !empty($user_image)){
-                  echo '<img src="../assets/dist/img/'.$user_image.'" class="img-size-50 mr-3 img-circle alt="User Image">';
-                }else{
-                  echo '<img src="../assets/dist/img/image.png" class="img-size-50 mr-3 img-circle alt="User Image">';
-                }
-              ?>
             
-              <div class="media-body">
-                <h3 class="dropdown-item-title py-3">
-                  <?= ucfirst($first_name_user) .' '. ucfirst($last_name_user) ?>
-                </h3>
-              </div>
-            </div>
+            
+             
+            
             <!-- Message End -->
           </a>         
           <div class="dropdown-divider"></div>
