@@ -15,16 +15,14 @@ $stmt = $pdo->prepare("SELECT label, field_name, field_type FROM document_fields
 $stmt->execute([$documentId]);
 $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Start building the form
-// This form will submit all its data to process_submission.php
-$html = '<form action="process_submission.php" method="POST">';
+$html = '';
 
-// Add a hidden field to pass the document_id to the next script
+// IMPORTANT: We pass the document_id as a hidden field so the main form knows which ID to process
 $html .= '<input type="hidden" name="document_id" value="' . htmlspecialchars($documentId) . '">';
-$html .= '<h3>2. Fill in Details:</h3>';
 
 if (!$fields) {
-    $html .= "<p>This document type does not require any additional information.</p>";
+    // If no fields are found in the database, simply return nothing (or a message)
+    // The main page handles the button visibility.
 }
 
 // Loop through the fields and create the correct input type
@@ -33,15 +31,17 @@ foreach ($fields as $field) {
     $name = htmlspecialchars($field['field_name']);
     $type = htmlspecialchars($field['field_type']);
 
-    $html .= "<div>";
+    // Use 'form-group' for spacing
+    $html .= "<div class='form-group'>";
     $html .= "<label for='{$name}'>{$label}:</label>";
 
     if ($type == 'textarea') {
-        $html .= "<textarea id='{$name}' name='{$name}' required></textarea>";
+        // Added class='form-control' for AdminLTE styling
+        $html .= "<textarea id='{$name}' name='{$name}' class='form-control' required></textarea>";
     
     } elseif ($type == 'select' && $name == 'indigency_reason') {
-        // This builds the special dropdown for Indigency Reason
-        $html .= "<select id='{$name}' name='{$name}' required>";
+        // Special Indigency Dropdown
+        $html .= "<select id='{$name}' name='{$name}' class='form-control' required>";
         $html .= "<option value='' disabled selected>-- Choose a reason --</option>";
         $html .= "<option value='scholarship'>SCHOLARSHIP</option>";
         $html .= "<option value='medical'>MEDICAL</option>";
@@ -49,16 +49,16 @@ foreach ($fields as $field) {
         $html .= "</select>";
         
     } else {
-        // Works for type="text", "number", "date", etc.
-        $html .= "<input type='{$type}' id='{$name}' name='{$name}' required>";
+        // Standard Inputs (text, number, date, etc.)
+        // Added class='form-control'
+        $html .= "<input type='{$type}' id='{$name}' name='{$name}' class='form-control' required>";
     }
     
     $html .= "</div>";
 }
 
-$html .= '<button type="submit">Submit and Generate Document</button>';
-$html .= '</form>';
+// DO NOT add <button> here. The main page has the button.
+// DO NOT add </form> here.
 
-// Echo the final HTML back to the JavaScript fetch request
 echo $html;
 ?>
