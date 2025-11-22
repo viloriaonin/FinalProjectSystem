@@ -1,55 +1,56 @@
-<?php  
 
+<?php
+file_put_contents("debug_update.log", "updateSettings.php reached\n", FILE_APPEND);
 include_once '../connection.php';
+session_start();
 
+try {
+    $id = $_POST['barangay_id'] ?? null;
+    $barangay = $_POST['barangay'] ?? null;
+    $municipality = $_POST['municipality'] ?? null;
+    $province = $_POST['province'] ?? null;
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+    $email = $_POST['email'];
 
-$id = $con->real_escape_string($_POST['id']);
-$barangay = $con->real_escape_string($_POST['barangay']);
-$zone = $con->real_escape_string($_POST['zone']);
-$district = $con->real_escape_string($_POST['district']);
-$address = $con->real_escape_string($_POST['address']);
-$postal_address = $con->real_escape_string($_POST['postal_address']);
-$image = $con->real_escape_string($_FILES['add_image']['name']);
+    // IMAGE UPLOAD
+    $image_path = null;
 
+    if (!empty($_FILES['add_image']['name'])) {
 
-if(isset($image)){
+        $fileName = $_FILES['add_image']['name'];
+        $tmpName = $_FILES['add_image']['tmp_name'];
+        $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
 
-    $sql = "SELECT `id`,`image`,`image_path` FROM `barangay_information` WHERE `id` = ?";
-    $stmt = $con->prepare($sql) or die ($con->error);
-    $stmt->bind_param('s',$id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $row = $result->fetch_assoc();
-    $old_image = $row['image'];
-    $old_image_path = $row['image_path'];
+        $newName = "logo_" . time() . "." . $fileExt;
+        $uploadDir = "../assets/logo/";
+        $uploadPath = $uploadDir . $newName;
 
-  if($image != '' || $image != null || !empty($image)){
+        if (move_uploaded_file($tmpName, $uploadPath)) {
+            $image_path = $uploadPath;
 
-    if($old_image != '' || $old_image != null || !empty($old_image)){
-      unlink($old_image_path);
+            $updateImg = $con->prepare("UPDATE barangay_information SET images = ?, image_path = ? WHERE barangay_id = ?");
+            $updateImg->bind_param("ssi", $newName, $uploadPath, $id);
+            $updateImg->execute();
+        }
     }
 
-    $type = explode('.',$image);
-    $type = $type[count($type) -1]; 
-    $new_image_name = uniqid(rand()) .'.'. $type;
-    $new_image_path = '../assets/dist/img/' . $new_image_name;
-    move_uploaded_file($_FILES['add_image']['tmp_name'], $new_image_path);
+    // UPDATE barangay information
+    // $sql1 = $con->prepare("UPDATE barangay_information 
+    //                        SET barangay=?, municipality=?, province=? 
+    //                        WHERE barangay_id=?");
+    // $sql1->bind_param("sssi", $barangay, $municipality, $province, $id);
+    // $sql1->execute();
 
-  }else{
-    $new_image_name = $old_image;
-    $new_image_path = $old_image_path;
-  }
+    // UPDATE user login details
+    $sql2 = $con->prepare("UPDATE users 
+                           SET username=?, password=?, email_address=? 
+                           WHERE user_id=?");
+    $sql2->bind_param("sssi", $username, $password, $email, $_SESSION['user_id']);
+    $sql2->execute();
 
-  
-  
-  $sql_insert = "UPDATE  `barangay_information` SET `barangay` = ?, `zone` = ?, `district` = ?, `image` = ?, `image_path` = ?, `address` = ?, `postal_address` = ? WHERE `id` = ?";
-  $stmt_insert = $con->prepare($sql_insert) or die ($con->error);
-  $stmt_insert->bind_param('ssssssss',$barangay,$zone,$district,$new_image_name,$new_image_path,$address,$postal_address,$id);
-  $stmt_insert->execute();
-  $stmt_insert->close();
-
+    echo "updated";  // VERY IMPORTANT - your JS relies on this
+    
+} catch (Exception $e) {
+    echo "error: " . $e->getMessage();
 }
-
-
-
-?>

@@ -1,55 +1,77 @@
 <?php 
 
+include_once '../db_connection.php';
+session_start();
 
+// Set header to JSON for the AJAX response
+header('Content-Type: application/json');
 
-include_once '../connection.php';
+try {
 
+    // Check if ID is sent (Using resident_id to match your database column)
+    if(isset($_POST['resident_id'])){
+        
+        $id = $_POST['resident_id'];
+        
+        // Start Transaction
+        $pdo->beginTransaction();
 
-try{
+        // --- 1. GET RESIDENT INFO FOR ACTIVITY LOG (Before we move them) ---
+        // We select from archivedResidence because that's where they are right now
+        $sql_check = "SELECT first_name, last_name FROM archivedResidence WHERE resident_id = :id";
+        $stmt_check = $pdo->prepare($sql_check);
+        $stmt_check->execute([':id' => $id]);
+        $row_resident = $stmt_check->fetch();
 
-  if(isset($_REQUEST['residence_id'])){
-    $residence_id = $con->real_escape_string(trim($_REQUEST['residence_id']));
-    $archive_status = 'NO';
-    $residence_status = 'ACTIVE';
-    $date_archive = date("m/d/Y h:i A");
+        $first_name = $row_resident['first_name'] ?? 'Unknown';
+        $last_name  = $row_resident['last_name'] ?? 'Unknown';
 
-    $sql_archive_residence_information = "UPDATE `residence_status` SET `archive` = ?, `date_unarchive` = ?,  `status` = ? WHERE `residence_id` = ?";
-    $stmt_archive_residence_information = $con->prepare($sql_archive_residence_information) or die($con->error);
-    $stmt_archive_residence_information->bind_param('ssss',$archive_status,$date_archive,$residence_status,$residence_id);
-    $stmt_archive_residence_information->execute();
-    $stmt_archive_residence_information->close();
+        // --- 2. RESTORE: Copy back to main table ---
+        $sqlRestore = "INSERT INTO residence_information SELECT * FROM archivedResidence WHERE resident_id = :id";
+        $stmtRestore = $pdo->prepare($sqlRestore);
+        $stmtRestore->execute([':id' => $id]);
 
+        // --- 3. DELETE: Remove from archive table ---
+        $sqlDelete = "DELETE FROM archivedResidence WHERE resident_id = :id";
+        $stmtDelete = $pdo->prepare($sqlDelete);
+        $stmtDelete->execute([':id' => $id]);
 
-    $sql_check_resident = "SELECT first_name, last_name FROM residence_information WHERE residence_id = ?";
-    $stmt_check_resident = $con->prepare($sql_check_resident) or die ($con->error);
-    $stmt_check_resident->bind_param('s',$residence_id);
-    $stmt_check_resident->execute();
-    $result_check_resident = $stmt_check_resident->get_result();
-    $row_resident_check = $result_check_resident->fetch_assoc();
-    $first_name = $row_resident_check['first_name'];
-    $last_name = $row_resident_check['last_name'];
+        // --- 4. INSERT ACTIVITY LOG ---
+        $date_activity = date("j-n-Y g:i A");
+        // Assuming the logged-in user is the admin performing the action
+        $admin_name = $_SESSION['username'] ?? 'ADMIN'; 
+        
+        $message = strtoupper($admin_name) . ': UNDELETED RESIDENT - ' . $id . ' | - ' . $first_name . ' ' . $last_name;
+        $status_log = 'restore'; // Changed from 'delete' to 'restore' to be more accurate, or keep 'delete' if you prefer
 
-    $date_activity = $now = date("j-n-Y g:i A");  
-    $admin = strtoupper('ADMIN').':' .' '. 'UNDELETED RESIDENT - '.' ' .$residence_id.' | '  .' - '.$first_name .' '. $last_name;
-    $status_activity_log = 'delete';
-    $sql_activity_log = "INSERT INTO activity_log (`message`,`date`,`status`)VALUES(?,?,?)";
-    $stmt_activity_log = $con->prepare($sql_activity_log) or die ($con->error);
-    $stmt_activity_log->bind_param('sss',$admin,$date_activity,$status_activity_log);
-    $stmt_activity_log->execute();
-    $stmt_activity_log->close();
+        $sql_log = "INSERT INTO activity_log (`message`, `date`, `status`) VALUES (:message, :date, :status)";
+        $stmt_log = $pdo->prepare($sql_log);
+        $stmt_log->execute([
+            ':message' => $message,
+            ':date'    => $date_activity,
+            ':status'  => $status_log
+        ]);
 
+        // Commit changes
+        $pdo->commit();
 
+        echo json_encode(['status' => 'success', 'message' => 'Resident unarchived successfully.']);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'No ID provided.']);
+    }
 
+} catch(Exception $e){
+    // Rollback changes if anything failed
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     
-
-
-
-  }
-  
-
-}catch(Exception $e){
-  echo $e->getMessage();
+    // Check specifically for duplicate entry (if they are already in the main table)
+    if ($e->getCode() == 23000) {
+        echo json_encode(['status' => 'error', 'message' => 'Error: This resident ID already exists in the active list.']);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'Database Error: ' . $e->getMessage()]);
+    }
 }
-
 
 ?>

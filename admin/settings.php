@@ -11,32 +11,30 @@ try{
   if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin'){
   
     $user_id = $_SESSION['user_id'];
-    $sql_user = "SELECT * FROM `users` WHERE `id` = ? ";
+    $sql_user = "SELECT * FROM `users` WHERE `user_id` = ? ";
     $stmt_user = $con->prepare($sql_user) or die ($con->error);
     $stmt_user->bind_param('s',$user_id);
     $stmt_user->execute();
     $result_user = $stmt_user->get_result();
     $row_user = $result_user->fetch_assoc();
-    $first_name_user = $row_user['first_name'] ?? '';
-    $last_name_user = $row_user['last_name'] ?? '';
+    $username_user = $row_user['username'] ?? '';
+    $password_user = $row_user['password'] ?? '';
     $user_type = $row_user['user_type'] ?? '';
-    $user_image = $row_user['image'] ?? '';
+    $email_user = $row_user['email_address'] ?? '';
   
   
     $sql = "SELECT * FROM `barangay_information`";
   $query = $con->prepare($sql) or die ($con->error);
   $query->execute();
   $result = $query->get_result();
-  while($row = $result->fetch_assoc()){
+
+     $row = $result->fetch_assoc();
       $barangay = $row['barangay'];
-      $zone = $row['zone'];
-      $district = $row['district'];
-      $image = $row['image'];
+      $municipality = $row['municipality'];
+      $province  = $row['province'];
+      $image     = $row['images'];
       $image_path = $row['image_path'];
-      $id = $row['id'];
-      $address = $row['address'];
-      $postal_address = $row['postal_address'];
-  }
+      $id = $row['barangay_id'];
   
   
   }else{
@@ -85,255 +83,8 @@ try{
 
 </head>
 <body class="hold-transition dark-mode sidebar-mini ">
-<div class="wrapper">
 
-  <!-- Preloader -->
-  <div class="preloader flex-column justify-content-center align-items-center">
-    <img class="animation__wobble " src="../assets/dist/img/loader.gif" alt="AdminLTELogo" height="70" width="70">
-  </div>
-
-  <!-- Navbar -->
-  <nav class="main-header navbar navbar-expand navbar-dark">
-    <!-- Left navbar links -->
-    <ul class="navbar-nav">
-      <li class="nav-item">
-        <h5><a class="nav-link text-white" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block" style="font-variant: small-caps;">
-        <h5 class="nav-link text-white" ><?= $barangay ?></h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block">
-        <h5 class="nav-link text-white" >-</h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block">
-        <h5 class="nav-link text-white" ><?= $zone ?></h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block">
-        <h5 class="nav-link text-white" >-</h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block">
-        <h5 class="nav-link text-white" ><?= $district ?></h5>
-      </li>
-    </ul>
-
-    <!-- Right navbar links -->
-    <ul class="navbar-nav ml-auto">
-
-      <!-- Messages Dropdown Menu -->
-      <li class="nav-item dropdown">
-        <a class="nav-link" data-toggle="dropdown" href="#">
-          <i class="far fa-user"></i>
-        </a>
-        <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right">
-          <a href="myProfile.php" class="dropdown-item">
-            <!-- Message Start -->
-            <div class="media">
-              <?php 
-                if($user_image != '' || $user_image != null || !empty($user_image)){
-                  echo '<img src="../assets/dist/img/'.$user_image.'" class="img-size-50 mr-3 img-circle alt="User Image">';
-                }else{
-                  echo '<img src="../assets/dist/img/image.png" class="img-size-50 mr-3 img-circle alt="User Image">';
-                }
-              ?>
-            
-              <div class="media-body">
-                <h3 class="dropdown-item-title py-3">
-                  <?= ucfirst($first_name_user) .' '. ucfirst($last_name_user) ?>
-                </h3>
-              </div>
-            </div>
-            <!-- Message End -->
-          </a>         
-          <div class="dropdown-divider"></div>
-          <a href="../logout.php" class="dropdown-item dropdown-footer">LOGOUT</a>
-        </div>
-      </li>
-    </ul>
-  </nav>
-  <!-- /.navbar -->
-
-  <!-- Main Sidebar Container -->
-  <aside class="main-sidebar sidebar-dark-primary elevation-4 sidebar-no-expand">
-    <!-- Brand Logo -->
-    <a href="#" class="brand-link text-center">
-    <?php 
-                    
-        if($image != '' || $image != null || !empty($image)){
-          echo '<img src="'.$image_path.'" id="logo_image" class="img-circle elevation-5 img-bordered-sm" alt="logo" style="width: 70%;">';
-        }else{
-          echo ' <img src="../assets//logo//logo.png" id="logo_image" class="img-circle elevation-5 img-bordered-sm" alt="logo" style="width: 70%;">';
-        }
-
-      ?>
-      <span class="brand-text font-weight-light"></span>
-    </a>
-
-    <!-- Sidebar -->
-    <div class="sidebar">
-    
-
-    <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-        <div class="image">
-          <img src="../assets/dist/img/logo.png" class="img-circle elevation-5 img-bordered-sm" alt="User Image">
-        </div>
-        <div class="info text-center">
-          <a href="#" class="d-block text-bold"><?= strtoupper($user_type) ?></a>
-        </div>
-      </div>
-      <!-- Sidebar Menu -->
-      <nav class="mt-2">
-      <ul class="nav nav-pills nav-sidebar flex-column nav-child-indent" data-widget="treeview" role="menu" data-accordion="false">
-          <li class="nav-item">
-            <a href="dashboard.php" class="nav-link">
-              <i class="nav-icon fas fa-tachometer-alt"></i>
-              <p>
-                Dashboard
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon fas fa-users-cog"></i>
-              <p>
-              Barangay Official
-                <i class="right fas fa-angle-left"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="newOfficial.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>New Official</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="allOfficial.php" class="nav-link">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>List of Official</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="officialEndTerm.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>Official End Term</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link ">
-              <i class="nav-icon fas fa-users"></i>
-              <p>
-                Residence
-                <i class="right fas fa-angle-left"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="newResidence.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>New Residence</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="allResidence.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>All Residence</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="archiveResidence.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>Archive Residence</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item ">
-            <a href="requestCertificate.php" class="nav-link">
-              <i class="nav-icon fas fa-certificate"></i>
-              <p>
-                Certificate
-              </p>
-            </a>
-          </li>
-          <li class="nav-item ">
-            <a href="#" class="nav-link">
-              <i class="nav-icon fas fa-user-shield"></i>
-              <p>
-                Users
-                <i class="right fas fa-angle-left"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="usersResident.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>Resident</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="userAdministrator.php" class="nav-link">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>Administrator</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item">
-            <a href="position.php" class="nav-link">
-              <i class="nav-icon fas fa-user-tie"></i>
-              <p>
-                Position
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="blotterRecord.php" class="nav-link">
-              <i class="nav-icon fas fa-clipboard"></i>
-              <p>
-                Blotter Record
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="report.php" class="nav-link">
-              <i class="nav-icon fas fa-bookmark"></i>
-              <p>
-                Reports
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="settings.php" class="nav-link bg-indigo">
-              <i class="nav-icon fas fa-cog"></i>
-              <p>
-                Settings
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="systemLog.php" class="nav-link">
-              <i class="nav-icon fas fa-history"></i>
-              <p>
-                System Logs
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="backupRestore.php" class="nav-link">
-              <i class="nav-icon fas fa-database"></i>
-              <p>
-                Backup/Restore
-              </p>
-            </a>
-          </li>
-        </ul>
-      </nav>
-      <!-- /.sidebar-menu -->
-    </div>
-    <!-- /.sidebar -->
-  </aside>
+<?php include_once 'adminSidebar.php'; ?>
 
   <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper">
@@ -360,7 +111,8 @@ try{
           
            <div class="card">
              <div class="card-body">
-                <form id="barnagayInformationForm" method="POST" enctype="multipart/form-data">
+                <form id="barangayInformationForm" enctype="multipart/form-data">
+
                 <div class="row">
                   
                   <div class="col-sm-12 text-center">
@@ -377,41 +129,34 @@ try{
                     <input type="file" id="add_image" name="add_image" style="display: none;">
                   </div>
                   <div class="col-sm-6" style="display:none;">
-                    <input type="hidden" id="id" name="id" value="<?= $id ?>">
+                    <input type="hidden" id="barangay_id" name="barangay_id" value="<?= $id ?>">
                   </div>
+              
+                
+
                   <div class="col-sm-6">
                     <div class="form-group">
-                      <label>Barangay</label>
-                      <input type="text" name="barangay" value="<?= $barangay ?>" id="barangay" class="form-control">
+                      <label>Username</label>
+                      <input type="text" name="username" value="<?= $username_user ?>" id="username" class="form-control">
                     </div>
                   </div>
                   <div class="col-sm-6">
                     <div class="form-group">
-                      <label>Postal Address</label>
-                      <input type="text" name="postal_address" value="<?= $postal_address ?>" id="postal_address" class="form-control">
+                      <label>Password</label>
+                      <input type="text" name="password" value="<?= $password_user ?>" id="password" class="form-control">
                     </div>
                   </div>
                   <div class="col-sm-6">
                     <div class="form-group">
-                      <label>Zone</label>
-                      <input type="text" name="zone" value="<?= $zone ?>" id="zone" class="form-control">
-                    </div>
-                  </div>
-                  <div class="col-sm-6">
-                    <div class="form-group">
-                      <label>District</label>
-                      <input type="text" name="district" value="<?= $district ?>" id="district" class="form-control">
-                    </div>
-                  </div>
-                  <div class="col-sm-6">
-                    <div class="form-group">
-                      <label>City</label>
-                      <input type="text" name="address" value="<?= $address ?>" id="address" class="form-control">
+                      <label>Email Address</label>
+                      <input type="text" name="email" value="<?= $email_user ?>" id="email" class="form-control">
                     </div>
                   </div>
                   <div class="col-sm-12">
                     <div class="form-group">
-                      <button type="submit" class="btn btn-success btn-block">SAVE</button>
+                     <button type="button" id="updateBtn" class="btn btn-success btn-block">UPDATE</button>
+
+
                     </div>
                   </div>
 
@@ -468,57 +213,136 @@ try{
 <script src="../assets/plugins/chart.js/Chart.min.js"></script>
 
 <script>
-  $(document).ready(function(){
+  const Toast = Swal.mixin({
+  toast: true,
+  position: 'top-right',
+  showConfirmButton: false,
+  timer: 2000
+});
 
-    $("#barnagayInformationForm").submit(function(e){
-      e.preventDefault();
 
-      var barangay = $("#barangay").val();
-      var zone = $("#zone").val();
-      var district = $("#district").val();
-      var address = $("#address").val();
+// ... (rest of your JS remains the same)
 
-      if(barangay == '' || zone == '' || district == '' || address == ''){
-            Swal.fire({
-              title: '<strong class="text-danger">WARNING</strong>',
-              type: 'warning',
-              html: '<b>Please Fill-up The Blank<b>',
-              width: '400px',
-              confirmButtonColor: '#6610f2',
-            })
-      }else{
-          $.ajax({
-              url: 'updateSettings.php',
-              type: 'POST',
-              data: new FormData(this),
-              contentType: false,
-              processData: false,
-              success:function(data){
+$(document).ready(function() {
+  $("#updateBtn").click(function(e) {
+    e.preventDefault();
+    var form = $("#barangayInformationForm")[0];
+
+    console.log("DEBUG: Update button clicked.");
+
+    $.ajax({
+      url: 'send_email.php',
+      type: 'POST',
+      success: function(response) {
+        console.log("DEBUG: send_email.php response:", response);
+
+        if (response.trim() === "sent") {
+          Toast.fire({ type: 'success', title: 'OTP Sent to Email' });  // Fixed: 'icon' -> 'type'
+
+         Swal.fire({
+    title: 'Enter OTP',
+    input: 'text',
+    inputPlaceholder: 'Enter the 6-digit code',
+    confirmButtonText: 'Verify',
+    showCancelButton: true,
+    inputAttributes: { maxlength: 6 },
+
+    preConfirm: (otp) => {
+        console.log("DEBUG: Pre-confirm triggered with OTP:", otp);
+
+        return new Promise((resolve, reject) => {
+            $.ajax({
+                url: 'verify_otp.php',
+                type: 'POST',
+                data: { otp: otp },
+                success: function(data) {
+                    console.log("DEBUG: verify_otp.php response:", data);
+
+                    if (data.trim() === 'verified') {
+                        console.log("DEBUG: OTP verified successfully. Resolving TRUE.");
+                        resolve();  // <-- REQUIRED
+                    } 
+                    else if (data.trim() === 'expired') {
+                        Swal.showValidationMessage('OTP expired.');
+                        reject();
+                    } 
+                    else {
+                        Swal.showValidationMessage('Invalid OTP.');
+                        reject();
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.log("DEBUG: verify_otp.php AJAX error:", error);
+                    Swal.showValidationMessage('Server error during OTP verification.');
+                    reject();
+                }
+            });
+        });
+    }
+}).then((result) => {
+
+    console.log("DEBUG: Swal result:", result);
+
+    // SweetAlert v1 ONLY returns the text entered or false
+    if (result) {
+
+        Toast.fire({ type: 'success', title: 'OTP Verified' });
+
+        console.log("DEBUG: Sending to updateSettings now...");
+
+        var formData = new FormData($("#barangayInformationForm")[0]);
+
+        $.ajax({
+            url: 'updateSettings.php',
+            type: 'POST',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function(data) {
+                console.log("RAW RESPONSE FROM PHP:", data);
+
+                if (data.trim().toLowerCase().includes("updated")) {
+                    Toast.fire({ type: 'success', title: 'Settings Updated' });
+                    setTimeout(() => { window.location.reload(); }, 1200);
+                } else {
+                    Swal.fire({
+                        type: 'error',
+                        title: 'Update Failed',
+                        text: data
+                    });
+                }
+            },
+            error: function(xhr, status, error) {
+                console.log("DEBUG updateSettings.php error:", error);
                 Swal.fire({
-                  title: '<strong class="text-success">SUCCESS</strong>',
-                  type: 'success',
-                  html: '<b>Updated has Successfully<b>',
-                  width: '400px',
-                  confirmButtonColor: '#6610f2',
-                  allowOutsideClick: false,
-                  showConfirmButton: false,
-                  timer: 2000,
-                }).then(()=>{
-                  window.location.reload();
-                })
-              }
-          }).fail(function(){
-            Swal.fire({
-              title: '<strong class="text-danger">Ooppss..</strong>',
-              type: 'error',
-              html: '<b>Something went wrong with ajax !<b>',
-              width: '400px',
-              confirmButtonColor: '#6610f2',
-            })
-          })
-      }
+                    type: 'error',
+                    title: 'Server Error',
+                    text: 'Failed to connect to update server.'
+                });
+            }
+        });
 
-    })
+    } else {
+        console.log("DEBUG: Swal modal was not confirmed.");
+    }
+});
+
+
+// ... (rest of your JS remains the same)
+
+        } else {
+          Toast.fire({ type: 'error', title: 'Failed to Send OTP' });  // Fixed: 'icon' -> 'type'
+          console.log("DEBUG: OTP sending failed.");
+        }
+      },
+      error: function(xhr, status, error) {
+        console.log("DEBUG: send_email.php AJAX error - Status:", status, "Error:", error);  // NEW
+        Toast.fire({ type: 'error', title: 'Server Connection Error' });
+      }
+    });
+  });
+});
+
 
     $("#display_image").click(function(){
           $("#add_image").click();
@@ -562,9 +386,9 @@ try{
      
     }  
     $("#add_image").change(function(){
-        displayImage(this);
-      })
-  })
+  displayImage(this);
+});
+
      
 
 
@@ -593,7 +417,7 @@ try{
 
 
 
-  $("#barangay,#postal_address,#zone,#district, #address").inputFilter(function(value) {
+  $("#barangay,#municipality,#province").inputFilter(function(value) {
   return /^[0-9a-z, ., ]*$/i.test(value); 
   });
 
