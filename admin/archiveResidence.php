@@ -1,52 +1,65 @@
-
 <?php 
-
-include_once '../connection.php';
+include_once '../db_connection.php'; // Ensure this path is correct
 session_start();
 
-try{
+// --- HANDLE ARCHIVE REQUEST (AJAX) ---
+// We check if 'archive_id' is sent via POST
+if(isset($_POST['resident_id'])) {
+    
+    // Set header to JSON so JS understands the response
+    header('Content-Type: application/json'); 
 
+    try {
+        $id = $_POST['resident_id'];
 
-  
-  if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin'){
-  
-    $user_id = $_SESSION['user_id'];
-    $sql_user = "SELECT * FROM `users` WHERE `id` = ? ";
-    $stmt_user = $con->prepare($sql_user) or die ($con->error);
-    $stmt_user->bind_param('s',$user_id);
-    $stmt_user->execute();
-    $result_user = $stmt_user->get_result();
-    $row_user = $result_user->fetch_assoc();
-    $first_name_user = $row_user['first_name'];
-    $last_name_user = $row_user['last_name'];
-    $user_type = $row_user['user_type'];
-    $user_image = $row_user['image'];
-  
-  
-    $sql = "SELECT * FROM `barangay_information`";
-  $query = $con->prepare($sql) or die ($con->error);
-  $query->execute();
-  $result = $query->get_result();
-  while($row = $result->fetch_assoc()){
-      $barangay = $row['barangay'];
-      $zone = $row['zone'];
-      $district = $row['district'];
-      $image = $row['image'];
-      $image_path = $row['image_path'];
-      $id = $row['id'];
-  }
-  
-  
-  }else{
-   echo '<script>
-          window.location.href = "../login.php";
-        </script>';
-  }
-  
-  }catch(Exception $e){
-    echo $e->getMessage();
-  }
+        // 1. Start Transaction
+        $pdo->beginTransaction();
 
+        // 2. Copy data to Archive Table
+        $sqlCopy = "INSERT INTO archivedResidence SELECT * FROM residence_information WHERE resident_id = :id";
+        $stmtCopy = $pdo->prepare($sqlCopy);
+        $stmtCopy->execute([':id' => $id]);
+
+        // 3. Delete from Main Table
+        $sqlDelete = "DELETE FROM residence_information WHERE resident_id = :id";
+        $stmtDelete = $pdo->prepare($sqlDelete);
+        $stmtDelete->execute([':id' => $id]);
+
+        // 4. Commit
+        $pdo->commit();
+
+        echo json_encode(['status' => 'success', 'message' => 'Resident moved to archive successfully.']);
+        
+    } catch (Exception $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        echo json_encode(['status' => 'error', 'message' => 'Error: ' . $e->getMessage()]);
+    }
+
+    // IMPORTANT: Stop script here! 
+    // This prevents the HTML below from being sent back to the AJAX request.
+    exit(); 
+}
+
+// --- END OF AJAX LOGIC ---
+
+// Normal Page Logic (Check Admin)
+try {
+   if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin'){
+        // ... your existing user fetch logic ...
+        $user_id = $_SESSION['user_id'];
+        $stmt_user = $pdo->prepare("SELECT * FROM `users` WHERE `user_id` = ?");
+        $stmt_user->execute([$user_id]);
+        $row_user = $stmt_user->fetch();
+        // ... assign variables ...
+   } else {
+       echo '<script>window.location.href = "../login.php";</script>';
+       exit();
+   }
+} catch(PDOException $e){
+    echo "Error: " . $e->getMessage();
+}
 ?>
 
 <!DOCTYPE html>
@@ -335,262 +348,7 @@ input:checked + .slider .off{
  
 </head>
 <body class="hold-transition dark-mode sidebar-mini  ">
-<div class="wrapper">
-
-<!-- Preloader -->
-<div class="preloader flex-column justify-content-center align-items-center">
-    <img class="animation__wobble " src="../assets/dist/img/loader.gif" alt="AdminLTELogo" height="70" width="70">
-  </div>
-
-  <!-- Navbar -->
-  <nav class="main-header navbar navbar-expand navbar-dark">
-    <!-- Left navbar links -->
-    <ul class="navbar-nav">
-      <li class="nav-item">
-        <h5><a class="nav-link text-white" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block" style="font-variant: small-caps;">
-        <h5 class="nav-link text-white" ><?= $barangay ?></h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block">
-        <h5 class="nav-link text-white" >-</h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block">
-        <h5 class="nav-link text-white" ><?= $zone ?></h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block">
-        <h5 class="nav-link text-white" >-</h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block">
-        <h5 class="nav-link text-white" ><?= $district ?></h5>
-      </li>
-    </ul>
-
-    <!-- Right navbar links -->
-    <ul class="navbar-nav ml-auto">
-
-      <!-- Messages Dropdown Menu -->
-      <li class="nav-item dropdown">
-        <a class="nav-link" data-toggle="dropdown" href="#">
-          <i class="far fa-user"></i>
-        </a>
-        <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right">
-          <a href="myProfile.php" class="dropdown-item">
-            <!-- Message Start -->
-            <div class="media">
-              <?php 
-                if($user_image != '' || $user_image != null || !empty($user_image)){
-                  echo '<img src="../assets/dist/img/'.$user_image.'" class="img-size-50 mr-3 img-circle alt="User Image">';
-                }else{
-                  echo '<img src="../assets/dist/img/image.png" class="img-size-50 mr-3 img-circle alt="User Image">';
-                }
-              ?>
-            
-              <div class="media-body">
-                <h3 class="dropdown-item-title py-3">
-                  <?= ucfirst($first_name_user) .' '. ucfirst($last_name_user) ?>
-                </h3>
-              </div>
-            </div>
-            <!-- Message End -->
-          </a>         
-          <div class="dropdown-divider"></div>
-          <a href="../logout.php" class="dropdown-item dropdown-footer">LOGOUT</a>
-        </div>
-      </li>
-    </ul>
-  </nav>
-  <!-- /.navbar -->
-
-  <!-- Main Sidebar Container -->
-  <aside class="main-sidebar sidebar-dark-primary elevation-4 sidebar-no-expand">
-    <!-- Brand Logo -->
-    <a href="#" class="brand-link text-center">
-    <?php 
-        if($image != '' || $image != null || !empty($image)){
-          echo '<img src="'.$image_path.'" id="logo_image" class="img-circle elevation-5 img-bordered-sm" alt="logo" style="width: 70%;">';
-        }else{
-          echo ' <img src="../assets//logo//logo.png" id="logo_image" class="img-circle elevation-5 img-bordered-sm" alt="logo" style="width: 70%;">';
-        }
-
-      ?>
-      <span class="brand-text font-weight-light"></span>
-    </a>
-
-    <!-- Sidebar -->
-    <div class="sidebar">
-    
-
-    <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-        <div class="image">
-          <img src="../assets/dist/img/logo.png" class="img-circle elevation-5 img-bordered-sm" alt="User Image">
-        </div>
-        <div class="info text-center">
-          <a href="#" class="d-block text-bold"><?= strtoupper($user_type) ?></a>
-        </div>
-      </div>
-      <!-- Sidebar Menu -->
-      <nav class="mt-2">
-        <ul class="nav nav-pills nav-sidebar flex-column nav-child-indent" data-widget="treeview" role="menu" data-accordion="false">
-          <li class="nav-item">
-            <a href="dashboard.php" class="nav-link ">
-              <i class="nav-icon fas fa-tachometer-alt"></i>
-              <p>
-                Dashboard
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon fas fa-users-cog"></i>
-              <p>
-              Barangay Official
-                <i class="right fas fa-angle-left"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="newOfficial.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>New Official</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="allOfficial.php" class="nav-link">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>List of Official</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="officialEndTerm.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>Official End Term</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item menu-open">
-            <a href="#" class="nav-link bg-indigo ">
-              <i class="nav-icon fas fa-users"></i>
-              <p>
-                Residence
-                <i class="right fas fa-angle-left"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="newResidence.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>New Residence</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="allResidence.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>All Residence</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="archiveResidence.php" class="nav-link active">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>Archive Residence</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item ">
-            <a href="requestCertificate.php" class="nav-link">
-              <i class="nav-icon fas fa-certificate"></i>
-              <p>
-                Certificate
-              </p>
-            </a>
-          </li>
-          <!-- <li class="nav-item">
-            <a href="position.php" class="nav-link">
-              <i class="nav-icon fas fa-user-shield"></i>
-              <p>
-                Position
-              </p>
-            </a>
-          </li> -->
-          <li class="nav-item ">
-            <a href="#" class="nav-link">
-              <i class="nav-icon fas fa-user-shield"></i>
-              <p>
-                Users
-                <i class="right fas fa-angle-left"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="usersResident.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>Resident</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="userAdministrator.php" class="nav-link">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>Administrator</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item">
-            <a href="position.php" class="nav-link">
-              <i class="nav-icon fas fa-user-tie"></i>
-              <p>
-                Position
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="blotterRecord.php" class="nav-link">
-              <i class="nav-icon fas fa-clipboard"></i>
-              <p>
-                Blotter Record
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="report.php" class="nav-link">
-              <i class="nav-icon fas fa-bookmark"></i>
-              <p>
-                Reports
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="settings.php" class="nav-link">
-              <i class="nav-icon fas fa-cog"></i>
-              <p>
-                Settings
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="systemLog.php" class="nav-link">
-              <i class="nav-icon fas fa-history"></i>
-              <p>
-                System Logs
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="backupRestore.php" class="nav-link">
-              <i class="nav-icon fas fa-database"></i>
-              <p>
-                Backup/Restore
-              </p>
-            </a>
-          </li>
-        </ul>
-      </nav>
-      <!-- /.sidebar-menu -->
-    </div>
-    <!-- /.sidebar -->
-  </aside>
+<?php include_once 'adminSidebar.php'; ?>
 
   <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper">
@@ -728,125 +486,111 @@ input:checked + .slider .off{
 <script src="../assets/plugins/inputmask/min/jquery.inputmask.bundle.min.js"></script>
 <script src="../assets/plugins/tempusdominus-bootstrap-4/js/tempusdominus-bootstrap-4.min.js"></script>
 <div id="displayResidence"></div>
+
+
 <script>
   $(document).ready(function(){
 
+    // 1. Initialize Functions
     archiveResidence();
     viewResidence();
     unArchiveResidence();
 
+    // 2. Search Logic
     $(document).on('click', '#search',function(){
       var first_name = $("#first_name").val();
       var middle_name = $("#middle_name").val();
       var last_name = $("#last_name").val();
-      var resident_id = $("#resident_id")
+      // FIX: Added .val() here. It was missing in your code.
+      var resident_id = $("#resident_id").val(); 
+      
       if(first_name != '' ||  middle_name != '' || last_name != '' || resident_id != ''){
         $("#archiveResidenceTable").DataTable().destroy();
         archiveResidence();
       }
-    })
+    });
+
+    // 3. Reset Logic
     $(document).on('click', '#reset',function(){
-      var first_name = $("#first_name")
-      var middle_name = $("#middle_name")
-      var last_name = $("#last_name")
-      var resident_id = $("#resident_id")
-      if(first_name != '' || middle_name != '' || last_name != '' || resident_id != ''){
-        $("#first_name").val('');
-        $("#middle_name").val('');
-        $("#last_name").val('');
-        $("#resident_id").val('');
-        $("#archiveResidenceTable").DataTable().destroy();
-        archiveResidence();
-      }else{
-        $("#archiveResidenceTable").DataTable().destroy();
-        archiveResidence();
-      }
-    })
+      $("#first_name").val('');
+      $("#middle_name").val('');
+      $("#last_name").val('');
+      $("#resident_id").val('');
+      
+      $("#archiveResidenceTable").DataTable().destroy();
+      archiveResidence();
+    });
 
+    // 4. Image Popup
     $(document).on('click', '.pop',function() {
-			$('.imagepreview').attr('src', $(this).find('img').attr('src'));
-			$('#imagemodal').modal('show');   
-		});
+      $('.imagepreview').attr('src', $(this).find('img').attr('src'));
+      $('#imagemodal').modal('show');   
+    });
 
 
+    // --- FUNCTION: LOAD TABLE ---
     function archiveResidence(){
       var first_name = $("#first_name").val();
       var middle_name = $("#middle_name").val();
       var last_name = $("#last_name").val();
       var resident_id = $("#resident_id").val();
+      
       var archiveResidenceTable = $("#archiveResidenceTable").DataTable({
-      processing: true,
-      serverSide: true,
-      responsive: true,
-      scrollY: '650',
-      ajax:{
-        url: 'archiveResidenceTable.php',
-        type: 'POST',
-        data:{
-          first_name:first_name,
-          middle_name:middle_name,
-          last_name:last_name,
-          resident_id:resident_id,
+        processing: true,
+        serverSide: true,
+        responsive: true,
+        scrollY: '650',
+        ajax:{
+          url: 'archiveResidenceTable.php',
+          type: 'POST',
+          data:{
+            first_name: first_name,
+            middle_name: middle_name,
+            last_name: last_name,
+            resident_id: resident_id,
+          }
+        },
+        order:[],
+        columnDefs:[
+          { orderable: false, targets: "_all" },
+          { targets: 8, className: "text-center" },
+          { targets: 5, className: "text-center" },
+          { targets: 6, className: "text-center" },
+          { targets: 7, className: "text-center" },
+        ],
+        dom: "<'row'<'col-sm-12 '>f>" +
+             "<'row'<'col-sm-12'tr>>" +
+             "<'d-flex flex-sm-row-reverse flex-column border-top '<'px-2 'p><'px-2'i> <'px-2'l> >",
+        pagingType: "full_numbers",
+        language: {
+          paginate: {
+            next: '<i class="fas fa-angle-right text-white"></i>',
+            previous: '<i class="fas fa-angle-left text-white"></i>', 
+            first: '<i class="fa fa-angle-double-left text-white"></i>',
+            last: '<i class="fa fa-angle-double-right text-white"></i>'        
+          }, 
+          lengthMenu: '<div class="mt-3 pr-2"> <span class="text-sm mb-3 pr-2">Rows per page:</span> <select>'+
+                      '<option value="10">10</option>'+
+                      '<option value="20">20</option>'+
+                      '<option value="30">30</option>'+
+                      '<option value="40">40</option>'+
+                      '<option value="50">50</option>'+
+                      '<option value="-1">All</option>'+
+                      '</select></div>',
+          info:  " _START_ - _END_ of _TOTAL_ ",
+        },
+        drawCallback:function(data){
+          $('#total').text(data.json.total);
+          $('.dataTables_paginate').addClass("mt-2 mt-md-2 pt-1 ");
+          $('.dataTables_paginate ul.pagination').addClass("pagination-md ");
         }
-
-      },
-      order:[],
-      columnDefs:[
-        {
-              orderable: false,
-              targets: "_all",
-            },
-            {
-              targets: 8,
-              className: "text-center",
-            },
-            {
-              targets: 5,
-              className: "text-center",
-            },
-            {
-              targets: 6,
-              className: "text-center",
-            },
-            {
-              targets: 7,
-              className: "text-center",
-            },
-      ],
-      dom: "<'row'<'col-sm-12 '>f>" +
-                "<'row'<'col-sm-12'tr>>" +
-                "<'d-flex flex-sm-row-reverse flex-column border-top '<'px-2 'p><'px-2'i> <'px-2'l> >",
-      pagingType: "full_numbers",
-            language: {
-              paginate: {
-                next: '<i class="fas fa-angle-right text-white"></i>',
-                previous: '<i class="fas fa-angle-left text-white"></i>', 
-                first: '<i class="fa fa-angle-double-left text-white"></i>',
-                last: '<i class="fa fa-angle-double-right text-white"  ></i>'        
-              }, 
-              lengthMenu: '<div class="mt-3 pr-2"> <span class="text-sm mb-3 pr-2">Rows per page:</span> <select>'+
-                          '<option value="10">10</option>'+
-                          '<option value="20">20</option>'+
-                          '<option value="30">30</option>'+
-                          '<option value="40">40</option>'+
-                          '<option value="50">50</option>'+
-                          '<option value="-1">All</option>'+
-                          '</select></div>',
-              info:  " _START_ - _END_ of _TOTAL_ ",
-           
-            },
-      drawCallback:function(data){
-        $('#total').text(data.json.total);
-        $('.dataTables_paginate').addClass("mt-2 mt-md-2 pt-1 ");
-        $('.dataTables_paginate ul.pagination').addClass("pagination-md ");
-      }
-      })
-     
+      });
     }
 
+    // --- FUNCTION: VIEW DETAILS ---
     function viewResidence(){
       $(document).on('click','.viewResidence',function(){
-      var residence_id = $(this).attr('id');
+        var residence_id = $(this).attr('id');
 
         $("#displayResidence").html('');
       
@@ -856,7 +600,7 @@ input:checked + .slider .off{
           dataType: 'html',
           cache: false,
           data: {
-            residence_id:residence_id
+            residence_id: residence_id
           },
           success:function(data){
             $("#displayResidence").html(data);
@@ -865,23 +609,25 @@ input:checked + .slider .off{
         }).fail(function(){
           Swal.fire({
             title: '<strong class="text-danger">Ooppss..</strong>',
-            type: 'error',
+            icon: 'error',
             html: '<b>Something went wrong with ajax !<b>',
             width: '400px',
             confirmButtonColor: '#6610f2',
           })
         })
-
       })
     }
 
+    // --- FUNCTION: UNARCHIVE (RESTORE) ---
     function unArchiveResidence(){
       $(document).on('click','.unArchiveResidence',function(){
-        var residence_id = $(this).attr('id');
+        
+        var id = $(this).attr('id');
+        
         Swal.fire({
             title: '<strong class="text-danger">Are you sure?</strong>',
             html: "You want Unarchive this Resident?",
-            type: 'warning',
+            icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#3085d6',
             cancelButtonColor: '#d33',
@@ -893,31 +639,41 @@ input:checked + .slider .off{
               $.ajax({
                 url: 'unArchiveResidence.php',
                 type: 'POST',
+                dataType: 'json', // Ensure we expect JSON
+                
+                // FIX: Changed key to 'resident_id' to match PHP
                 data: {
-                  residence_id:residence_id,
+                  resident_id: id, 
                 },
-                cache: false,
+                
                 success:function(data){
-                  Swal.fire({
-                    title: '<strong class="text-success">Success</strong>',
-                    type: 'success',
-                    html: '<b>Unarchive Resident has Successfully<b>',
+                  if(data.status == 'success'){
+                      Swal.fire({
+                        title: '<strong class="text-success">Success</strong>',
+                        icon: 'success',
+                        html: '<b>' + data.message + '<b>', // Note: kept your original HTML tag style
+                        width: '400px',
+                        showConfirmButton: false,
+                        allowOutsideClick: false,
+                        timer: 2000
+                      }).then(()=>{
+                        // Reload table
+                        $("#archiveResidenceTable").DataTable().ajax.reload();
+                      })
+                  } else {
+                      Swal.fire('Error', data.message, 'error');
+                  }
+                },
+                error: function(xhr, status, error){
+                   console.log(xhr.responseText);
+                   Swal.fire({
+                    title: '<strong class="text-danger">Ooppss..</strong>',
+                    icon: 'error',
+                    html: '<b>Something went wrong with ajax !<b>',
                     width: '400px',
-                    showConfirmButton: false,
-                    allowOutsideClick: false,
-                    timer: 2000
-                  }).then(()=>{
-                    $("#archiveResidenceTable").DataTable().ajax.reload();
+                    confirmButtonColor: '#6610f2',
                   })
                 }
-              }).fail(function(){
-                Swal.fire({
-                  title: '<strong class="text-danger">Ooppss..</strong>',
-                  type: 'error',
-                  html: '<b>Something went wrong with ajax !<b>',
-                  width: '400px',
-                  confirmButtonColor: '#6610f2',
-                })
               })
             }
           })
@@ -925,8 +681,7 @@ input:checked + .slider .off{
       })
     }
   
-
-  })
+  });
 </script>
 
 <script>

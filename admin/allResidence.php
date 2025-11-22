@@ -1,52 +1,56 @@
-
 <?php 
-
-include_once '../connection.php';
+include_once '../db_connection.php'; // Ensure this file defines $pdo
 session_start();
 
-try{
+try {
 
+  // Check if user is logged in as admin
+  if (isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin') {
 
-  
-  if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin'){
-  
     $user_id = $_SESSION['user_id'];
-    $sql_user = "SELECT * FROM `users` WHERE `id` = ? ";
-    $stmt_user = $con->prepare($sql_user) or die ($con->error);
-    $stmt_user->bind_param('s',$user_id);
-    $stmt_user->execute();
-    $result_user = $stmt_user->get_result();
-    $row_user = $result_user->fetch_assoc();
-    $first_name_user = $row_user['first_name'];
-    $last_name_user = $row_user['last_name'];
-    $user_type = $row_user['user_type'];
-    $user_image = $row_user['image'];
-  
-  
-    $sql = "SELECT * FROM `barangay_information`";
-  $query = $con->prepare($sql) or die ($con->error);
-  $query->execute();
-  $result = $query->get_result();
-  while($row = $result->fetch_assoc()){
-      $barangay = $row['barangay'];
-      $zone = $row['zone'];
-      $district = $row['district'];
-      $image = $row['image'];
-      $image_path = $row['image_path'];
-      $id = $row['id'];
-  }
-  
-  
-  }else{
-   echo '<script>
-          window.location.href = "../login.php";
-        </script>';
-  }
-  
-  }catch(Exception $e){
-    echo $e->getMessage();
-  }
 
+    // --- 1. Fetch User Details (PDO) ---
+    $sql_user = "SELECT * FROM `users` WHERE `user_id` = ?";
+    $stmt_user = $pdo->prepare($sql_user);
+    $stmt_user->execute([$user_id]); // Pass ID directly here
+    $row_user = $stmt_user->fetch(); // Fetch single row
+
+    // Assign variables
+    if ($row_user) {
+        $username = $row_user['username'];
+        $user_type = $row_user['user_type'];
+        $contact_number = $row_user['contact_number'];
+        $display_name = strtoupper($username);
+    }
+
+    // --- 2. Fetch Barangay Information (PDO) ---
+    $sql = "SELECT * FROM `barangay_information`";
+    $query = $pdo->prepare($sql);
+    $query->execute();
+    
+    // Loop through results
+    while ($row = $query->fetch()) {
+        $id = $row['barangay_id'];
+        $barangay = $row['barangay'];
+        $municipality = $row['municipality'];
+        $province = $row['province'];
+        $image = $row['images'];
+        $image_path = $row['image_path'];
+    }
+  
+  } else {
+    // Redirect if not admin
+    echo '<script>
+           window.location.href = "../login.php";
+         </script>';
+    exit();
+  }
+  
+} catch(PDOException $e) {
+    echo "Database Error: " . $e->getMessage();
+} catch(Exception $e) {
+    echo "Error: " . $e->getMessage();
+}
 ?>
 
 <!DOCTYPE html>
@@ -54,33 +58,25 @@ try{
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title></title>
+  <title>All Residence</title>
 
- 
-  <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="../assets/plugins/fontawesome-free/css/all.min.css">
-  <!-- overlayScrollbars -->
   <link rel="stylesheet" href="../assets/plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
-  <!-- Theme style -->
   <link rel="stylesheet" href="../assets/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="../assets/plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/sweetalert2/css/sweetalert2.min.css">
-  <!-- Tempusdominus Bbootstrap 4 -->
   <link rel="stylesheet" href="../assets/plugins/tempusdominus-bootstrap-4/css/tempusdominus-bootstrap-4.min.css">
   <link rel="stylesheet" href="../assets/plugins/select2/css/select2.min.css">
   <link rel="stylesheet" href="../assets/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
   <style>
     .dataTables_wrapper .dataTables_paginate .page-link {
-      
         border: none;
     }
     .dataTables_wrapper .dataTables_paginate .page-item .page-link{
         color: #fff ;
         border-color: transparent;
-        
-        
       }
    
     .dataTables_wrapper .dataTables_paginate .page-item.active .page-link{
@@ -91,14 +87,10 @@ try{
         background-color: #000;
       }
     .page-link:focus{
-   
       outline:0;
       -webkit-box-shadow:none;
       box-shadow:none;
-   
     }
-
-
 
     .dataTables_length select{
       border: 1px solid #fff;
@@ -107,7 +99,6 @@ try{
       border-right: none;
       cursor: pointer;
       color: #fff;
- 
     }
     .dataTables_length span{
       color: #fff;
@@ -227,12 +218,9 @@ try{
     .select2-container--default .select2-selection--single{
       background-color: transparent;
       height: 38px;
-      
-      
     }
     .select2-container--default .select2-selection--single .select2-selection__rendered{
       color: #fff;
-      
     }
 
     .switch {
@@ -242,367 +230,107 @@ try{
       height: 28px;
     } 
 
-.switch input {
-  display:none;
-}
+    .switch input {
+      display:none;
+    }
 
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #ca2222;
-  -webkit-transition: .4s;
-  transition: .4s;
-  
-}
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ca2222;
+      -webkit-transition: .4s;
+      transition: .4s;
+    }
 
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 20px;
-  width: 20px;
-  left: 4px;
-  bottom: 4px;
-  background-color: #000;
-  -webkit-transition: .4s;
-  transition: .4s;
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 4px;
+      bottom: 4px;
+      background-color: #000;
+      -webkit-transition: .4s;
+      transition: .4s;
+    }
 
-}
+    input:checked + .slider {
+      background-color: #2ab934;
+    }
 
-input:checked + .slider {
-  background-color: #2ab934;
-}
+    input:focus + .slider {
+      box-shadow: 0 0 1px #2196F3;
+    }
 
-input:focus + .slider {
-  box-shadow: 0 0 1px #2196F3;
-}
+    input:checked + .slider:before {
+      -webkit-transform: translateX(46px);
+      -ms-transform: translateX(46px);
+      transform: translateX(46px);
+    }
 
-input:checked + .slider:before {
-  -webkit-transform: translateX(46px);
-  -ms-transform: translateX(46px);
-  transform: translateX(46px);
-}
+    /*------ ADDED CSS ---------*/
+    .on { display: none; }
+    .off{
+      color: white;
+      position: absolute;
+      transform: translate(-50%,-50%);
+      top: 50%;
+      left: 62%;
+      font-size: 8px;
+      font-family: Verdana, sans-serif;
+    }
 
-/*------ ADDED CSS ---------*/
-.on
-{
-  display: none;
-  
-}
-.off{
-  color: white;
-  position: absolute;
-  transform: translate(-50%,-50%);
-  top: 50%;
-  left: 62%;
-  font-size: 8px;
-  font-family: Verdana, sans-serif;
-}
+    .on{
+      color: white;
+      position: absolute;
+      transform: translate(-50%,-50%);
+      top: 50%;
+      left: 40%;
+      font-size: 8px;
+      font-family: Verdana, sans-serif;
+    }
 
-.on{
+    input:checked+ .slider .on{
+        display: block;
+    }
 
-  color: white;
-  position: absolute;
-  transform: translate(-50%,-50%);
-  top: 50%;
-  left: 40%;
-  font-size: 8px;
-  font-family: Verdana, sans-serif;
-}
+    input:checked + .slider .off{
+        display: none;
+    }
 
-  input:checked+ .slider .on{
-  display: block;
-  }
-
-input:checked + .slider .off{
-
-  display: none;
-}
-
-.slider.round {
-  border-radius: 34px;
-}
-.slider.round:before {
-  border-radius: 50%;
-}
+    .slider.round {
+      border-radius: 34px;
+    }
+    .slider.round:before {
+      border-radius: 50%;
+    }
     
-#allResidenceTable_filter{
+    #allResidenceTable_filter{
       display: none;
     }
     .scrollbar::-webkit-scrollbar
-{
-    width: 6px;
-    background-color: #000000;
-}
- 
-.scrollbar::-webkit-scrollbar-thumb
-{
-   
-  --webkit-box-shadow: inset 0 0 6px #6c757d; 
-    background-color: #6c757d;
-}
+    {
+        width: 6px;
+        background-color: #000000;
+    }
+    
+    .scrollbar::-webkit-scrollbar-thumb
+    {
+      --webkit-box-shadow: inset 0 0 6px #6c757d; 
+        background-color: #6c757d;
+    }
   </style>
- 
- 
 </head>
 <body class="hold-transition dark-mode sidebar-mini  ">
-<div class="wrapper">
 
-<!-- Preloader -->
-<div class="preloader flex-column justify-content-center align-items-center">
-    <img class="animation__wobble " src="../assets/dist/img/loader.gif" alt="AdminLTELogo" height="70" width="70">
-  </div>
+<?php include_once 'adminSidebar.php'; ?>
 
-  <!-- Navbar -->
-  <nav class="main-header navbar navbar-expand navbar-dark">
-    <!-- Left navbar links -->
-    <ul class="navbar-nav">
-      <li class="nav-item">
-        <h5><a class="nav-link text-white" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block" style="font-variant: small-caps;">
-        <h5 class="nav-link text-white" ><?= $barangay ?></h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block">
-        <h5 class="nav-link text-white" >-</h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block">
-        <h5 class="nav-link text-white" ><?= $zone ?></h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block">
-        <h5 class="nav-link text-white" >-</h5>
-      </li>
-      <li class="nav-item d-none d-sm-inline-block">
-        <h5 class="nav-link text-white" ><?= $district ?></h5>
-      </li>
-    </ul>
-
-    <!-- Right navbar links -->
-    <ul class="navbar-nav ml-auto">
-
-      <!-- Messages Dropdown Menu -->
-      <li class="nav-item dropdown">
-        <a class="nav-link" data-toggle="dropdown" href="#">
-          <i class="far fa-user"></i>
-        </a>
-        <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right">
-          <a href="myProfile.php" class="dropdown-item">
-            <!-- Message Start -->
-            <div class="media">
-              <?php 
-                if($user_image != '' || $user_image != null || !empty($user_image)){
-                  echo '<img src="../assets/dist/img/'.$user_image.'" class="img-size-50 mr-3 img-circle alt="User Image">';
-                }else{
-                  echo '<img src="../assets/dist/img/image.png" class="img-size-50 mr-3 img-circle alt="User Image">';
-                }
-              ?>
-            
-              <div class="media-body">
-                <h3 class="dropdown-item-title py-3">
-                  <?= ucfirst($first_name_user) .' '. ucfirst($last_name_user) ?>
-                </h3>
-              </div>
-            </div>
-            <!-- Message End -->
-          </a>         
-          <div class="dropdown-divider"></div>
-          <a href="../logout.php" class="dropdown-item dropdown-footer">LOGOUT</a>
-        </div>
-      </li>
-    </ul>
-  </nav>
-  <!-- /.navbar -->
-
-  <!-- Main Sidebar Container -->
-  <aside class="main-sidebar sidebar-dark-primary elevation-4 sidebar-no-expand">
-    <!-- Brand Logo -->
-    <a href="#" class="brand-link text-center">
-    <?php 
-        if($image != '' || $image != null || !empty($image)){
-          echo '<img src="'.$image_path.'" id="logo_image" class="img-circle elevation-5 img-bordered-sm" alt="logo" style="width: 70%;">';
-        }else{
-          echo ' <img src="../assets//logo//logo.png" id="logo_image" class="img-circle elevation-5 img-bordered-sm" alt="logo" style="width: 70%;">';
-        }
-
-      ?>
-      <span class="brand-text font-weight-light"></span>
-    </a>
-
-    <!-- Sidebar -->
-    <div class="sidebar">
-    
-
-    <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-        <div class="image">
-          <img src="../assets/dist/img/logo.png" class="img-circle elevation-5 img-bordered-sm" alt="User Image">
-        </div>
-        <div class="info text-center">
-          <a href="#" class="d-block text-bold"><?= strtoupper($user_type) ?></a>
-        </div>
-      </div>
-      <!-- Sidebar Menu -->
-      <nav class="mt-2">
-        <ul class="nav nav-pills nav-sidebar flex-column nav-child-indent" data-widget="treeview" role="menu" data-accordion="false">
-          <li class="nav-item">
-            <a href="dashboard.php" class="nav-link ">
-              <i class="nav-icon fas fa-tachometer-alt"></i>
-              <p>
-                Dashboard
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon fas fa-users-cog"></i>
-              <p>
-              Barangay Official
-                <i class="right fas fa-angle-left"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="newOfficial.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>New Official</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="allOfficial.php" class="nav-link">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>List of Official</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="officialEndTerm.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>Official End Term</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item menu-open">
-            <a href="#" class="nav-link bg-indigo ">
-              <i class="nav-icon fas fa-users"></i>
-              <p>
-                Residence
-                <i class="right fas fa-angle-left"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="newResidence.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>New Residence</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="allResidence.php" class="nav-link active">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>All Residence</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="archiveResidence.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>Archive Residence</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item ">
-            <a href="requestCertificate.php" class="nav-link">
-              <i class="nav-icon fas fa-certificate"></i>
-              <p>
-                Certificate
-              </p>
-            </a>
-          </li>
-          <li class="nav-item ">
-            <a href="#" class="nav-link">
-              <i class="nav-icon fas fa-user-shield"></i>
-              <p>
-                Users
-                <i class="right fas fa-angle-left"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="usersResident.php" class="nav-link ">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>Resident</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="userAdministrator.php" class="nav-link">
-                  <i class="fas fa-circle nav-icon text-red"></i>
-                  <p>Administrator</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item">
-            <a href="position.php" class="nav-link">
-              <i class="nav-icon fas fa-user-tie"></i>
-              <p>
-                Position
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="blotterRecord.php" class="nav-link">
-              <i class="nav-icon fas fa-clipboard"></i>
-              <p>
-                Blotter Record
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="report.php" class="nav-link">
-              <i class="nav-icon fas fa-bookmark"></i>
-              <p>
-                Reports
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="settings.php" class="nav-link">
-              <i class="nav-icon fas fa-cog"></i>
-              <p>
-                Settings
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="systemLog.php" class="nav-link">
-              <i class="nav-icon fas fa-history"></i>
-              <p>
-                System Logs
-              </p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="backupRestore.php" class="nav-link">
-              <i class="nav-icon fas fa-database"></i>
-              <p>
-                Backup/Restore
-              </p>
-            </a>
-          </li>
-        </ul>
-      </nav>
-      <!-- /.sidebar-menu -->
-    </div>
-    <!-- /.sidebar -->
-  </aside>
-
-  <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper">
    
-
-    <!-- Main content -->
     <section class="content mt-3">
       <div class="container-fluid">
 
@@ -617,7 +345,6 @@ input:checked + .slider .off{
                       <span class="input-group-text bg-indigo">FIRST NAME</span>
                     </div>
                         <input type="search" name="first_name" id="first_name" class="form-control"> 
-                      </select>
                   </div>
                 </div>
                 <div class="col-sm-4">
@@ -626,7 +353,6 @@ input:checked + .slider .off{
                       <span class="input-group-text bg-indigo">MIDDLE NAME</span>
                     </div>
                         <input type="search" name="middle_name" id="middle_name" class="form-control"> 
-                      </select>
                   </div>
                 </div>
                 <div class="col-sm-4">
@@ -635,7 +361,6 @@ input:checked + .slider .off{
                       <span class="input-group-text bg-indigo">LAST NAME</span>
                     </div>
                         <input type="search" name="last_name" id="last_name" class="form-control"> 
-                      </select>
                   </div>
                 </div>
                 <div class="col-sm-4">
@@ -657,7 +382,6 @@ input:checked + .slider .off{
                       <span class="input-group-text bg-indigo">AGE</span>
                     </div>
                         <input type="number" name="age" id="age" class="form-control"> 
-                      </select>
                   </div>
                 </div>
                 <div class="col-sm-4">
@@ -714,7 +438,6 @@ input:checked + .slider .off{
                       <span class="input-group-text bg-indigo">RESIDENT NUMBER</span>
                     </div>
                         <input type="text" name="resident_id" id="resident_id" class="form-control"> 
-                      </select>
                   </div>
                 </div>
                 <div class="col-sm-4 text-center mb-4">
@@ -745,15 +468,8 @@ input:checked + .slider .off{
       </div>   
 
 
-      </div><!--/. container-fluid -->
-    </section>
-    <!-- /.content -->
-  </div>
-  <!-- /.content-wrapper -->
-
- 
-
-  <!-- Main Footer -->
+      </div></section>
+    </div>
   <footer class="main-footer">
     <strong>Copyright &copy; <?php echo date("Y"); ?> - <?php echo date('Y', strtotime('+1 year'));  ?> </strong>
     
@@ -761,8 +477,6 @@ input:checked + .slider .off{
     </div>
   </footer>
 </div>
-<!-- ./wrapper -->
-
 <div id="imagemodal" class="modal " tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <div class="modal-content" style="background-color: #000">
@@ -776,14 +490,9 @@ input:checked + .slider .off{
 
 
 
-<!-- REQUIRED SCRIPTS -->
-<!-- jQuery -->
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
-<!-- Bootstrap -->
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
-<!-- overlayScrollbars -->
 <script src="../assets/plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js"></script>
-<!-- AdminLTE App -->
 <script src="../assets/dist/js/adminlte.js"></script>
 <script src="../assets/plugins/popper/umd/popper.min.js"></script>
 <script src="../assets/plugins/datatables/jquery.dataTables.min.js"></script>
@@ -819,54 +528,63 @@ input:checked + .slider .off{
 
 
     function deleteResidence(){
-      $(document).on('click','.deleteResidence',function(){
-        var residence_id = $(this).attr('id');
-        Swal.fire({
-            title: '<strong class="text-danger">Are you sure?</strong>',
-            html: "You want archive this Resident?",
-            type: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#3085d6',
-            cancelButtonColor: '#d33',
-            allowOutsideClick: false,
-            confirmButtonText: 'Yes, archive it!',
-            width: '400px',
-          }).then((result) => {
-            if (result.value) {
-              $.ajax({
-                url: 'deleteResidence.php',
-                type: 'POST',
-                data: {
-                  residence_id:residence_id,
-                },
-                cache: false,
-                success:function(data){
+  $(document).on('click','.deleteResidence',function(){
+    // Get the ID from the button
+    var id = $(this).attr('id');
+    
+    Swal.fire({
+        title: '<strong class="text-danger">Are you sure?</strong>',
+        html: "You want to archive this Resident?",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        allowOutsideClick: false,
+        confirmButtonText: 'Yes, archive it!',
+        width: '400px',
+      }).then((result) => {
+        if (result.value) {
+          $.ajax({
+            url: 'archiveResidence.php', // The file where the PHP logic is
+            type: 'POST',
+            dataType: 'json', 
+            data: {
+              // We use 'resident_id' here to match your DB column logic
+              resident_id: id, 
+            },
+            success:function(data){
+              if(data.status == 'success'){
                   Swal.fire({
                     title: '<strong class="text-success">Success</strong>',
-                    type: 'success',
-                    html: '<b>Archive Resident has Successfully<b>',
+                    icon: 'success',
+                    html: '<b>' + data.message + '</b>',
                     width: '400px',
                     showConfirmButton: false,
                     allowOutsideClick: false,
                     timer: 2000
                   }).then(()=>{
+                    // Reload the table
                     $("#allResidenceTable").DataTable().ajax.reload();
                   })
-                }
-              }).fail(function(){
-                Swal.fire({
-                  title: '<strong class="text-danger">Ooppss..</strong>',
-                  type: 'error',
-                  html: '<b>Something went wrong with ajax !<b>',
-                  width: '400px',
-                  confirmButtonColor: '#6610f2',
-                })
+              } else {
+                  Swal.fire('Error', data.message, 'error');
+              }
+            },
+            error: function(xhr, status, error){
+               console.log(xhr.responseText); 
+               Swal.fire({
+                title: '<strong class="text-danger">Ooppss..</strong>',
+                icon: 'error',
+                html: '<b>Something went wrong with ajax!</b>',
+                width: '400px',
+                confirmButtonColor: '#6610f2',
               })
             }
           })
-
+        }
       })
-    }
+  })
+}
 
 
     function editStatus(){
@@ -1071,9 +789,9 @@ input:checked + .slider .off{
     })
     
     $(document).on('click', '.pop',function() {
-			$('.imagepreview').attr('src', $(this).find('img').attr('src'));
-			$('#imagemodal').modal('show');   
-		});
+      $('.imagepreview').attr('src', $(this).find('img').attr('src'));
+      $('#imagemodal').modal('show');   
+    });
 
     $("#age").on("input", function() {
       if (/^0/.test(this.value)) {
@@ -1101,9 +819,6 @@ input:checked + .slider .off{
     });
   };
 }(jQuery));
-
-
-
 
   $("#first_name, #middle_name, #last_name").inputFilter(function(value) {
   return /^[a-z, ]*$/i.test(value); 

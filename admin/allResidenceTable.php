@@ -1,193 +1,179 @@
 <?php 
+// admin/allResidenceTable.php
+include_once '../db_connection.php'; // Ensure this file has the $pdo variable
 
-include_once '../connection.php';
+try {
+    // --- 1. READ INPUTS FROM DATATABLES ---
+    $draw   = $_POST['draw'] ?? 1;
+    $start  = $_POST['start'] ?? 0;
+    $length = $_POST['length'] ?? 10;
+    $orderColumnIndex = $_POST['order'][0]['column'] ?? 0;
+    $orderDir = $_POST['order'][0]['dir'] ?? 'DESC';
 
-try{
-  
+    // --- Filters sent from HTML ---
+    $first_name    = $_POST['first_name'] ?? '';
+    $middle_name   = $_POST['middle_name'] ?? '';
+    $last_name     = $_POST['last_name'] ?? '';
+    // $status     = $_POST['status'] ?? ''; // IGNORED: Column does not exist in DB
+    $voters        = $_POST['voters'] ?? '';
+    $age           = $_POST['age'] ?? '';
+    $pwd           = $_POST['pwd'] ?? '';
+    $senior        = $_POST['senior'] ?? '';
+    $single_parent = $_POST['single_parent'] ?? '';
+    $resident_id   = $_POST['resident_id'] ?? '';
 
-$first_name = $con->real_escape_string($_POST['first_name']);
-$middle_name = $con->real_escape_string($_POST['middle_name']);
-$last_name = $con->real_escape_string($_POST['last_name']);
-$status = $con->real_escape_string($_POST['status']);
-$voters =  $con->real_escape_string($_POST['voters']);
-$age =  $con->real_escape_string($_POST['age']);
-$pwd =  $con->real_escape_string($_POST['pwd']);
-$senior =  $con->real_escape_string($_POST['senior']);
-$single_parent =  $con->real_escape_string($_POST['single_parent']);
-$resident_id =  $con->real_escape_string($_POST['resident_id']);
+    // --- Map columns for sorting ---
+    // Indexes must match the HTML table column order (0=Image, 1=Resident ID, etc.)
+    $columns = [
+        0 => 'image_path', 
+        1 => 'resident_id', 
+        2 => 'first_name', 
+        3 => 'age', 
+        4 => 'pwd', 
+        5 => 'single_parent', 
+        6 => 'voter', 
+        7 => 'resident_id' // Status column placeholder
+    ];
+    
+    // Default sorting by resident_id if index not found
+    $orderBy = $columns[$orderColumnIndex] ?? 'resident_id';
 
-$whereClause = [];
+    // --- 2. BUILD QUERY ---
+    // We select from residence_information ONLY.
+    // NOTE: Removed "WHERE archive = 'NO'" because 'archive' column doesn't exist.
+    $sqlBase = " FROM residence_information WHERE 1=1 "; 
+    $params = [];
 
-if(!empty($first_name))  
-$whereClause[] = "first_name LIKE '%" .$first_name. "%'";
+    // Apply Filters
+    if(!empty($first_name)) {
+        $sqlBase .= " AND first_name LIKE :first_name";
+        $params[':first_name'] = "%$first_name%";
+    }
+    if(!empty($middle_name)) {
+        $sqlBase .= " AND middle_name LIKE :middle_name";
+        $params[':middle_name'] = "%$middle_name%";
+    }
+    if(!empty($last_name)) {
+        $sqlBase .= " AND last_name LIKE :last_name";
+        $params[':last_name'] = "%$last_name%";
+    }
+    if(!empty($pwd)) {
+        $sqlBase .= " AND pwd = :pwd";
+        $params[':pwd'] = $pwd; // Expects 'Yes' or 'No'
+    }
+    if(!empty($single_parent)) {
+        $sqlBase .= " AND single_parent = :single_parent";
+        $params[':single_parent'] = $single_parent; // Expects 'Yes' or 'No'
+    }
+    if(!empty($senior)) {
+        $sqlBase .= " AND senior_citizen = :senior"; // DB Column is 'senior_citizen'
+        $params[':senior'] = $senior; // Expects 'Yes' or 'No'
+    }
+    if(!empty($voters)) {
+        $sqlBase .= " AND voter = :voters"; // DB Column is 'voter'
+        $params[':voters'] = $voters; // Expects 'Yes' or 'No'
+    }
+    if(!empty($age)) {
+        $sqlBase .= " AND age = :age";
+        $params[':age'] = $age;
+    }
+    if(!empty($resident_id)) {
+        $sqlBase .= " AND resident_id = :resident_id"; // Correct PK is 'resident_id'
+        $params[':resident_id'] = $resident_id;
+    }
 
-if(!empty($middle_name))  
-$whereClause[] = "middle_name LIKE '%" .$middle_name. "%'";
+    // --- 3. COUNT TOTALS ---
+    // Total records (Unfiltered)
+    $stmtTotal = $pdo->query("SELECT COUNT(*) FROM residence_information"); 
+    $totalData = $stmtTotal->fetchColumn();
 
-if(!empty($last_name))  
-$whereClause[] = "last_name LIKE '%" .$last_name. "%'";
+    // Total records (Filtered)
+    $stmtFiltered = $pdo->prepare("SELECT COUNT(*) " . $sqlBase);
+    $stmtFiltered->execute($params);
+    $totalFiltered = $stmtFiltered->fetchColumn();
 
-if(!empty($pwd))  
-$whereClause[] = "residence_status.pwd='".$pwd."'";
+    // --- 4. FETCH DATA ---
+    // Added LIMIT and OFFSET for pagination
+    $sqlData = "SELECT * " . $sqlBase . " ORDER BY $orderBy $orderDir LIMIT :limit OFFSET :offset";
+    
+    $stmt = $pdo->prepare($sqlData);
+    
+    // Bind all filter params
+    foreach($params as $key => $value){
+        $stmt->bindValue($key, $value);
+    }
+    
+    // Bind pagination params
+    $stmt->bindValue(':limit', (int)$length, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', (int)$start, PDO::PARAM_INT);
+    
+    $stmt->execute();
+    $empRecords = $stmt->fetchAll();
 
-if(!empty($single_parent))  
-$whereClause[] = "residence_status.single_parent='".$single_parent."'";
+    // --- 5. FORMAT DATA ---
+    $data = [];
+    foreach($empRecords as $row) {
+        
+        // Image Logic
+        if(!empty($row['image_path'])){
+            // Assuming image path in DB is relative or absolute. Adjust '../' if needed.
+            $img = '<div class="text-center"><a href="#" class="pop"><img src="'.$row['image_path'].'" style="width: 40px; height: 40px; border: 1px solid gray; border-radius: 50%; object-fit: cover;"></a></div>';
+        } else {
+            $img = '<div class="text-center"><img src="../assets/dist/img/blank_image.png" style="width: 40px; height: 40px; border: 1px solid gray; border-radius: 50%; object-fit: cover;"></div>';
+        }
 
-if(!empty($senior))  
-$whereClause[] = "residence_status.senior='".$senior."'";
+        // Name Formatting
+        $middle_name = !empty($row['middle_name']) ? ucfirst($row['middle_name'][0]).'.' : '';
+        $full_name = strtoupper($row['last_name'] . ', ' . $row['first_name'] . ' ' . $middle_name);
 
-if(!empty($status))  
-$whereClause[] = "residence_status.status='".$status."'";
+        // Badges
+        $voters = ($row['voter'] == 'Yes') ? '<span class="badge badge-success">YES</span>' : '<span class="badge badge-danger">NO</span>';
+        $single_parent = ($row['single_parent'] == 'Yes') ? '<span class="badge badge-info">YES</span>' : '<span class="badge badge-warning">NO</span>';
+        
+        // PWD Info
+        $pwd_display = $row['pwd'];
+        if($row['pwd'] == 'Yes' && !empty($row['pwd_info'])){
+            $pwd_display .= ' <small>('.$row['pwd_info'].')</small>';
+        }
 
-if(!empty($voters))
-$whereClause[] = "residence_status.voters='".$voters."'";
+        // Status
+        // Since 'status' column DOES NOT EXIST in your DB, we hardcode 'ACTIVE' for display purposes
+        // so the table layout doesn't break.
+        $status = '<span class="badge badge-success">ACTIVE</span>'; 
 
-if(!empty($age))
-$whereClause[] = "residence_information.age='".$age."'";
+        // Action Buttons
+        // Used 'resident_id' here
+        $action = '<div class="text-center">
+                    <button type="button" class="btn btn-sm btn-warning viewResidence text-white elevation-2" id="'.$row['resident_id'].'" title="View Details"><i class="fas fa-eye"></i></button>
+                    <button type="button" class="btn btn-sm btn-danger deleteResidence elevation-2" id="'.$row['resident_id'].'" title="Archive"><i class="fas fa-archive"></i></button>
+                   </div>';
 
+        $data[] = [
+            $img,
+            $row['resident_id'], // Correct Primary Key
+            $full_name,
+            $row['age'],
+            $pwd_display,
+            $single_parent,
+            $voters,
+            $status,
+            $action
+        ];
+    }
 
-if(!empty($resident_id))
-$whereClause[] = "residence_information.residence_id='$resident_id'";
+    // --- 6. RESPONSE ---
+    $response = [
+        "draw" => intval($draw),
+        "iTotalRecords" => $totalData,
+        "iTotalDisplayRecords" => $totalFiltered,
+        "aaData" => $data
+    ];
 
+    echo json_encode($response);
 
-$where = '';
-
-if(count($whereClause) > 0){
-  $where .= ' AND ' .implode(' AND ', $whereClause);
+} catch (PDOException $e) {
+    echo json_encode(["error" => "Database Error: " . $e->getMessage()]);
+} catch (Exception $e) {
+    echo json_encode(["error" => "Error: " . $e->getMessage()]);
 }
-
-
-
-
-$sql = "SELECT 
-residence_information.residence_id, 
-residence_information.first_name,  
-residence_information.middle_name, 
-residence_information.last_name, 
-residence_information.age, 
-residence_information.image, 
-residence_information.image_path, 
-residence_status.residence_id,
-residence_status.voters,
-residence_status.single_parent,
-residence_status.pwd_info,
-residence_status.status
-FROM residence_information
-INNER JOIN residence_status ON residence_information.residence_id = residence_status.residence_id
- WHERE archive = 'NO'" .$where;
-$query = $con->prepare($sql) or die ($con->error);
-$query->execute();
-$query->store_result();
-$totalData = $query->num_rows;
-$totalFiltered = $totalData;
-
-
-
-
-
-
-
-if(isset($_REQUEST['order'])){
-  $sql .= ' ORDER BY '.
-  $_REQUEST['order']['0']['column'].
-  ' '.
-  $_REQUEST['order']['0']['dir'].
-  ' ';
-}else{
-  $sql .= ' ORDER BY date_added DESC ';
-}
-
-if($_REQUEST['length'] != -1){
-  $sql .= ' LIMIT '.
-  $_REQUEST['start'].
-  ' ,'.
-  $_REQUEST['length'].
-  '';
-}
-
-$query = $con->prepare($sql) or die ($con->error);
-$query->execute();
-$result = $query->get_result();
-$data = [];
-while($row = $result->fetch_assoc()){
-  
-
-  if($row['image'] != '' || $row['image'] != null || !empty($row['image'])){
-    $image = '<span style="cursor: pointer;" class="pop"><img src="'.$row['image_path'].'" alt="residence_image" class="img-circle" width="40"></span>';
-  }else{
-    $image = '<span style="cursor: pointer;" class="pop"><img src="../assets/dist/img/blank_image.png" alt="residence_image" class="img-circle"  width="40"></span>';
-  }
-
-  if($row['middle_name'] != ''){
-    $middle_name = ucfirst($row['middle_name'])[0].'.';
-  }else{
-    $middle_name = '';
-  }
-
-  
-  if($row['voters'] == 'YES'){
-    $voters = '<span class="badge badge-success text-md ">'.$row['voters'].'</span>';
-  }else{
-    $voters = '<span class="badge badge-danger text-md ">'.$row['voters'].'</span>';
-  }
-
-  if($row['single_parent'] == 'YES'){
-    $single_parent = '<span class="badge badge-info text-md ">'.$row['single_parent'].'</span>';
-  }else{
-    $single_parent = '<span class="badge badge-warning text-md ">'.$row['single_parent'].'</span>';
-  }
-
-
-  if($row['status'] == 'ACTIVE'){
-    $status = '<label class="switch">
-                    <input type="checkbox" class="editStatus" data-status="ACTIVE"  id="'.$row['residence_id'].'"  checked>
-                  <div class="slider round">
-                    <span class="on ">ACTIVE</span>
-                    <span class="off ">INACTIVE</span>
-                  </div>
-              </label>';
-}else{
-    $status = '<label class="switch">
-                    <input type="checkbox" class="editStatus" id="'.$row['residence_id'].'" data-status="INACTIVE">
-                  <div class="slider round">
-                    <span class="off ">INACTIVE</span>
-                    <span class="on ">ACTIVE</span>
-                  </div>
-              </label> ';
-}
-
-  $subdata = [];
-  $subdata[] = $image;
-  $subdata[] =  $row['residence_id'];
-  $subdata[] =  ucfirst($row['first_name']).' '. $middle_name .' '. ucfirst($row['last_name']); 
-  $subdata[] =  $row['age'];
-  $subdata[] =  $row['pwd_info']; 
-  $subdata[] =  $single_parent; 
-  $subdata[] = $voters;
-  $subdata[] = $status;
-  $subdata[] = '<i style="cursor: pointer;  color: yellow;  text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fa fa-user-edit text-lg px-3 viewResidence" id="'.$row['residence_id'].'"></i>
-  <i style="cursor: pointer;  color: red;  text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fa fa-times text-lg px-2 deleteResidence" id="'.$row['residence_id'].'"></i>';
-  $data[] = $subdata;
-}
-
-$json_data = [
-  'draw' => intval($_REQUEST['draw']),
-  'recordsTotal' => intval($totalData),
-  'recordsFiltered' => intval($totalFiltered),
-  'data' => $data,
-  'total'    => number_format($totalData),
-];
-
-echo json_encode($json_data);
-
-
-
-}catch(Exception $e){
-  echo $e->getMessage();
-}
-
-
-
-
-
 ?>
