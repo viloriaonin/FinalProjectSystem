@@ -108,26 +108,38 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_type']) || $_SESSION[
                   </tr>
                 </thead>
                 <tbody>
-                  <?php
-                  // Query barangay_applications table
-                  $sql = "SELECT * FROM barangay_applications"; // Changed to * to get IDs if needed later
-                  $stmt = $pdo->query($sql);
+  <?php
+  // Query barangay_applications table
+  $sql = "SELECT * FROM barangay_applications"; 
+  $stmt = $pdo->query($sql);
 
-                  if ($stmt && $stmt->rowCount() > 0) {
-                      while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                          echo "<tr>";
-                          echo "<td>" . htmlspecialchars($row['first_name']) . "</td>";
-                          echo "<td>" . htmlspecialchars($row['middle_name']) . "</td>";
-                          echo "<td>" . htmlspecialchars($row['last_name']) . "</td>";
-                          // Added dummy action buttons to match the look
-                          echo '<td class="text-center">
-                                  <button class="btn btn-info btn-sm elevation-2"><i class="fas fa-eye"></i> View</button>
-                                </td>';
-                          echo "</tr>";
-                      }
-                  }
-                  ?>
-                </tbody>
+  if ($stmt && $stmt->rowCount() > 0) {
+      while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+          echo "<tr>";
+          echo "<td>" . htmlspecialchars($row['applicant_id']) . "</td>";
+          echo "<td>" . htmlspecialchars($row['first_name']) . "</td>";
+          echo "<td>" . htmlspecialchars($row['middle_name']) . "</td>";
+          echo "<td>" . htmlspecialchars($row['last_name']) . "</td>";
+          // ... inside your loop ...
+           echo '<td class="text-center">
+              <button type="button" class="btn btn-info btn-sm elevation-2 viewApplication" data-id="'.$row['applicant_id'].'">
+                  <i class="fas fa-eye"></i> View
+              </button>
+      </td>';
+// ...
+          echo "</tr>";
+      }
+  } else {
+      // This part runs if the table is empty
+      echo '<tr>
+              <td colspan="5" class="text-center text-muted font-weight-bold py-4">
+                <i class="fas fa-folder-open fa-2x mb-2"></i><br>
+                No Applications Found
+              </td>
+            </tr>';
+  }
+  ?>
+</tbody>
               </table>
             </fieldset>
 
@@ -182,21 +194,60 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_type']) || $_SESSION[
              "<'d-flex flex-sm-row-reverse flex-column border-top '<'px-2 'p><'px-2'i> <'px-2'l> >",
     });
 
-    // Custom Search Logic to link inputs to DataTable
+   // Custom Search Logic
+    // Column 0 is now Applicant ID, so we start searching at Column 1
+    
     $('#customFirst').on('keyup', function () {
-        table.column(0).search(this.value).draw();
-    });
-    $('#customMiddle').on('keyup', function () {
-        table.column(1).search(this.value).draw();
-    });
-    $('#customLast').on('keyup', function () {
-        table.column(2).search(this.value).draw();
+        // Was column(0), changed to column(1) because ID is now 0
+        table.column(1).search(this.value).draw(); 
     });
     
-    // Hide default DataTables search box to keep design clean
-    $('.dataTables_filter').hide();
-  });
-</script>
+    $('#customMiddle').on('keyup', function () {
+        // Was column(1), changed to column(2)
+        table.column(2).search(this.value).draw(); 
+    });
+    
+    $('#customLast').on('keyup', function () {
+        // Was column(2), changed to column(3)
+        table.column(3).search(this.value).draw(); 
+    });
 
+    // View Application Modal
+$(document).on('click', '.viewApplication', function(){
+    var applicant_id = $(this).data('id');
+    $("#viewApplicantModal").modal('show'); 
+    
+    $.ajax({
+        url: 'viewApplicantModal.php',
+        type: 'POST',
+        data: { applicant_id: applicant_id },
+        success: function(data){
+            // Make sure you are targeting the .modal-content div to replace everything inside it
+            $("#viewApplicantModal .modal-content").html(data);
+        }
+    });
+});
+  });
+  
+</script>
+<div class="modal fade" id="viewApplicantModal" tabindex="-1" role="dialog" aria-labelledby="viewAppLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content"> <div class="modal-header bg-info">
+        <h5 class="modal-title" id="viewAppLabel"><i class="fas fa-user-check mr-2"></i> Applicant Details</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="displayApplicationData">
+        <div class="text-center py-5">
+            <i class="fas fa-spinner fa-spin fa-3x text-muted"></i>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
