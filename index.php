@@ -1,321 +1,311 @@
-
-
 <?php
 //index.php
-include_once 'connection.php';
+include_once 'db_connection.php';
+include_once 'navbar.php'; 
 session_start();
-if(isset($_SESSION['user_id']) && $_SESSION['user_type']){
 
-
-  $user_id = $_SESSION['user_id'];
-  $sql = "SELECT * FROM users WHERE id = '$user_id'";
-  $query = $con->query($sql) or die ($con->error);
-  $row = $query->fetch_assoc();
-  $account_type = $row['user_type'];
-  if ($account_type == 'admin') {
-  echo '<script>
-          window.location.href="admin/dashboard.php";
-      </script>';
-  
-  } elseif ($account_type == 'secretary') {
-      echo '<script>
-          window.location.href="secretary/dashboard.php";
-      </script>';
-  
-  } else {
-      echo '<script>
-      window.location.href="resident/dashboard.php";
-  </script>';
-  
+// --- 1. SECURITY & REDIRECT CHECK ---
+if(isset($_SESSION['user_id']) && isset($_SESSION['user_type'])){
+    $user_id = $_SESSION['user_id'];
+    
+    // Use $pdo from your db_connection.php
+    $sql = "SELECT user_type FROM users WHERE user_id = :user_id"; 
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':user_id' => $user_id]);
+    
+    // No need for PDO::FETCH_ASSOC argument because you set it as default in db_connection.php
+    if($row = $stmt->fetch()){
+        $account_type = $row['user_type'];
+        
+        if ($account_type == 'admin') {
+            header('Location: admin/dashboard.php');
+            exit;
+        } elseif ($account_type == 'secretary') {
+            header('Location: secretary/dashboard.php');
+            exit;
+        } else {
+            header('Location: resident/dashboard.php');
+            exit;
+        }
+    }
 }
 
+// --- 2. FETCH BARANGAY INFORMATION ---
+$sql_brgy = "SELECT * FROM `barangay_information` LIMIT 1";
+$stmt_brgy = $pdo->prepare($sql_brgy);
+$stmt_brgy->execute();
 
+// Default variables
+$barangay = "Barangay";
+$municipality = "Municipality";
+$province = "Province";
+$image = "default.png";
+$postal_address = "";
 
-
-
+if($row_brgy = $stmt_brgy->fetch()){
+    $barangay = $row_brgy['barangay'];
+    $municipality = $row_brgy['municipality'];
+    $province = $row_brgy['province'];
+    // Handle potential nulls
+    $image = $row_brgy['image'] ?? $row_brgy['images']; 
+    $image_path = $row_brgy['image_path'] ?? '';
+    $id = $row_brgy['barangay_id'] ?? $row_brgy['id'] ?? null;
+    
+    // Address logic
+    if(!empty($row_brgy['postal_address'])){
+        $postal_address = $row_brgy['postal_address'];
+    } else {
+        $postal_address = $barangay . ', ' . $municipality . ', ' . $province;
+    }
 }
-$sql = "SELECT * FROM `barangay_information`";
-  $query = $con->prepare($sql) or die ($con->error);
-  $query->execute();
-  $result = $query->get_result();
-  while($row = $result->fetch_assoc()){
-      $barangay = $row['barangay'];
-      $zone = $row['zone'];
-      $district = $row['district'];
-      $image = $row['image'];
-      $image_path = $row['image_path'];
-      $id = $row['id'];
-      $postal_address = $row['postal_address'];
-  }
 
-  function make_query($con){
+// --- 3. CAROUSEL FUNCTIONS ---
 
+// Fetch all carousel data once using $pdo
+function get_carousel_data($pdo){
     $sql = "SELECT * FROM carousel";
-    $query = $con->query($sql) or die ($con->error);
-    return $query;
-  }
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute();
+    return $stmt->fetchAll(); // Returns associative array based on your config
+}
 
-function make_slide_indicators($con){
+// Store data in a variable to pass to functions below
+$carousel_items = get_carousel_data($pdo);
 
+function make_slide_indicators($data){
     $output = ''; 
     $count = 0;
-    $result = make_query($con);
-    while($row = $result->fetch_assoc()) {
-
-      if($count == 0) {
-     
-      $output .= '
-      <li data-target="#carouselExampleIndicators" data-slide-to="'.$count.'" class="active"></li>
-      ';
-     
-      }else{
-      
-      $output .= '
-      <li data-target="#carouselExampleIndicators" data-slide-to="'.$count.'"></li>
-      ';
-      }
-      $count = $count + 1;
+    foreach($data as $row) {
+        $active = ($count == 0) ? 'active' : '';
+        $output .= '<li data-target="#heroCarousel" data-slide-to="'.$count.'" class="'.$active.'"></li>';
+        $count++;
     }
     return $output;
 }
 
-function make_slides($con){
-
-      $output = '';
-      $count = 0;
-      $result = make_query($con);
-      while($row = mysqli_fetch_array($result)) {
-     
-      if($count == 0)  {
-      
-        $output .= '<div class="carousel-item active">';
+function make_slides($data, $barangay_name){
+    $output = '';
+    $count = 0;
+    
+    foreach($data as $row) {
+        $active = ($count == 0) ? 'active' : '';
         
-      }else{
-        
-        $output .= '<div class="carousel-item">';
-      }
         $output .= '
-        <img class="d-block w-100" src="'.$row["banner_image_path"].'" alt="'.$row["banner_title"].'" />
-          <div class="carousel-caption">
-            <h3>'.$row["banner_title"].'</h3>
-          </div>
-        </div>
-        ';
-        $count = $count + 1;
-      }
-      return $output;
+        <div class="carousel-item '.$active.'">
+            <div class="carousel-image-overlay"></div> 
+            <img class="d-block w-100" src="'.htmlspecialchars($row["banner_image_path"]).'" alt="'.htmlspecialchars($row["banner_title"]).'" />
+            <div class="carousel-caption">
+                <h1 class="display-4 font-weight-bold">'.htmlspecialchars($row["banner_title"]).'</h1>
+                <p class="lead">Welcome to the official portal of '.htmlspecialchars($barangay_name).'</p>
+            </div>
+        </div>';
+        $count++;
+    }
+    return $output;
 }
-
 ?>
-
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title></title>
-<!-- Font Awesome Icons -->
-<link rel="stylesheet" href="assets/plugins/fontawesome-free/css/all.min.css">
-
-  <!-- Theme style -->
+  <title>Welcome to <?= htmlspecialchars($barangay) ?> Portal</title>
+  
+  <link rel="stylesheet" href="assets/plugins/fontawesome-free/css/all.min.css">
   <link rel="stylesheet" href="assets/dist/css/adminlte.min.css">
- 
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 
   <style>
-    .rightBar:hover{
-      border-bottom: 3px solid red;
-     
+    body { font-family: 'Poppins', sans-serif; }
+    
+    .rightBar:hover{ border-bottom: 3px solid red; }
+
+    /* --- SCROLLING FIXES --- */
+    .content-wrapper {
+        min-height: calc(100vh - 60px) !important; 
+        height: auto !important; 
+        background-image: none;
     }
     
+    .main-footer {
+        margin-left: 0 !important;
+        position: relative !important;
+        width: 100%;
+        z-index: 10;
+    }
 
-
+    /* Carousel */
+    #heroCarousel .carousel-item {
+      height: 75vh; min-height: 400px;
+      background: no-repeat center center scroll; background-size: cover;
+    }
+    #heroCarousel .carousel-item img {
+      position: absolute; top: 0; left: 0; min-width: 100%; height: 100%; object-fit: cover; z-index: 1;
+    }
+    .carousel-image-overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.4); z-index: 2;
+    }
+    #heroCarousel .carousel-caption {
+      bottom: auto; top: 50%; transform: translateY(-50%); z-index: 3; text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+    }
     
-    #barangay_logo{
-      height: 150px;
-      width:auto;
-      max-width:500px;
+    /* General Section */
+    .section-title {
+        color: #0037af; font-weight: 700; margin-bottom: 30px; position: relative;
     }
-
-    .logo{
-      height: 150px;
-      width:auto;
-      max-width:500px;
+    .section-title::after {
+        content: ''; display: block; width: 60px; height: 3px; background: #0037af; margin: 10px auto 0;
     }
-    .content-wrapper{
-      background-image: url('assets/logo/cover.jpg');
-      background-repeat:no-repeat;
-background-size:contain;
-background-size: cover;
-background-position:center;
-width: 100%;
-  height: auto;
-        animation-name: example;
-        animation-duration: 5s;
-       
-       
+    
+    /* Service & Info Cards */
+    .service-card {
+        transition: all 0.3s ease; border: 0; box-shadow: 0 4px 15px rgba(0,0,0,0.05); height: 100%;
+        background: #fff; border-radius: 10px;
     }
-
-
-@keyframes example {
-  from {opacity: 0;}
-  to {opacity: 1.5;}
-}
-
-
-
-
-
+    .service-card:hover {
+        transform: translateY(-10px); box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+    }
+    .service-card .card-body { padding: 2.5rem; }
+    .service-card i { font-size: 3.5rem; color: #0037af; margin-bottom: 1.5rem; }
+    .service-card h5 { font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem; }
+    .service-card p, .service-card li { color: #6c757d; }
+    .goals-list { text-align: left; display: inline-block; }
   </style>
-
-
 </head>
-<body  class="hold-transition layout-top-nav">
+<body class="hold-transition layout-top-nav">
 
-
-<div class="wrapper">
-
-  <!-- Navbar -->
-  <nav class="main-header navbar navbar-expand-md " style="background-color: #0037af">
-    <div class="container">
-      <a href="" class="navbar-brand">
-        <img src="assets/dist/img/<?= $image  ?>" alt="logo" class="brand-image img-circle " >
-        <span class="brand-text  text-white"  style="font-weight: 700">BARANGAY PORTAL</span>
-      </a>
-
-      <button class="navbar-toggler order-1" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-
-      <div class="collapse navbar-collapse order-3" id="navbarCollapse">
-        <!-- Left navbar links -->
-
-
-       
-      </div>
-
-      <!-- Right navbar links -->
-      <ul class="order-1 order-md-3 navbar-nav navbar-no-expand ml-auto " >
-          <li class="nav-item">
-            <a href="#" class="nav-link text-white rightBar" style="  border-bottom: 3px solid red;">HOME</a>
-          </li>
-          <li class="nav-item">
-            <a href="register.php" class="nav-link text-white rightBar"><i class="fas fa-user-plus"></i> REGISTER</a>
-          </li>
-          <li class="nav-item">
-            <a href="login.php" class="nav-link text-white rightBar"><i class="fas fa-user-alt"></i> LOGIN</a>
-          </li>
-      </ul>
-    </div>
-  </nav>
-  <!-- /.navbar -->
-
-  <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper" >
-    <!-- Content Header (Page header) -->
- 
-    
   
-    <!-- /.content-header -->
-
-    <!-- Main content -->
-    <div class="content  " >
-      <div class="container-fluid pt-5">
-      <div class="card "  style=" background-color: rgba(0,54,175,.75);">
-      
-      <div class="card-body text-center text-white">
-      <h1 class="card-text" style="font-weight: 1000">WELCOME</h1>
-        <img src="assets/dist/img/<?= $image;?>" alt="logo" class="img-circle logo">
-        
-          <h1 class="card-text" style="font-weight: 1000; text-transform: uppercase; "><?= $barangay ?> <?= $zone ?>, <?= $district ?></h1>
-          <br>
-          <br>
-          <a href="register.php" class="btn bg-red btn-lg px-3 " style="font-weight: 900">REGISTER NOW</a>
-          <a href="login.php" class="btn btn-outline-info btn-lg px-3 text-white" style="font-weight: 900; border: 2px solid #fff">LOGIN</a>
+    <div id="heroCarousel" class="carousel slide" data-ride="carousel" data-interval="5000">
+      <ol class="carousel-indicators">
+        <?php echo make_slide_indicators($carousel_items); ?>
+      </ol>
+      <div class="carousel-inner">
+        <?php echo make_slides($carousel_items, $barangay); ?>
       </div>
+      <a class="carousel-control-prev" href="#heroCarousel" role="button" data-slide="prev">
+        <span class="carousel-control-custom-icon" aria-hidden="true"><i class="fas fa-chevron-left fa-2x"></i></span>
+        <span class="sr-only">Previous</span>
+      </a>
+      <a class="carousel-control-next" href="#heroCarousel" role="button" data-slide="next">
+        <span class="carousel-control-custom-icon" aria-hidden="true"><i class="fas fa-chevron-right fa-2x"></i></span>
+        <span class="sr-only">Next</span>
+      </a>
     </div>
-
-      </div>
-
   
-
-
-
-    
-
-    <!-- <div class="container-fluid ">
-      <div class="row pt-5">
-        <div class="col-sm-7">
-        <div id="carouselExampleIndicators" class="carousel slide" data-ride="carousel" data-interval="4000">
-                    <ol class="carousel-indicators">
-                    <?php echo make_slide_indicators($con); ?>
-          
-                    </ol>
-                <div class="carousel-inner">
-                <?php echo make_slides($con); ?>
-                  
+    <div class="content">
+      <div class="container">
+         <div class="row pt-5 pb-4 justify-content-center">
+            <div class="col-lg-10 text-center">
+                <div class="card card-body shadow-sm" style="border-top: 5px solid #0037af;">
+                    <h1 class="card-text" style="font-weight: 700; color: #0037af;">Welcome to the <?= htmlspecialchars($barangay) ?> Portal</h1>
+                    <p class="lead text-muted">Your online gateway for barangay services, announcements, and requests. <br>Register an account or log in to get started.</p>
+                    <div class="mt-3">
+                        <a href="register.php" class="btn btn-lg px-4" style="background-color: #0037af; color: white; font-weight: 700"><i class="fas fa-user-plus mr-2"></i> REGISTER NOW</a>
+                        <a href="login.php" class="btn btn-outline-secondary btn-lg px-4 ml-2" style="font-weight: 700;"><i class="fas fa-sign-in-alt mr-2"></i> LOGIN</a>
+                    </div>
                 </div>
-                <a class="carousel-control-prev" href="#carouselExampleIndicators" role="button" data-slide="prev">
-                  <span class="carousel-control-custom-icon" aria-hidden="true">
-                    <i class="fas fa-chevron-left"></i>
-                  </span>
-                  <span class="sr-only">Previous</span>
-                </a>
-                <a class="carousel-control-next" href="#carouselExampleIndicators" role="button" data-slide="next">
-                  <span class="carousel-control-custom-icon" aria-hidden="true">
-                    <i class="fas fa-chevron-right"></i>
-                  </span>
-                  <span class="sr-only">Next</span>
-                </a>
-              </div>
-
-        </div>
-        <div class="col-sm-5">
-          <div class="card text-left">
-            <img class="card-img-top" src="holder.js/100px180/" alt="">
-            <div class="card-body">
-              <h4 class="card-title">Title</h4>
-              <p class="card-text">Body</p>
             </div>
-          </div>
         </div>
       </div>
-            
-    </div> -->
- 
-
-     
-          
-               
-      
-     
     </div>
-    <!-- /.content -->
+
+    <div class="bg-light pt-5 pb-5">
+        <div class="container">
+            <h2 class="section-title text-center">Mission & Vision</h2>
+            <div class="row">
+                
+                <div class="col-lg-6 mb-4">
+                    <div class="card service-card h-100">
+                        <div class="card-body text-center">
+                            <i class="fas fa-bullseye"></i>
+                            <h5 class="card-title">MISSION</h5>
+                            <p class="card-text">To be one of the Barangay who is united healthy, god-oriented, progressive, peaceful, productive administration and can sustain community needs.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-6 mb-4">
+                    <div class="card service-card h-100">
+                        <div class="card-body text-center">
+                            <i class="fas fa-eye"></i>
+                            <h5 class="card-title">VISION</h5>
+                            <p class="card-text">To be one of the Barangay who is progressive, united, can sustain our fellow's needs, has an active administration, and is a Barangay who had fellowmen that always supports the good governance of each barangay leaders.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6 mb-4">
+                    <div class="card service-card h-100">
+                        <div class="card-body text-center">
+                            <i class="fas fa-star"></i>
+                            <h5 class="card-title">ASPIRATION</h5>
+                            <p class="card-text">We desired that our whole community would be free and safe of any hazards and calamities.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-6 mb-4">
+                    <div class="card service-card h-100">
+                        <div class="card-body text-center">
+                            <i class="fas fa-tasks"></i>
+                            <h5 class="card-title">GOALS</h5>
+                            <div class="d-inline-block text-left">
+                                <ul class="mb-0 pl-3" style="color: #6c757d;">
+                                    <li>To strengthen the BDRRMC member/s.</li>
+                                    <li>To give community knowledge on hazards.</li>
+                                    <li>To be alert and prepared for calamities.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+  
+    <div class="pt-5 pb-5">
+        <div class="container">
+            <h2 class="section-title text-center">Our Services</h2>
+            <div class="row justify-content-center">
+                <div class="col-md-6 mb-4">
+                    <div class="card service-card h-100">
+                        <div class="card-body text-center">
+                            <i class="fas fa-certificate"></i>
+                            <h5 class="card-title">Document Requests</h5>
+                            <p class="card-text text-muted">Quickly request your Barangay Clearance, Certificate of Indigency, and other essential documents online.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-4">
+                    <div class="card service-card h-100">
+                        <div class="card-body text-center">
+                            <i class="fas fa-id-card"></i>
+                            <h5 class="card-title">Residency Application</h5>
+                            <p class="card-text text-muted">Easily apply for your residency certificate and manage your household information.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="main-footer text-white text-center" style="background-color: #0037af; padding: 20px 0;">
+      <div class="container">
+        <h5 class="font-weight-bold mb-2 text-uppercase"><?= htmlspecialchars($barangay) ?></h5>
+        <p class="mb-2">
+          <i class="fas fa-map-marker-alt mr-2"></i> <?= htmlspecialchars($postal_address) ?>
+        </p>
+        <small style="opacity: 0.7;">&copy; <?= date('Y') ?> Barangay Portal. All Rights Reserved.</small>
+      </div>
+    </footer>
+  
   </div>
-  <!-- /.content-wrapper -->
 
- 
-  <footer class="main-footer text-white" style="background-color: #0037af">
-    <div class="float-right d-none d-sm-block">
-    
-    </div>
-  <i class="fas fa-map-marker-alt"></i> <?= $postal_address ?> 
-  </footer>
- 
-
-
-</div>
-<!-- ./wrapper -->
-
-
-
-
-
-<!-- jQuery -->
 <script src="assets/plugins/jquery/jquery.min.js"></script>
-<!-- Bootstrap -->
 <script src="assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
-<!-- AdminLTE App -->
 <script src="assets/dist/js/adminlte.js"></script>
 
 </body>
