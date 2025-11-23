@@ -12,19 +12,19 @@ if($_SESSION['user_type'] == 'admin'){
     $user_type_log = 'RESIDENT';
 }
 
-$sql_user = "SELECT first_name, last_name FROM users WHERE id = ?";
+$sql_user = "SELECT username, password FROM users WHERE user_id = ?";
 $stmt_user = $con->prepare($sql_user) or die ($con->error);
 $stmt_user->bind_param('s',$_SESSION['user_id']);
 $stmt_user->execute();
 $result_user = $stmt_user->get_result();
 $row_user = $result_user->fetch_assoc();
-$first_name = $row_user['first_name'];
-$last_name = $row_user['last_name'];
+$username = $row_user['username'];
+$password = $row_user['password'];
 $status_activity_log = 'logout';
 
 
 $date_activity = $now = date("j-n-Y g:i A"); 
-$message =  $user_type_log. ': '.$first_name.' '. $last_name .' | '. 'LOGOUT';
+$message =  $user_type_log. ': '.$username.' | '. 'LOGOUT';
 $sql_system_logs= "INSERT INTO activity_log (`message`, `date`,`status`) VALUES (?,?,?)";
 $query_system_logs = $con->prepare($sql_system_logs) or die ($con->error);
 $query_system_logs->bind_param('sss',$message,$date_activity,$status_activity_log);
