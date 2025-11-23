@@ -1,65 +1,53 @@
-
 <?php 
+error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE); // Hide minor warnings, keep errors visible
 include_once 'connection.php';
 session_start();
 
-try{
+try {
+    // ✅ If user already logged in, redirect to their dashboard
+    if (isset($_SESSION['user_id']) && isset($_SESSION['user_type'])) {
+        $user_id = $_SESSION['user_id'];
 
-  if(isset($_SESSION['user_id']) && $_SESSION['user_type']){
+        // Secure prepared statement
+        $stmt = $con->prepare("SELECT * FROM users WHERE id = ?");
+        $stmt->bind_param('i', $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
 
+        if ($row) {
+            $account_type = $row['user_type'];
+            if ($account_type == 'admin') {
+                echo '<script>window.location.href="admin/dashboard.php";</script>';
+                exit();
+            } else {
+                echo '<script>window.location.href="resident/dashboard.php";</script>';
+                exit();
+            }
+        }
+    }
 
-    $user_id = $_SESSION['user_id'];
-    $sql = "SELECT * FROM users WHERE id = '$user_id'";
-    $query = $con->query($sql) or die ($con->error);
-    $row = $query->fetch_assoc();
-    $account_type = $row['user_type'];
-    if ($account_type == 'admin') {
-    echo '<script>
-            window.location.href="admin/dashboard.php";
-        </script>';
-    
-    } elseif ($account_type == 'secretary') {
-        echo '<script>
-            window.location.href="secretary/dashboard.php";
-        </script>';
-    
-    } else {
-        echo '<script>
-        window.location.href="resident/dashboard.php";
-    </script>';
-    
+    // ✅ Barangay info defaults
+    $barangay = $municipality = $province = $image = $image_path = "";
+
+    // Get barangay info (if exists)
+    $sql = "SELECT * FROM `barangay_information`";
+    $query = $con->prepare($sql);
+    $query->execute();
+    $result = $query->get_result();
+
+    while ($row = $result->fetch_assoc()) {
+        $barangay = $row['barangay'];
+        $municipality = $row['municipality'];
+        $province = $row['province'];
+        $image = $row['image'];
+        $image_path = $row['image_path'];
+        $id = $row['id'];
+    }
+
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage();
 }
-
-
-
-
-
-}
-
-$sql = "SELECT * FROM `barangay_information`";
-  $query = $con->prepare($sql) or die ($con->error);
-  $query->execute();
-  $result = $query->get_result();
-  while($row = $result->fetch_assoc()){
-      $barangay = $row['barangay'];
-      $zone = $row['zone'];
-      $district = $row['district'];
-      $image = $row['image'];
-      $image_path = $row['image_path'];
-      $id = $row['id'];
-      $postal_address = $row['postal_address'];
-  }
-
-}catch(Exception $e){
-  echo $e->getMessage();
-}
-
-
-
-
-
-
-
 ?>
 
 
@@ -115,7 +103,46 @@ $sql = "SELECT * FROM `barangay_information`";
   to {opacity: 1.5;}
 }
 
+.create-account-text {
+  font-size: 1.5em;
+  font-weight: bold;
+  color: #000000;
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 5px 10px;
+  border-radius: 5px;
+  display: inline-block;
+  margin-bottom: 10px;
+}
 
+.create-account-btn {
+  background-color: #007bff;
+  color: white;
+  border: 2px solid #007bff;
+  font-weight: bold;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.create-account-btn:hover {
+  background-color: #0056b3;
+  border-color: #0056b3;
+}
+
+.account-text {
+  color: #0a0a0aff; 
+  font-weight: 500;
+}
+
+.create-account-link {
+  color: #0036af; /* gold color for visibility */
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.create-account-link:hover {
+  color: #ffffff; /* white when hovered */
+  text-decoration: none;
+}
 
 
 
@@ -125,10 +152,10 @@ $sql = "SELECT * FROM `barangay_information`";
 </head>
 <body  class="hold-transition layout-top-nav">
 
+<?php include_once 'navbar.php'; ?>
+<!-- <div class="wrapper">
 
-<div class="wrapper">
-
-  <!-- Navbar -->
+  
   <nav class="main-header navbar navbar-expand-md " style="background-color: #0037af">
     <div class="container">
       <a href="" class="navbar-brand">
@@ -141,27 +168,26 @@ $sql = "SELECT * FROM `barangay_information`";
       </button>
 
       <div class="collapse navbar-collapse order-3" id="navbarCollapse">
-        <!-- Left navbar links -->
-
+       
 
        
       </div>
 
-      <!-- Right navbar links -->
+    
       <ul class="order-1 order-md-3 navbar-nav navbar-no-expand ml-auto " >
           <li class="nav-item">
             <a href="index.php" class="nav-link text-white rightBar" >HOME</a>
           </li>
           <li class="nav-item">
-            <a href="register.php" class="nav-link text-white rightBar"><i class="fas fa-user-plus"></i> REGISTER</a>
+            <a href="ourofficial.php" class="nav-link text-white rightBar"></i> Our Officials</a>
           </li>
           <li class="nav-item">
             <a href="#" class="nav-link text-white rightBar" style="  border-bottom: 3px solid red;"><i class="fas fa-user-alt"></i> LOGIN</a>
           </li>
       </ul>
     </div>
-  </nav>
-  <!-- /.navbar -->
+  </nav> -->
+  
 
   <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper" >
@@ -210,7 +236,15 @@ $sql = "SELECT * FROM `barangay_information`";
                   </div>
                 </div>
               </div>
-            <div class="col-sm-12 text-right">
+              <div class="col-sm-12 text-center mt-3">
+                <small class="account-text">
+                 Don’t have an account?
+                <a href="register.php" class="create-account-link">Create one</a>
+                 </small>
+              </div>
+
+
+            <div class="col-sm-12 text-right mt-2">
                     <a href="forgot.php">Forgot Password</a>
             </div>
             <div class="col-sm-12 mt-4">
@@ -247,7 +281,7 @@ $sql = "SELECT * FROM `barangay_information`";
     <div class="float-right d-none d-sm-block">
     
     </div>
-  <i class="fas fa-map-marker-alt"></i> <?= $postal_address ?> 
+  <i class="fas fa-map-marker-alt"></i> <?= $barangay ?>,<?= $municipality ?>, <?= $province ?> 
   </footer>
 
 
