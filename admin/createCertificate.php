@@ -74,7 +74,7 @@ try {
                   
                   <div class="form-group">
                       <label style="color:#00c0ef"><i class="fas fa-user"></i> Find Resident (Auto-fill):</label>
-                      <select id="resident-search" class="form-control select2">
+                      <select id="resident-search" name="resident_id" class="form-control select2" required>
                           <option value="">-- Search Name --</option>
                           <?php foreach ($residents as $res): ?>
                               <option value="<?php echo $res['resident_id']; ?>">
