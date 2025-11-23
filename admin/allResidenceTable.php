@@ -130,11 +130,19 @@ try {
         $voters = ($row['voter'] == 'Yes') ? '<span class="badge badge-success">YES</span>' : '<span class="badge badge-danger">NO</span>';
         $single_parent = ($row['single_parent'] == 'Yes') ? '<span class="badge badge-info">YES</span>' : '<span class="badge badge-warning">NO</span>';
         
-        // PWD Info
-        $pwd_display = $row['pwd'];
-        if($row['pwd'] == 'Yes' && !empty($row['pwd_info'])){
-            $pwd_display .= ' <small>('.$row['pwd_info'].')</small>';
+        // --- UPDATED PWD LOGIC START ---
+        if($row['pwd'] == 'Yes'){
+            // Badge for YES - Changed to Primary (Blue)
+            $pwd_display = '<span class="badge badge-primary">YES</span>';
+            // If info exists, add it in BOLD
+            if(!empty($row['pwd_info'])){
+                $pwd_display .= ' <small style="font-weight: bold; font-size: 85%;">('.$row['pwd_info'].')</small>';
+            }
+        } else {
+            // Badge for NO - Changed to Secondary (Grey)
+            $pwd_display = '<span class="badge badge-secondary">NO</span>';
         }
+        // --- UPDATED PWD LOGIC END ---
 
         // Status
         // Since 'status' column DOES NOT EXIST in your DB, we hardcode 'ACTIVE' for display purposes

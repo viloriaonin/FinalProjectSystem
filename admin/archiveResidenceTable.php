@@ -60,7 +60,7 @@ $columns = [
     1 => 'resident_id', 
     2 => 'first_name', 
     3 => 'age',
-    4 => 'pwd_info',
+    4 => 'pwd', // Changed to match logic mapping, was 'pwd_info'
     5 => 'single_parent',
     6 => 'voters',
     7 => 'status',
@@ -132,6 +132,24 @@ foreach($empRecords as $row) {
         $single_parent = '<span class="badge badge-warning text-md ">NO</span>';
     }
 
+    // --- PWD LOGIC START (Copied from allResidenceTable.php) ---
+    // Ensure we check if 'pwd' column exists, default to 'No' if missing
+    $pwdVal = $row['pwd'] ?? 'No'; 
+    
+    if($pwdVal == 'Yes' || $pwdVal == 'YES'){
+        // Badge for YES - Primary (Blue)
+        $pwd_display = '<span class="badge badge-primary">YES</span>';
+        
+        // If info exists, add it in BOLD
+        if(!empty($row['pwd_info'])){
+            $pwd_display .= ' <small style="font-weight: bold; font-size: 85%;">('.$row['pwd_info'].')</small>';
+        }
+    } else {
+        // Badge for NO - Secondary (Grey)
+        $pwd_display = '<span class="badge badge-secondary">NO</span>';
+    }
+    // --- PWD LOGIC END ---
+
     // Status Switch (For Archive, usually we display "ARCHIVED")
     $status = '<span class="badge badge-danger">ARCHIVED</span>';
 
@@ -147,7 +165,7 @@ foreach($empRecords as $row) {
     $subdata[] = $id;
     $subdata[] = ucfirst($row['first_name']).' '. $middle_name_display .' '. ucfirst($row['last_name']); 
     $subdata[] = $row['age'];
-    $subdata[] = $row['pwd_info'] ?? ''; // Use null coalescing operator in case column missing
+    $subdata[] = $pwd_display; // Replaced direct $row['pwd_info'] with new logic
     $subdata[] = $single_parent; 
     $subdata[] = $voters;
     $subdata[] = $status;
