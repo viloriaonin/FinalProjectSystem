@@ -17,13 +17,11 @@ try {
       $barangay = $row['barangay'];
       $municipality = $row['municipality'];
       $province = $row['province'];
-      $image = $row['images']; // Assuming column is 'images' based on your previous code
+      $image = $row['images']; 
       $image_path = $row['image_path'];
-      // $id = $row['barangay_id']; // Unused variable removed
   }
 
   // --- B. Fetch User Information (for the sidebar display) ---
-  // We need to check if session is started, if not, start it
   if (session_status() === PHP_SESSION_NONE) {
       session_start();
   }
@@ -33,10 +31,7 @@ try {
   if (isset($_SESSION['user_id'])) {
       $user_id = $_SESSION['user_id'];
       
-      // Make sure to check your USERS table column name here too! (id vs user_id)
       $sql_user = "SELECT user_type FROM users WHERE user_id = ?";
-      
-
       $stmt_user = $pdo->prepare($sql_user);
       $stmt_user->execute([$user_id]);
       
@@ -55,7 +50,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Sidebar</title>
 </head>
 <body>
 <!-- Preloader -->
@@ -89,25 +84,7 @@ try {
   
   <!-- Right navbar links -->
     <ul class="navbar-nav ml-auto">
-
-      <!-- Messages Dropdown Menu -->
-      <li class="nav-item dropdown">
-        <a class="nav-link" data-toggle="dropdown" href="#">
-          <i class="far fa-user"></i>
-        </a>
-        <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right">
-          <a href="myProfile.php" class="dropdown-item">
-            <!-- Message Start -->
-            
-            
-             
-            
-            <!-- Message End -->
-          </a>         
-          <div class="dropdown-divider"></div>
-          <a href="../logout.php" class="dropdown-item dropdown-footer">LOGOUT</a>
-        </div>
-      </li>
+      <!-- REMOVED LOGOUT DROPDOWN FROM HERE -->
     </ul>
   </nav>
   <!-- /.navbar -->
@@ -248,6 +225,17 @@ try {
                 System Logs
               </p>
             </a>
+          </li>
+
+          <!-- 🔴 NEW SIDEBAR LOGOUT BUTTON -->
+          <li class="nav-item mt-3">
+            <a href="#" class="nav-link bg-danger" id="sidebarLogoutBtn">
+              <i class="nav-icon fas fa-sign-out-alt"></i>
+              <p>
+                Logout
+              </p>
+            </a>
+          </li>
          
         </ul>
       </nav>
@@ -258,7 +246,7 @@ try {
 
 </body>
 
-  <script>
+<script>
 document.addEventListener("DOMContentLoaded", function() {
   const currentPage = window.location.pathname.split("/").pop(); // e.g. dashboard.php
   const navLinks = document.querySelectorAll('.nav-sidebar a.nav-link');
@@ -281,6 +269,35 @@ document.addEventListener("DOMContentLoaded", function() {
       }
     }
   });
+
+  // 🔴 LOGOUT CONFIRMATION SCRIPT
+  const logoutBtn = document.getElementById('sidebarLogoutBtn');
+  if(logoutBtn){
+    logoutBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      
+      // Use SweetAlert if available, otherwise confirm()
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          title: 'Are you sure?',
+          text: "You will be logged out of the system.",
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#d33',
+          cancelButtonColor: '#3085d6',
+          confirmButtonText: 'Yes, logout!'
+        }).then((result) => {
+          if (result.value || result.isConfirmed) {
+            window.location.href = '../logout.php';
+          }
+        });
+      } else {
+        if(confirm("Are you sure you want to logout?")) {
+           window.location.href = '../logout.php';
+        }
+      }
+    });
+  }
 });
 </script>
 
