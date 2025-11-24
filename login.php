@@ -1,6 +1,6 @@
 <?php 
-error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE); // Hide minor warnings, keep errors visible
-include_once 'connection.php';
+error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE); 
+include_once 'db_connection.php'; // ✅ Updated to your file name
 session_start();
 
 try {
@@ -8,12 +8,10 @@ try {
     if (isset($_SESSION['user_id']) && isset($_SESSION['user_type'])) {
         $user_id = $_SESSION['user_id'];
 
-        // Secure prepared statement
-        $stmt = $con->prepare("SELECT * FROM users WHERE id = ?");
-        $stmt->bind_param('i', $user_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $row = $result->fetch_assoc();
+        // ✅ Use $pdo instead of $con
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+        $stmt->execute([$user_id]);
+        $row = $stmt->fetch();
 
         if ($row) {
             $account_type = $row['user_type'];
@@ -30,13 +28,13 @@ try {
     // ✅ Barangay info defaults
     $barangay = $municipality = $province = $image = $image_path = "";
 
-    // Get barangay info (if exists)
+    // ✅ Get barangay info using $pdo
     $sql = "SELECT * FROM `barangay_information`";
-    $query = $con->prepare($sql);
-    $query->execute();
-    $result = $query->get_result();
-
-    while ($row = $result->fetch_assoc()) {
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute();
+    
+    // Fetch logic
+    while ($row = $stmt->fetch()) {
         $barangay = $row['barangay'];
         $municipality = $row['municipality'];
         $province = $row['province'];
@@ -50,158 +48,46 @@ try {
 }
 ?>
 
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title></title>
-<!-- Font Awesome Icons -->
-<link rel="stylesheet" href="assets/plugins/fontawesome-free/css/all.min.css">
-
-  <!-- Theme style -->
+  <title>Login</title>
+  <link rel="stylesheet" href="assets/plugins/fontawesome-free/css/all.min.css">
   <link rel="stylesheet" href="assets/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="assets/plugins/sweetalert2/css/sweetalert2.min.css">
- 
 
   <style>
-    .rightBar:hover{
-      border-bottom: 3px solid red;
-     
-    }
-    
-
-
-    
-    #barangay_logo{
-      height: 150px;
-      width:auto;
-      max-width:500px;
-    }
-
-    .logo{
-      height: 150px;
-      width:auto;
-      max-width:500px;
-    }
+    .rightBar:hover{ border-bottom: 3px solid red; }
+    #barangay_logo{ height: 150px; width:auto; max-width:500px; }
+    .logo{ height: 150px; width:auto; max-width:500px; }
     .content-wrapper{
       background-image: url('assets/logo/cover.jpg');
       background-repeat: no-repeat;
       background-size: cover;
       width: 100%;
-        height: 100%;
-        animation-name: example;
-        animation-duration: 5s;
-       
-       
+      height: 100%;
+      animation-name: example;
+      animation-duration: 5s;
     }
-
-
-@keyframes example {
-  from {opacity: 0;}
-  to {opacity: 1.5;}
-}
-
-.create-account-text {
-  font-size: 1.5em;
-  font-weight: bold;
-  color: #000000;
-  background-color: rgba(255, 255, 255, 0.9);
-  padding: 5px 10px;
-  border-radius: 5px;
-  display: inline-block;
-  margin-bottom: 10px;
-}
-
-.create-account-btn {
-  background-color: #007bff;
-  color: white;
-  border: 2px solid #007bff;
-  font-weight: bold;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-}
-
-.create-account-btn:hover {
-  background-color: #0056b3;
-  border-color: #0056b3;
-}
-
-.account-text {
-  color: #0a0a0aff; 
-  font-weight: 500;
-}
-
-.create-account-link {
-  color: #0036af; /* gold color for visibility */
-  font-weight: 600;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.create-account-link:hover {
-  color: #ffffff; /* white when hovered */
-  text-decoration: none;
-}
-
-
-
+    @keyframes example { from {opacity: 0;} to {opacity: 1.5;} }
+    .create-account-text { font-size: 1.5em; font-weight: bold; color: #000000; background-color: rgba(255, 255, 255, 0.9); padding: 5px 10px; border-radius: 5px; display: inline-block; margin-bottom: 10px; }
+    .create-account-btn { background-color: #007bff; color: white; border: 2px solid #007bff; font-weight: bold; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
+    .create-account-btn:hover { background-color: #0056b3; border-color: #0056b3; }
+    .account-text { color: #0a0a0aff; font-weight: 500; }
+    .create-account-link { color: #0036af; font-weight: 600; text-decoration: underline; cursor: pointer; }
+    .create-account-link:hover { color: #ffffff; text-decoration: none; }
   </style>
-
-
 </head>
-<body  class="hold-transition layout-top-nav">
+<body class="hold-transition layout-top-nav">
 
 <?php include_once 'navbar.php'; ?>
-<!-- <div class="wrapper">
 
-  
-  <nav class="main-header navbar navbar-expand-md " style="background-color: #0037af">
-    <div class="container">
-      <a href="" class="navbar-brand">
-        <img src="assets/dist/img/<?= $image  ?>" alt="logo" class="brand-image img-circle " >
-        <span class="brand-text  text-white" style="font-weight: 700">BARANGAY PORTAL</span>
-      </a>
-
-      <button class="navbar-toggler order-1" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-
-      <div class="collapse navbar-collapse order-3" id="navbarCollapse">
-       
-
-       
-      </div>
-
-    
-      <ul class="order-1 order-md-3 navbar-nav navbar-no-expand ml-auto " >
-          <li class="nav-item">
-            <a href="index.php" class="nav-link text-white rightBar" >HOME</a>
-          </li>
-          <li class="nav-item">
-            <a href="ourofficial.php" class="nav-link text-white rightBar"></i> Our Officials</a>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link text-white rightBar" style="  border-bottom: 3px solid red;"><i class="fas fa-user-alt"></i> LOGIN</a>
-          </li>
-      </ul>
-    </div>
-  </nav> -->
-  
-
-  <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper" >
-    <!-- Content Header (Page header) -->
- 
-    
-  
-    <!-- /.content-header -->
-
-    <!-- Main content -->
     <div class="content px-4" >
       <div class="container-fluid pt-5 "  style="background-color: rgba(0,54,175,.75);">
-      <br>
-      <br>
+      <br><br>
         <div class="row justify-content-center">
           <form id="loginForm" method="post">
           <div class="card " style="border: 10px solid rgba(0,54,175,.75); border-radius: 0;">
@@ -243,7 +129,6 @@ try {
                  </small>
               </div>
 
-
             <div class="col-sm-12 text-right mt-2">
                     <a href="forgot.php">Forgot Password</a>
             </div>
@@ -253,52 +138,24 @@ try {
           </div>
           </form>
         </div>
-
-  
-      
-
       </div>
-
-
-      <br>
-        <br>
-        <br>
-        
-       
+      <br><br><br>
     </div>
-    <!-- /.content -->
   </div>
-  <!-- /.content-wrapper -->
-
- 
-
- 
-
 
 </div>
-<!-- ./wrapper -->
 <footer class="main-footer text-white" style="background-color: #0037af">
-    <div class="float-right d-none d-sm-block">
-    
-    </div>
+    <div class="float-right d-none d-sm-block"></div>
   <i class="fas fa-map-marker-alt"></i> <?= $barangay ?>,<?= $municipality ?>, <?= $province ?> 
-  </footer>
+</footer>
 
-
-
-
-<!-- jQuery -->
 <script src="assets/plugins/jquery/jquery.min.js"></script>
-<!-- Bootstrap -->
 <script src="assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
-<!-- AdminLTE App -->
 <script src="assets/dist/js/adminlte.js"></script>
 <script src="assets/plugins/sweetalert2/js/sweetalert2.all.min.js"></script>
 
 <script>
   $(document).ready(function() {
-
-
     $("#loginForm").submit(function(e){
       e.preventDefault();
       var username = $("#username").val();
@@ -312,10 +169,13 @@ try {
         })
       }else{
         $.ajax({
-          url: 'loginForm.php',
+          url: 'loginForm.php', // ✅ This must match the file below
           type: 'POST',
           data: $(this).serialize(),
           success:function(data){
+              // Use .trim() to prevent whitespace issues
+              data = data.trim(); 
+              
               if(data == 'errorUsername'){
                 Swal.fire({
                   title: '<strong class="text-danger">ERROR</strong>',
@@ -372,9 +232,6 @@ try {
       }
     })
 
-
-
-
     $("#show_hide_password a").on('click', function(event) {
         event.preventDefault();
         if($('#show_hide_password input').attr("type") == "text"){
@@ -389,7 +246,5 @@ try {
     });
 });
 </script>
-
-
 </body>
-</html>
+</html>o

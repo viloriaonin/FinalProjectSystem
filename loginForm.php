@@ -1,6 +1,6 @@
 <?php 
 session_start();
-include_once 'connection.php';
+include_once 'db_connection.php'; // ✅ Uses your PDO connection file
 include_once 'userInfo.php';
 
 try {
@@ -9,31 +9,30 @@ try {
         exit('No data received.');
     }
 
-    // Sanitize input
-    $username = $con->real_escape_string($_POST['username']);
-    $password = $con->real_escape_string($_POST['password']);
+    // ✅ No need for real_escape_string with PDO prepared statements
+    $username = $_POST['username'];
+    $password = $_POST['password'];
 
     // Prepare and execute query
+    // ✅ Using $pdo instead of $con
     $sql = "SELECT `user_id`, `username`, `password`, `user_type`, `contact_number` 
             FROM `users` 
             WHERE (username = ? OR user_id = ?)";
-    $stmt = $con->prepare($sql);
-    if (!$stmt) {
-        throw new Exception("Database error: " . $con->error);
-    }
-
-    $stmt->bind_param('ss', $username, $username);
-    $stmt->execute();
-    $result = $stmt->get_result();
+    
+    $stmt = $pdo->prepare($sql);
+    
+    // ✅ PDO execution: pass parameters inside the execute array
+    $stmt->execute([$username, $username]);
+    
+    // ✅ Fetch the row (PDO::FETCH_ASSOC is default in your connection file)
+    $row = $stmt->fetch();
 
     // Check if user exists
-    if ($result->num_rows === 0) {
+    if (!$row) {
         exit('errorUsername'); // no user found
     }
 
-    $row = $result->fetch_assoc();
-
-    // Check password (you can replace this with password_verify() if hashed)
+    // Check password (plain text comparison as per your original code)
     if ($password !== $row['password']) {
         exit('errorPassword');
     }
@@ -47,23 +46,22 @@ try {
     date_default_timezone_set('Asia/Manila');
     $date_activity = date("j-n-Y g:i A");
     $status_activity_log = 'login';
+    
+    // Assuming UserInfo class methods are static and don't require DB connection
     $device = UserInfo::get_device();
     $os = UserInfo::get_os();
 
     $message = strtoupper($row['user_type']) . ': ' . $row['username'] . ' | LOGIN';
 
+    // ✅ Insert Log using PDO
     $sql_system_logs = "INSERT INTO activity_log (`message`, `date`, `status`) VALUES (?, ?, ?)";
-    $query_system_logs = $con->prepare($sql_system_logs);
-    if ($query_system_logs) {
-        $query_system_logs->bind_param('sss', $message, $date_activity, $status_activity_log);
-        $query_system_logs->execute();
-        $query_system_logs->close();
-    }
+    $query_system_logs = $pdo->prepare($sql_system_logs);
+    $query_system_logs->execute([$message, $date_activity, $status_activity_log]);
 
     // Return the user type as response
     exit($row['user_type']);
 
-} catch (Exception $e) {
+} catch (PDOException $e) {
     echo "Error: " . $e->getMessage();
 }
 ?>
