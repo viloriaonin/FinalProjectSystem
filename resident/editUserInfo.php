@@ -1,63 +1,69 @@
 <?php 
+include_once '../db_connection.php';
+session_start();
 
-include_once '../connection.php';
+try {
+    // 1. Security Check
+    if (!isset($_SESSION['user_id'])) {
+        exit('errorSession');
+    }
+    $user_id = $_SESSION['user_id'];
 
-try{
+    // 2. Get Inputs
+    $username = trim($_POST['username']);
+    $current_password = $_POST['current_password'];
+    $new_password = $_POST['new_password'];
+    $retype_password = $_POST['retype_password'];
 
-  $user_id = $con->real_escape_string(trim($_POST['user_id']));;
-  $username = $con->real_escape_string($_POST['username']);
-  $current_password = $con->real_escape_string($_POST['current_password']);
-  $retype_password = $con->real_escape_string($_POST['retype_password']);
-  $password = $con->real_escape_string($_POST['new_password']);
-
-
-
-    $sql_check_username = "SELECT username FROM users WHERE username = ? AND id != ?";
-    $stmt_check_username = $con->prepare($sql_check_username) or die ($con->error);
-    $stmt_check_username->bind_param('ss',$username,$user_id);
-    $stmt_check_username->execute();
-    $stmt_check_username->store_result();
-    $count = $stmt_check_username->num_rows;
-
-    if($count > 0){
-      exit('errorUsername');
+    // 3. Validate Inputs
+    if ($new_password != $retype_password) {
+        exit('errorNot'); // Passwords don't match
     }
 
-
-    $sql_check_password = "SELECT password FROM users  WHERE id = ?";
-    $stmt_check_password = $con->prepare($sql_check_password) or die ($con->error);
-    $stmt_check_password->bind_param('s',$user_id);
-    $stmt_check_password->execute();
-    $result_password = $stmt_check_password->get_result();
-    $row_password = $result_password->fetch_assoc();
-
-    if($row_password['password'] != $current_password){
-      exit('errorPassword');
+    // 4. Check if Username is taken by someone else
+    // PDO: Prepare & Execute
+    $stmt_check = $pdo->prepare("SELECT id FROM users WHERE username = :uname AND id != :uid");
+    $stmt_check->execute(['uname' => $username, 'uid' => $user_id]);
+    
+    if ($stmt_check->rowCount() > 0) {
+        exit('errorUsername');
     }
 
+    // 5. Verify CURRENT Password
+    $stmt_auth = $pdo->prepare("SELECT password FROM users WHERE id = :uid");
+    $stmt_auth->execute(['uid' => $user_id]);
+    $row = $stmt_auth->fetch(PDO::FETCH_ASSOC);
 
-    if($password != $retype_password){
-      exit('errorNot');
+    if (!$row) {
+        exit('errorSession'); // User not found
     }
 
+    // Verify hash
+    if (!password_verify($current_password, $row['password'])) {
+        exit('errorPassword');
+    }
 
+    // 6. Update with HASHED Password
+    $new_hash = password_hash($new_password, PASSWORD_DEFAULT);
+    
+    $update = $pdo->prepare("UPDATE users SET username = :uname, password = :pass WHERE id = :uid");
+    $result = $update->execute([
+        'uname' => $username, 
+        'pass'  => $new_hash, 
+        'uid'   => $user_id
+    ]);
+    
+    if ($result) {
+        echo 'success';
+    } else {
+        echo 'errorDb';
+    }
 
-
-
-
-  $sql_user = "UPDATE users SET username = ?, password = ? WHERE id = ?";
-  $stmt_user = $con->prepare($sql_user) or die ($con->error);
-  $stmt_user->bind_param('sss',$username,$password,$user_id);
-  $stmt_user->execute();
-  $stmt_user->close();
-
-
-
-
-
-}catch(Exception $e){
-  echo $e->getMessage();
+} catch (PDOException $e) {
+    // Log error instead of showing raw SQL error to user
+    error_log("Update Password Error: " . $e->getMessage());
+    echo 'errorDb'; 
+} catch (Exception $e) {
+    echo 'error: ' . $e->getMessage();
 }
-
-
 ?>

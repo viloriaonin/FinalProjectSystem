@@ -1,45 +1,46 @@
 <?php 
+include_once '../db_connection.php';
 
-
-
-include_once '../connection.php';
-
-try{
-
-
+try {
   if(isset($_REQUEST['residence_id']) && isset($_REQUEST['certificate_id'])){
 
-    $residence_id = $con->real_escape_string($_REQUEST['residence_id']);
-    $certificate_id = $con->real_escape_string($_REQUEST['certificate_id']);
+    // PDO: No need for real_escape_string when using prepared statements
+    $residence_id = $_REQUEST['residence_id'];
+    $certificate_id = $_REQUEST['certificate_id'];
 
+    // PDO Update: Using named placeholders (:cert_id, :res_id)
     $sql_request_status = "SELECT certificate_request.*, residence_information.first_name, residence_information.middle_name, residence_information.last_name,
     residence_information.image, residence_information.image_path, residence_information.address,  residence_information.gender, residence_information.age,  residence_information.contact_number
-    FROM certificate_request INNER JOIN residence_information ON certificate_request.residence_id = residence_information.residence_id WHERE certificate_request.id = ?
-    AND certificate_request.residence_id = ?";
-    $stmt_request_status = $con->prepare($sql_request_status) or die ($con->error);
-    $stmt_request_status->bind_param('ss',$certificate_id,$residence_id);
-    $stmt_request_status->execute();
-    $result =  $stmt_request_status->get_result();
-
-    $row_request_status = $result->fetch_assoc();
-        
-    if($row_request_status['image'] != '' || $row_request_status['image'] != null){
-      $image = '<img class="img-circle elevation-2" src="'.$row_request_status['image_path'].'" alt="User Avatar">';
-    }else{
-      $image = '<img class="img-circle elevation-2" src="../assets/dist/img/blank_image.png" alt="User Avatar">';
-    }
+    FROM certificate_request INNER JOIN residence_information ON certificate_request.residence_id = residence_information.residence_id WHERE certificate_request.id = :cert_id
+    AND certificate_request.residence_id = :res_id";
     
+    $stmt_request_status = $pdo->prepare($sql_request_status);
+    
+    // PDO Update: Execute with array mapping
+    $stmt_request_status->execute([
+        'cert_id' => $certificate_id,
+        'res_id'  => $residence_id
+    ]);
+    
+    // PDO Update: Fetch result
+    $row_request_status = $stmt_request_status->fetch(PDO::FETCH_ASSOC);
+        
+    // Check if row exists to avoid errors
+    if ($row_request_status) {
+        if(!empty($row_request_status['image'])){
+          $image = '<img class="img-circle elevation-2" src="'.$row_request_status['image_path'].'" alt="User Avatar">';
+        }else{
+          $image = '<img class="img-circle elevation-2" src="../assets/dist/img/blank_image.png" alt="User Avatar">';
+        }
+    } else {
+        $image = ''; // Fallback
+    }
 
   }
 
-
-
-
-}catch(Exception $e){
+} catch(PDOException $e){
   echo $e->getMessage();
 }
-
-
 ?>
 
 
@@ -70,47 +71,48 @@ try{
                 </div>
                 <!-- /.widget-user-image -->
                 <h3 class="widget-user-username"></h3>
-                <h5 class="widget-user-desc pt-3"><?= $row_request_status['first_name'].' '.  $row_request_status['last_name']  ?></h5>
+                <h5 class="widget-user-desc pt-3"><?= isset($row_request_status) ? $row_request_status['first_name'].' '.  $row_request_status['last_name'] : 'N/A'  ?></h5>
               </div>
               <div class="card-footer p-0">
                 <ul class="nav flex-column ">
                   <li class="nav-item" data-toggle="tooltip" data-placement="bottom" title="RESIDENT ID">
                     <span href="#" class="nav-link">
-                      <i class="fas fa-id-card-alt text-yellow text-lg"></i> <span class="float-right "><?= $row_request_status['residence_id']?></span>
+                      <i class="fas fa-id-card-alt text-yellow text-lg"></i> <span class="float-right "><?= isset($row_request_status) ? $row_request_status['residence_id'] : ''?></span>
                     </span>
                   </li>
                   <li class="nav-item" data-toggle="tooltip" data-placement="bottom" title="ADDRESS">
                     <span href="#" class="nav-link">
-                      <i class="fas fa-map-marker-alt text-yellow text-lg"></i> <span class="float-right "><?= $row_request_status['address']?></span>
+                      <i class="fas fa-map-marker-alt text-yellow text-lg"></i> <span class="float-right "><?= isset($row_request_status) ? $row_request_status['address'] : ''?></span>
                     </span>
                   </li>
                   <li class="nav-item" data-toggle="tooltip" data-placement="bottom" title="GENDER">
                     <span href="#" class="nav-link" >
-                      <i class="fas fa-venus-mars text-yellow text-lg"></i> <span class="float-right "><?= $row_request_status['gender']?></span>
+                      <i class="fas fa-venus-mars text-yellow text-lg"></i> <span class="float-right "><?= isset($row_request_status) ? $row_request_status['gender'] : ''?></span>
                     </span>
                   </li>
                   <li class="nav-item" data-toggle="tooltip" data-placement="bottom" title="AGE">
                     <span href="#" class="nav-link" >
-                      <i class="fa fa-child text-yellow text-lg" ></i> <span class="float-right "><?= $row_request_status['age']?></span>
+                      <i class="fa fa-child text-yellow text-lg" ></i> <span class="float-right "><?= isset($row_request_status) ? $row_request_status['age'] : ''?></span>
                     </span>
                   </li>
                   <li class="nav-item" data-toggle="tooltip" data-placement="bottom" title="CONTACT NUMBER">
                     <span href="#" class="nav-link" >
-                      <i class="fa fa-phone text-yellow text-lg" ></i> <span class="float-right "><?= $row_request_status['contact_number']?></span>
+                      <i class="fa fa-phone text-yellow text-lg" ></i> <span class="float-right "><?= isset($row_request_status) ? $row_request_status['contact_number'] : ''?></span>
                     </span>
                   </li>
                   <li class="nav-item" data-toggle="tooltip" data-placement="bottom" title="STATUS">
                     <span href="#" class="nav-link" >
                       <i class="fa fa-exclamation text-yellow text-lg" ></i> 
                       <?php 
-                      if($row_request_status['status'] == 'REJECTED'){
-                          echo ' <span class="float-right badge badge-danger"> '.$row_request_status['status'].'</span> ';
-                        }elseif($row_request_status['status'] == 'PENDING') {
-                          echo ' <span class="float-right badge badge-warning"> '.$row_request_status['status'].'</span> ';
-                        }else{
-                          echo ' <span class="float-right badge badge-success"> '.$row_request_status['status'].'</span> ';
-                        }
-                      
+                      if(isset($row_request_status)) {
+                          if($row_request_status['status'] == 'REJECTED'){
+                              echo ' <span class="float-right badge badge-danger"> '.$row_request_status['status'].'</span> ';
+                            }elseif($row_request_status['status'] == 'PENDING') {
+                              echo ' <span class="float-right badge badge-warning"> '.$row_request_status['status'].'</span> ';
+                            }else{
+                              echo ' <span class="float-right badge badge-success"> '.$row_request_status['status'].'</span> ';
+                            }
+                      }
                       ?>
                       </span>
                   </li>
@@ -123,23 +125,23 @@ try{
                 <div class="col-sm-12">
                   <div class="form-group form-group-sm">
                     <label>Purpose</label>
-                    <input type="text" name="purpose" id="edit_purpose" class="form-control" value="<?= $row_request_status['purpose'] ?>"     <?= $row_request_status['status'] != 'PENDING'? 'disabled': '' ?>>
+                    <input type="text" name="purpose" id="edit_purpose" class="form-control" value="<?= isset($row_request_status) ? $row_request_status['purpose'] : '' ?>"     <?= (isset($row_request_status) && $row_request_status['status'] != 'PENDING') ? 'disabled': '' ?>>
                   </div>
                 </div>
                
                 <?php 
                 
-                if($row_request_status['status'] != 'PENDING'){
+                if(isset($row_request_status) && $row_request_status['status'] != 'PENDING'){
                   echo '
                   <style>
-                         #showStatusRequestModal .modal-body{
+                          #showStatusRequestModal .modal-body{
                             height: 74vh;
                             overflow-y: auto;
                         }
                       #showStatusRequestModal  .modal-body::-webkit-scrollbar {
                             width: 5px;
-                        }                                                    
-                                                
+                        }                            
+                                                        
                        #showStatusRequestModal .modal-body::-webkit-scrollbar-thumb {
                             background: #6c757d; 
                             --webkit-box-shadow: inset 0 0 6px #6c757d; 
@@ -178,7 +180,7 @@ try{
       </div>
       <div class="modal-footer">
        
-      <?= $row_request_status['status'] == 'PENDING' ?  ' <button type="submit" class="btn bg-primary btn-flat elevation-5 px-3"><i class="fas fa-edit"></i> EDIT</button>': '';  ?>
+      <?= (isset($row_request_status) && $row_request_status['status'] == 'PENDING') ?  ' <button type="submit" class="btn bg-primary btn-flat elevation-5 px-3"><i class="fas fa-edit"></i> EDIT</button>': '';  ?>
 
      
       <button type="button" class="btn bg-black btn-flat elevation-5 px-3" data-dismiss="modal"><i class="fas fa-times"></i> CLOSE</button>

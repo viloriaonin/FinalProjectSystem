@@ -1,59 +1,239 @@
-
 <?php 
-
-include_once '../connection.php';
+include_once '../db_connection.php';
 session_start();
 
-
-try{
-  if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'resident'){
-
-    $user_id = $_SESSION['user_id'];
-    $sql_user = "SELECT * FROM `users` WHERE `id` = ? ";
-    $stmt_user = $con->prepare($sql_user) or die ($con->error);
-    $stmt_user->bind_param('s',$user_id);
-    $stmt_user->execute();
-    $result_user = $stmt_user->get_result();
-    $row_user = $result_user->fetch_assoc();
-    $first_name_user = $row_user['first_name'];
-    $last_name_user = $row_user['last_name'];
-    $user_type = $row_user['user_type'];
-    $user_image = $row_user['image'];
-
-
-    $sql_resident = "SELECT residence_information.*, residence_status.* FROM residence_information
-    INNER JOIN residence_status ON residence_information.residence_id = residence_status.residence_id
-     WHERE residence_information.residence_id = '$user_id'";
-    $query_resident = $con->query($sql_resident) or die ($con->error);
-    $row_resident = $query_resident->fetch_assoc();
-
-
-
-    $sql = "SELECT * FROM `barangay_information`";
-    $query = $con->prepare($sql) or die ($con->error);
-    $query->execute();
-    $result = $query->get_result();
-    while($row = $result->fetch_assoc()){
-        $barangay = $row['barangay'];
-        $zone = $row['zone'];
-        $district = $row['district'];
-        $image = $row['image'];
-        $image_path = $row['image_path'];
-        $id = $row['id'];
-        $postal_address = $row['postal_address'];
-    }
-
-
-  }else{
-   echo '<script>
-          window.location.href = "../login.php";
-        </script>';
-  }
-
-}catch(Exception $e){
-  echo $e->getMessage();
+// --- 1. SECURITY & LOGOUT CHECK ---
+if(!isset($_SESSION['user_id']) || !isset($_SESSION['user_type']) || $_SESSION['user_type'] != 'resident'){
+    echo '<script>window.location.href = "../login.php";</script>';
+    exit;
 }
 
+$user_id = $_SESSION['user_id'];
+$alert_script = ""; 
+
+try {
+    // --- FETCH DATA EARLY (Needed for Modal & Form) ---
+    $stmt_user = $pdo->prepare("SELECT * FROM `users` WHERE `id` = :uid");
+    $stmt_user->execute([':uid' => $user_id]);
+    $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC);
+
+    // =================================================================================
+    // LOGIC A: UPDATE PERSONAL INFORMATION
+    // =================================================================================
+    if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_resident'])) {
+        
+        // Prepare standard inputs
+        $fname = $_POST['edit_first_name'];
+        $mname = $_POST['edit_middle_name'];
+        $lname = $_POST['edit_last_name'];
+        $suffix = $_POST['edit_suffix'];
+        $bdate = $_POST['edit_birth_date'];
+        $bplace = $_POST['edit_birth_place'];
+        $gender = $_POST['edit_gender'];
+        $civil = $_POST['edit_civil_status'];
+        $religion = $_POST['edit_religion'];
+        $national = $_POST['edit_nationality'];
+        
+        $municipality = $_POST['edit_municipality'];
+        $zip = $_POST['edit_zip'];
+        $barangay = $_POST['edit_barangay'];
+        $house = $_POST['edit_house_number'];
+        $street = $_POST['edit_street'];
+        $address = $_POST['edit_address'];
+        
+        $email = $_POST['edit_email_address'];
+        $contact = $_POST['edit_contact_number'];
+        
+        $father = $_POST['edit_fathers_name'];
+        $mother = $_POST['edit_mothers_name'];
+        $guardian = $_POST['edit_guardian'];
+        $g_contact = $_POST['edit_guardian_contact'];
+
+        // Handle Image Upload
+        $image_sql_part = "";
+        $image_path_for_users = ""; 
+        $image_param = [];
+
+        if (isset($_FILES['edit_image_residence']) && $_FILES['edit_image_residence']['error'] == 0) {
+            $allowed = ['jpg', 'jpeg', 'png', 'gif'];
+            $filename = $_FILES['edit_image_residence']['name'];
+            $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+            
+            if (in_array($ext, $allowed)) {
+                $new_name = "resident_" . $user_id . "_" . time() . "." . $ext;
+                $target = "../assets/uploads/" . $new_name;
+                if (move_uploaded_file($_FILES['edit_image_residence']['tmp_name'], $target)) {
+                    $image_sql_part = ", image_path = :img_path";
+                    $image_path_for_users = $target; 
+                    $image_param[':img_path'] = $target;
+                }
+            }
+        }
+
+        // 1. UPDATE residence_information
+        $sql1 = "UPDATE residence_information SET 
+                 first_name=:fname, middle_name=:mname, last_name=:lname, suffix=:suffix, 
+                 birth_date=:bdate, birth_place=:bplace, gender=:gender, civil_status=:civil, 
+                 religion=:rel, nationality=:nat, municipality=:mun, zip=:zip, 
+                 barangay=:brgy, house_number=:house, street=:st, address=:addr, 
+                 email_address=:email, contact_number=:contact, fathers_name=:father, 
+                 mothers_name=:mother, guardian=:guardian, guardian_contact=:gcontact 
+                 $image_sql_part
+                 WHERE residence_id=:uid";
+        
+        $stmt1 = $pdo->prepare($sql1);
+        $params1 = [
+            ':fname' => $fname, ':mname' => $mname, ':lname' => $lname, ':suffix' => $suffix, 
+            ':bdate' => $bdate, ':bplace' => $bplace, ':gender' => $gender, ':civil' => $civil, 
+            ':rel' => $religion, ':nat' => $national, ':mun' => $municipality, ':zip' => $zip, 
+            ':brgy' => $barangay, ':house' => $house, ':st' => $street, ':addr' => $address, 
+            ':email' => $email, ':contact' => $contact, ':father' => $father, ':mother' => $mother, 
+            ':guardian' => $guardian, ':gcontact' => $g_contact, ':uid' => $user_id
+        ];
+        // Merge image param if it exists
+        $stmt1->execute(array_merge($params1, $image_param));
+
+        // 2. UPDATE residence_status
+        $voters = $_POST['edit_voters'];
+        $single = $_POST['edit_single_parent'];
+        $pwd = $_POST['edit_pwd'];
+        $pwd_info = ($pwd == 'YES') ? $_POST['edit_pwd_info'] : '';
+
+        $sql2 = "UPDATE residence_status SET voters=:voters, single_parent=:single, pwd=:pwd, pwd_info=:pwd_info WHERE residence_id=:uid";
+        $stmt2 = $pdo->prepare($sql2);
+        $stmt2->execute([
+            ':voters' => $voters, ':single' => $single, ':pwd' => $pwd, ':pwd_info' => $pwd_info, ':uid' => $user_id
+        ]);
+
+        // 3. SYNC DATA TO USERS TABLE
+        $user_image_sql = "";
+        $user_params = [':fname' => $fname, ':lname' => $lname, ':contact' => $contact, ':uid' => $user_id];
+        
+        if(!empty($image_path_for_users)) {
+            $user_image_sql = ", image_path = :img_path";
+            $user_params[':img_path'] = $image_path_for_users;
+        }
+
+        $sql3 = "UPDATE users SET first_name=:fname, last_name=:lname, contact_number=:contact $user_image_sql WHERE id=:uid";
+        $stmt3 = $pdo->prepare($sql3);
+        $stmt3->execute($user_params);
+
+        $_SESSION['status'] = "success";
+        $_SESSION['msg'] = "Personal information updated successfully!";
+        header("Location: myInfo.php");
+        exit();
+    }
+
+    // =================================================================================
+    // LOGIC B: UPDATE CREDENTIALS (USERNAME/PASSWORD)
+    // =================================================================================
+    if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_credentials'])) {
+        
+        $username = trim($_POST['username']);
+        $current_password = $_POST['current_password'];
+        $new_password = $_POST['new_password'];
+        $retype_password = $_POST['retype_password'];
+        
+        $db_password = $row_user['password'];
+        $is_valid_password = false;
+        $need_rehash = false; 
+
+        // 1. Verify Current Password
+        if (password_verify($current_password, $db_password)) {
+            $is_valid_password = true;
+        } elseif ($current_password === $db_password) {
+            $is_valid_password = true;
+            $need_rehash = true;
+        }
+
+        if (!$is_valid_password) {
+                throw new Exception("Incorrect current password.");
+        }
+
+        // 2. Validate Username Uniqueness
+        if ($username != $row_user['username']) {
+            $stmt = $pdo->prepare("SELECT id FROM users WHERE username = :uname AND id != :uid");
+            $stmt->execute([':uname' => $username, ':uid' => $user_id]);
+            if ($stmt->rowCount() > 0) {
+                throw new Exception("Username is already taken.");
+            }
+        }
+
+        // 3. Prepare Update Query
+        $sql_cred = "UPDATE users SET username = :uname";
+        $cred_params = [':uname' => $username];
+
+        // 4. Handle Password Change
+        if (!empty($new_password)) {
+            if ($new_password != $retype_password) {
+                throw new Exception("New passwords do not match.");
+            }
+            if (strlen($new_password) < 6) {
+                throw new Exception("Password must be at least 6 characters.");
+            }
+            $new_hash = password_hash($new_password, PASSWORD_DEFAULT);
+            $sql_cred .= ", password = :pass";
+            $cred_params[':pass'] = $new_hash;
+
+        } elseif ($need_rehash) {
+            $new_hash = password_hash($current_password, PASSWORD_DEFAULT);
+            $sql_cred .= ", password = :pass";
+            $cred_params[':pass'] = $new_hash;
+        }
+
+        $sql_cred .= " WHERE id = :uid";
+        $cred_params[':uid'] = $user_id;
+
+        // Execute Update
+        $stmt_cred = $pdo->prepare($sql_cred);
+        
+        if ($stmt_cred->execute($cred_params)) {
+            $_SESSION['status'] = "success";
+            $_SESSION['msg'] = "Account credentials updated successfully!";
+            header("Location: myInfo.php");
+            exit();
+        } else {
+            throw new Exception("Database error while updating credentials.");
+        }
+    }
+
+    // --- 3. HANDLE SUCCESS MESSAGE AFTER RELOAD ---
+    if (isset($_SESSION['status'])) {
+        if($_SESSION['status'] == 'success'){
+            $alert_script = "Swal.fire({icon: 'success', title: 'Success', text: '".$_SESSION['msg']."', showConfirmButton: false, timer: 2000});";
+        }
+        unset($_SESSION['status']);
+        unset($_SESSION['msg']);
+    }
+
+    // --- 4. FETCH RESIDENT DATA FOR DISPLAY ---
+    $stmt_res = $pdo->prepare("SELECT ri.*, rs.* FROM residence_information ri 
+                            LEFT JOIN residence_status rs ON ri.residence_id = rs.residence_id 
+                            WHERE ri.residence_id = :uid");
+    $stmt_res->execute([':uid' => $user_id]);
+    $row_resident = $stmt_res->fetch(PDO::FETCH_ASSOC);
+
+    $defaults = [
+        'residence_id' => $user_id, 'first_name' => '', 'middle_name' => '', 'last_name' => '', 'suffix' => '',
+        'voters' => 'NO', 'birth_date' => '', 'birth_place' => '', 'age' => '', 'gender' => '',
+        'civil_status' => '', 'religion' => '', 'nationality' => '', 'single_parent' => 'NO',
+        'pwd' => 'NO', 'pwd_info' => '', 'municipality' => '', 'zip' => '', 'barangay' => '',
+        'house_number' => '', 'street' => '', 'address' => '', 'email_address' => '',
+        'contact_number' => '', 'fathers_name' => '', 'mothers_name' => '', 'guardian' => '',
+        'guardian_contact' => '', 'image_path' => ''
+    ];
+
+    if(!$row_resident) $row_resident = [];
+    $row_resident = array_merge($defaults, $row_resident);
+
+    $postal_address = '';
+    $res_brgy = $pdo->query("SELECT postal_address FROM `barangay_information` LIMIT 1");
+    if($row = $res_brgy->fetch(PDO::FETCH_ASSOC)){ $postal_address = $row['postal_address']; }
+
+} catch (Exception $e) {
+    // Catch both PDOException and standard Exception
+    $alert_script = "Swal.fire({icon: 'error', title: 'Error', text: '".addslashes($e->getMessage())."'});";
+}
 ?>
 
 <!DOCTYPE html>
@@ -61,1175 +241,445 @@ try{
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title></title>
-
- 
-  <!-- Font Awesome Icons -->
+  <title>My Info</title>
   <link rel="stylesheet" href="../assets/plugins/fontawesome-free/css/all.min.css">
-  <!-- overlayScrollbars -->
-  <link rel="stylesheet" href="../assets/plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
-  <!-- Theme style -->
   <link rel="stylesheet" href="../assets/dist/css/adminlte.min.css">
-  <link rel="stylesheet" href="../assets/plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
-  <link rel="stylesheet" href="../assets/plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
-  <link rel="stylesheet" href="../assets/plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/sweetalert2/css/sweetalert2.min.css">
-  <!-- Tempusdominus Bbootstrap 4 -->
-  <link rel="stylesheet" href="../assets/plugins/tempusdominus-bootstrap-4/css/tempusdominus-bootstrap-4.min.css">
-  <link rel="stylesheet" href="../assets/plugins/select2/css/select2.min.css">
-  <link rel="stylesheet" href="../assets/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+
   <style>
-    .rightBar:hover{
-      border-bottom: 3px solid red;
-     
+    :root { 
+        --bg-dark: #0d1117; 
+        --card-bg: #161b22; 
+        --input-bg: #0d1117; 
+        --text-main: #c9d1d9; 
+        --text-muted: #8b949e; 
+        --accent-color: #3b82f6; 
+        --border-color: #30363d;
+    }
+    body { 
+        background-color: var(--bg-dark); 
+        color: var(--text-main); 
+        font-family: 'Poppins', sans-serif; 
+        font-size: 0.9rem;
+    }
+    .content-wrapper { 
+        background-color: var(--bg-dark) !important; 
+        padding-bottom: 60px; /* Space for footer */
     }
     
-
+    /* Compact Card */
+    .ui-card { 
+        background-color: var(--card-bg); 
+        border: 1px solid var(--border-color); 
+        border-radius: 12px; 
+        padding: 25px 30px; /* Reduced horizontal padding */
+        margin-bottom: 20px; 
+        margin-top: 0; /* Remove top margin */
+    }
+    
+    .form-control { 
+        background-color: var(--input-bg) !important; 
+        border: 1px solid var(--border-color); 
+        color: var(--text-main) !important; 
+        border-radius: 6px; 
+        height: 38px; /* Smaller input height */
+        font-size: 0.9rem;
+    }
+    .form-control:focus { border-color: var(--accent-color); }
+    .form-control:disabled, .form-control[readonly] { background-color: #15171c !important; opacity: 0.7; }
+    
+    label { 
+        color: var(--text-muted); 
+        font-size: 0.8rem; 
+        text-transform: uppercase; 
+        margin-bottom: 4px; 
+        letter-spacing: 0.5px;
+    }
+    
+    /* --- UPDATED PROFILE SECTION STYLES --- */
+    .profile-section { 
+        text-align: center; 
+        margin-bottom: 30px; 
+    }
+    #display_img { 
+        height: 110px; width: 110px; 
+        object-fit: cover; 
+        border-radius: 50%; 
+        border: 3px solid var(--accent-color); 
+        cursor: pointer;
+        margin-bottom: 10px; 
+    }
+    
+    /* New style for the clickable "Change Photo" text underneath */
+    .change-photo-btn {
+        color: var(--accent-color);
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: color 0.2s;
+        display: inline-block;
+    }
+    .change-photo-btn:hover {
+        color: #60a5fa; /* Lighter blue on hover */
+        text-decoration: underline;
+    }
+    /* -------------------------------------- */
 
     
-    #barangay_logo{
-      height: 150px;
-      width:auto;
-      max-width:500px;
+    .section-title { 
+        border-bottom: 1px solid var(--border-color); 
+        color: var(--accent-color); 
+        font-size: 1rem; 
+        font-weight: 600; 
+        margin-bottom: 15px; 
+        margin-top: 5px; 
+        padding-bottom: 8px; 
+    }
+    
+    .btn-save { 
+        background-color: var(--accent-color); 
+        color: white; border: none; 
+        padding: 8px 25px; 
+        border-radius: 6px; 
+        font-weight: 500; 
+        font-size: 0.9rem;
+        transition: all 0.3s; 
+    }
+    .btn-save:hover { background-color: #2563eb; }
+    
+    .btn-security { 
+        background-color: rgba(245, 158, 11, 0.1); /* Subtle orange background */
+        color: #f59e0b; 
+        font-weight: 500; 
+        border: 1px solid rgba(245, 158, 11, 0.3); 
+        padding: 6px 18px; 
+        border-radius: 20px; 
+        font-size: 0.8rem;
+        transition: all 0.2s; 
+    }
+    .btn-security:hover { 
+        background-color: rgba(245, 158, 11, 0.2); 
+        border-color: #f59e0b;
     }
 
-    .logo{
-      height: 150px;
-      width:auto;
-      max-width:500px;
-    }
-    .wrapper{
-      background-image: url('../assets/logo/cover.jpg');
-      background-repeat:no-repeat;
-
-background-size: cover;
-background-position:center;
-width: 100%;
-  height: auto;
-        animation-name: example;
-        animation-duration: 5s;
-       
-       
+    /* Fixed Footer Style (Same as Dashboard) */
+    .main-footer {
+        background-color: var(--card-bg) !important;
+        border-top: 1px solid var(--border-color);
+        color: var(--text-muted);
+        text-align: center;
+        padding: 10px;
+        font-size: 0.85rem;
+        position: fixed;
+        bottom: 0;
+        right: 0;
+        left: 260px; /* Match slide-menu-width */
+        z-index: 1030;
+        transition: left 0.3s ease-in-out;
     }
 
+    /* Modal Styling */
+    .modal-content { background-color: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-main); }
+    .modal-header { border-bottom: 1px solid var(--border-color); }
+    .modal-footer { border-top: 1px solid var(--border-color); }
+    .close { color: var(--text-main); text-shadow: none; opacity: 1; }
+    
+    .invalid-feedback { color: #ff6b6b !important; font-size: 0.8rem; }
+    .is-invalid { border-color: #ff6b6b !important; }
 
-@keyframes example {
-  from {opacity: 0;}
-  to {opacity: 1.5;}
-}
-
-.dark-mode .custom-control-label::before, .dark-mode .custom-file-label, .dark-mode .custom-file-label::after, .dark-mode .custom-select, .dark-mode .form-control:not(.form-control-navbar):not(.form-control-sidebar), .dark-mode .input-group-text {
-      background-color: transparent;
-    color: #fff;
-}
-
-
-    .editInfo {
-    background-color:rgba(0, 0, 0, 0);
-    color:#fff;
-    border: none;
-    outline:none;
-    width: 100%;
+    @media (max-width: 768px) {
+        .main-footer { left: 0; }
     }
-    .editInfo:focus {
-      background-color:rgba(0, 0, 0, 0);
-      color:#fff;
-      border: none;
-      outline:none;
-      width: 100%;
-    }
-    #edit_gender, #edit_civil_status, #edit_voters, #edit_pwd, select {
-      /* for Firefox */
-      -moz-appearance: none;
-      /* for Chrome */
-      
-      border: none;
-      width: 100%;
-      background-color: transparent;
-    color: #fff;
-    }
-    #edit_gender, #edit_civil_status, #edit_voters, #edit_pwd, #edit_single_parent, option:focus{
-      outline:none;
-      border:none;
-      box-shadow:none;
-      background-color: transparent;
-    color: #fff;
-    }
-
-    /* For IE10 */
-    #edit_gender, #edit_civil_status, #edit_voters, #edit_pwd,#edit_single_parent select::-ms-expand {
-      display: none;
-      background-color: transparent;
-    color: #fff;
-    }
-    select option {
-
-    background: #343a40;
-    color: #fff;
-    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
-}
-#display_edit_image_residence{
-      height: 120px;
-      width:auto;
-      max-width:500px;
-    }
-
-
-
   </style>
 </head>
-<body class="layout-top-nav dark-mode">
+<body class="hold-transition layout-top-nav">
 
-<div class="wrapper  p-0 maring-0 bg-transparent" >
+<div class="wrapper">
+<?php include_once __DIR__ . '/../includes/menu_bar.php'; ?>
 
-  <!-- Navbar -->
-  <nav class="main-header navbar navbar-expand-md " style="background-color: #0037af">
-    <div class="container">
-      <a href="#" class="navbar-brand">
-        <img src="../assets/dist/img/<?= $image  ?>" alt="logo" class="brand-image img-circle " >
-        <span class="brand-text  text-white"  style="font-weight: 700">  <?= $barangay ?> <?= $zone ?>, <?= $district ?></span>
-      </a>
-
-      <button class="navbar-toggler order-1" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-
-      <div class="collapse navbar-collapse order-3" id="navbarCollapse">
-        <!-- Left navbar links -->
-
-
-       
-      </div>
-
-      
-
-      <!-- Right navbar links -->
-      <ul class="order-1 order-md-3 navbar-nav navbar-no-expand ml-auto " >
-          <li class="nav-item">
-            <a href="dashboard.php" class="nav-link text-white rightBar" ><i class="fas fa-home"></i> DASHOBARD</a>
-          </li>
-          <li class="nav-item">
-            <a href="profile.php" class="nav-link text-white rightBar" style="text-transform:uppercase;"><i class="fas fa-user-alt"></i> <?= $last_name_user ?>-<?= $user_id ?></a>
-          </li>
-          <li class="nav-item">
-            <a href="../logout.php" class="nav-link text-white rightBar" style="text-transform:uppercase;"><i class="fas fa-sign-out-alt"></i> Logout</a>
-          </li>
-      </ul>
-    </div>
-  </nav>
-  <!-- /.navbar -->
-
-  <!-- Content Wrapper. Contains page content -->
-  <div class="content-wrapper"  style="background-color: transparent">
-    <!-- Content Header (Page header) -->
- 
-    
-  
-    <!-- /.content-header -->
-
-    <!-- Main content -->
-    <div class="content  " >
-  
-
-
-
-    <div class="container-fluid pt-5">
-        <form id="editResidenceForm" method="post" enctype="multipart/form-data">
-
-          <div class="card card-widget widget-user" style="border: 10px solid rgba(0,54,175,.75); border-radius: 0;">
-              <!-- Add the bg color to the header using any of the bg-* classes -->
-              <div class="widget-user-header bg-dark pl-5">
-                <h3 class="widget-user-username"><br></h3>
-                <h5 class="widget-user-desc">RESIDENT NO. <?= $row_resident['residence_id'] ?></h5>
-              </div>
-              <div class="widget-user-image tex">
+  <div class="content-wrapper">
+    <div class="content">
+      <div class="container pt-3 pb-5" style="padding-left: 10px; padding-right: 10px;">
+        
+        <form method="post" enctype="multipart/form-data" id="myInfoForm">
+          <input type="hidden" name="update_resident" value="1">
+          <div class="ui-card">
+            
+            <div class="profile-section">
+                <?php $img = !empty($row_resident['image_path']) ? $row_resident['image_path'] : '../assets/dist/img/blank_image.png'; ?>
                 
-              <?php 
-                if($row_resident['image_path'] != '' || $row_resident['image_path'] != null || !empty($row_resident['image_path'])){
-                  echo '<img src="'.$row_resident['image_path'].'" class="img-circle elevation-2" alt="User Image" id="display_edit_image_residence">';
-                }else{
-                  echo '<img src="../assets/dist/img/blank_image.png" class="img-circle elevation-2" alt="User Image" id="display_edit_image_residence">';
-                }
-              ?>
+                <img src="<?= $img ?>" alt="User Image" id="display_img">
+                <input type="file" name="edit_image_residence" id="upload_img" style="display: none;">
+                
+                <div>
+                    <span class="change-photo-btn" id="change_photo_trigger">
+                        <i class="fas fa-camera mr-1"></i> Change Photo
+                    </span>
+                </div>
 
-                    <input type="file" name="edit_image_residence" id="edit_image_residence" style="display: none;">
+                <h5 class="mt-3 mb-1 text-white" style="font-weight: 600;"><?= isset($row_user['username']) ? htmlspecialchars($row_user['username']) : 'User' ?></h5>
 
-              
+                <div class="text-muted small mb-3" style="font-family: monospace;">Resident ID: <?= $row_resident['residence_id'] ?></div>
+
+                <button type="button" class="btn btn-security" data-toggle="modal" data-target="#securityModal">
+                    <i class="fas fa-key mr-1"></i> Account Security
+                </button>
+            </div>
+
+            <div class="section-title"><i class="fas fa-user mr-2"></i> Personal Information</div>
+            <div class="row">
+                <div class="col-md-3"><div class="form-group"><label>First Name</label><input type="text" class="form-control" name="edit_first_name" value="<?= $row_resident['first_name'] ?>" required></div></div>
+                <div class="col-md-3"><div class="form-group"><label>Middle Name</label><input type="text" class="form-control" name="edit_middle_name" value="<?= $row_resident['middle_name'] ?>"></div></div>
+                <div class="col-md-3"><div class="form-group"><label>Last Name</label><input type="text" class="form-control" name="edit_last_name" value="<?= $row_resident['last_name'] ?>" required></div></div>
+                <div class="col-md-3"><div class="form-group"><label>Suffix</label><input type="text" class="form-control" name="edit_suffix" value="<?= $row_resident['suffix'] ?>"></div></div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-3"><div class="form-group"><label>Date of Birth</label><input type="date" class="form-control" name="edit_birth_date" value="<?= !empty($row_resident['birth_date']) ? date('Y-m-d', strtotime($row_resident['birth_date'])) : '' ?>" required></div></div>
+                <div class="col-md-3"><div class="form-group"><label>Place of Birth</label><input type="text" class="form-control" name="edit_birth_place" value="<?= $row_resident['birth_place'] ?>"></div></div>
+                <div class="col-md-3"><div class="form-group"><label>Gender</label>
+                    <select name="edit_gender" class="form-control">
+                        <option value="Male" <?= $row_resident['gender']=='Male'?'selected':'' ?>>Male</option>
+                        <option value="Female" <?= $row_resident['gender']=='Female'?'selected':'' ?>>Female</option>
+                    </select>
+                </div></div>
+                <div class="col-md-3"><div class="form-group"><label>Civil Status</label>
+                    <select name="edit_civil_status" class="form-control">
+                        <option value="Single" <?= $row_resident['civil_status']=='Single'?'selected':'' ?>>Single</option>
+                        <option value="Married" <?= $row_resident['civil_status']=='Married'?'selected':'' ?>>Married</option>
+                        <option value="Widowed" <?= $row_resident['civil_status']=='Widowed'?'selected':'' ?>>Widowed</option>
+                        <option value="Separated" <?= $row_resident['civil_status']=='Separated'?'selected':'' ?>>Separated</option>
+                    </select>
+                </div></div>
+            </div>
+            
+             <div class="row">
+                <div class="col-md-4"><div class="form-group"><label>Religion</label><input type="text" class="form-control" name="edit_religion" value="<?= $row_resident['religion'] ?>"></div></div>
+                <div class="col-md-4"><div class="form-group"><label>Nationality</label><input type="text" class="form-control" name="edit_nationality" value="<?= $row_resident['nationality'] ?>"></div></div>
+                <div class="col-md-4"><div class="form-group"><label>Voter Status</label>
+                    <select name="edit_voters" class="form-control">
+                        <option value="YES" <?= $row_resident['voters']=='YES'?'selected':'' ?>>YES</option>
+                        <option value="NO" <?= $row_resident['voters']=='NO'?'selected':'' ?>>NO</option>
+                    </select>
+                </div></div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-4"><div class="form-group"><label>Single Parent</label>
+                    <select name="edit_single_parent" class="form-control">
+                        <option value="YES" <?= $row_resident['single_parent']=='YES'?'selected':'' ?>>YES</option>
+                        <option value="NO" <?= $row_resident['single_parent']=='NO'?'selected':'' ?>>NO</option>
+                    </select>
+                </div></div>
+                <div class="col-md-4"><div class="form-group"><label>PWD</label>
+                    <select name="edit_pwd" id="pwd_select" class="form-control">
+                        <option value="YES" <?= $row_resident['pwd']=='YES'?'selected':'' ?>>YES</option>
+                        <option value="NO" <?= $row_resident['pwd']=='NO'?'selected':'' ?>>NO</option>
+                    </select>
+                </div></div>
+                <div class="col-md-4"><div class="form-group"><label>PWD Type</label>
+                    <input type="text" class="form-control" name="edit_pwd_info" id="pwd_info" value="<?= $row_resident['pwd_info'] ?>" <?= $row_resident['pwd']=='NO'?'disabled':'' ?>>
+                </div></div>
+            </div>
+
+            <div class="section-title"><i class="fas fa-map-marker-alt mr-2"></i> Address</div>
+            <div class="row">
+                <div class="col-md-4"><div class="form-group"><label>Full Address</label><input type="text" class="form-control" name="edit_address" value="<?= $row_resident['address'] ?>" required></div></div>
+                <div class="col-md-4"><div class="form-group"><label>Barangay</label><input type="text" class="form-control" name="edit_barangay" value="<?= $row_resident['barangay'] ?>"></div></div>
+                <div class="col-md-4"><div class="form-group"><label>Zip Code</label><input type="text" class="form-control" name="edit_zip" value="<?= $row_resident['zip'] ?>"></div></div>
+            </div>
+             <div class="row">
+                <div class="col-md-4"><div class="form-group"><label>House No.</label><input type="text" class="form-control" name="edit_house_number" value="<?= $row_resident['house_number'] ?>"></div></div>
+                <div class="col-md-4"><div class="form-group"><label>Street</label><input type="text" class="form-control" name="edit_street" value="<?= $row_resident['street'] ?>"></div></div>
+                <div class="col-md-4"><div class="form-group"><label>Municipality</label><input type="text" class="form-control" name="edit_municipality" value="<?= $row_resident['municipality'] ?>"></div></div>
+            </div>
+
+            <div class="section-title"><i class="fas fa-phone mr-2"></i> Contacts</div>
+            <div class="row">
+                <div class="col-md-6"><div class="form-group"><label>Email</label><input type="email" class="form-control" name="edit_email_address" value="<?= $row_resident['email_address'] ?>" required></div></div>
+                <div class="col-md-6"><div class="form-group"><label>Mobile No.</label><input type="text" class="form-control" name="edit_contact_number" value="<?= $row_resident['contact_number'] ?>" maxlength="11" required></div></div>
+            </div>
+
+            <div class="section-title"><i class="fas fa-users mr-2"></i> Family</div>
+            <div class="row">
+                <div class="col-md-6"><div class="form-group"><label>Father's Name</label><input type="text" class="form-control" name="edit_fathers_name" value="<?= $row_resident['fathers_name'] ?>"></div></div>
+                <div class="col-md-6"><div class="form-group"><label>Mother's Name</label><input type="text" class="form-control" name="edit_mothers_name" value="<?= $row_resident['mothers_name'] ?>"></div></div>
+            </div>
+            <div class="row">
+                <div class="col-md-6"><div class="form-group"><label>Guardian</label><input type="text" class="form-control" name="edit_guardian" value="<?= $row_resident['guardian'] ?>"></div></div>
+                <div class="col-md-6"><div class="form-group"><label>Guardian Contact</label><input type="text" class="form-control" name="edit_guardian_contact" value="<?= $row_resident['guardian_contact'] ?>"></div></div>
+            </div>
+
+            <div class="text-center mt-4">
+                 <button type="submit" name="update_resident" class="btn btn-save">UPDATE INFO</button>
+            </div>
+          </div> 
+        </form>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="securityModal" tabindex="-1" role="dialog" aria-hidden="true">
+      <div class="modal-dialog" role="document">
+          <div class="modal-content">
+              <div class="modal-header">
+                  <h5 class="modal-title"><i class="fas fa-user-shield mr-2"></i> Update Credentials</h5>
+                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                  </button>
               </div>
-              <div class="card-footer mt-4">
-              <div class="table-responsive">
-              <input type="hidden" name="edit_residence_id" value="<?= $row_resident['residence_id'];?>">
-              <table  style="font-size:11pt;" class="table table-bordered">
-    <tbody>
-      
-      <tr>
-        <td colspan="3">
-          <div class="d-flex justify-content-between">
-            <div> FIRST NAME<br>
-              <input type="text"  class="editInfo form-control form-control-sm"  value="<?= $row_resident['first_name'] ?>" id="edit_first_name" name="edit_first_name" size="30"> 
-              <input type="hidden" value="false" id="edit_first_name_check"> 
-            </div>
-            <div>MIDDLE NAME<br>
-              <input type="text"  class="editInfo  form-control form-control-sm " value="<?= $row_resident['middle_name'] ?>" id="edit_middle_name" name="edit_middle_name" size="20"> 
-              <input type="hidden" id="edit_middle_name_check" value="false">
-            </div>
-            <div>      
-              LAST NAME<br>
-              <input type="text"  class="editInfo  form-control form-control-sm"  value="<?= $row_resident['last_name'] ?>" id="edit_last_name" name="edit_last_name" size="20"> 
-              <input type="hidden" value="false" id="edit_last_name_check">
-            </div>
-            <div>      
-              SUFFIX<br>
-              <input type="text"  class="editInfo  form-control form-control-sm" value="<?= $row_resident['suffix'] ?>" id="edit_suffix" name="edit_suffix" size="5">  
-              <input type="hidden" id="edit_suffix_check" value="false">
-            </div>
+              <form method="post" id="securityForm">
+                  <input type="hidden" name="update_credentials" value="1">
+                  <div class="modal-body">
+                      <p class="text-muted small mb-3">Leave password fields blank if you only want to change your username.</p>
+                      
+                      <div class="form-group">
+                          <label>Username</label>
+                          <input type="text" class="form-control" name="username" value="<?= isset($row_user['username']) ? htmlspecialchars($row_user['username']) : '' ?>" required>
+                      </div>
+                      
+                      <div class="form-group">
+                          <label class="text-warning">Current Password (Required)</label>
+                          <input type="password" class="form-control" name="current_password" required placeholder="To confirm your identity">
+                      </div>
+
+                      <hr style="border-top:1px dashed #2d333b;">
+
+                      <div class="form-group">
+                          <label>New Password (Optional)</label>
+                          <input type="password" class="form-control" name="new_password" id="new_password" placeholder="Enter new password">
+                      </div>
+
+                      <div class="form-group">
+                          <label>Confirm Password</label>
+                          <input type="password" class="form-control" name="retype_password" placeholder="Repeat new password">
+                      </div>
+                  </div>
+                  <div class="modal-footer">
+                      <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                      <button type="submit" class="btn btn-primary">Save Changes</button>
+                  </div>
+              </form>
           </div>
-        </td>
-      <td>
-       VOTERS
-        <br>
-        <select name="edit_voters" id="edit_voters" class="form-control">
-          <option value="NO" <?= $row_resident['voters'] == 'NO'? 'selected': '' ?>>NO</option>
-          <option value="YES" <?= $row_resident['voters'] == 'YES'? 'selected': '' ?>>YES</option>
-        </select>
-        <input type="hidden" value="false" id="edit_voters_check">
-      </td>
-    </tr>
-    <tr>
-      <td>
-         DATE OF BIRTH
-          <br>
-          
-          <input type="date" class="editInfo  form-control form-control-sm" value="<?php echo strftime('%Y-%m-%d',strtotime($row_resident['birth_date'])); ?>" name="edit_birth_date" id="edit_birth_date"/>
-          <input type="hidden" id="edit_birth_date_check" value='false'>
-      </td>
-      <td>
-        PLACE OF BIRTH
-          <br>
-        
-        <input type="text" class="editInfo  form-control form-control-sm" value=" <?= $row_resident['birth_place'] ?>"  name="edit_birth_place" id="edit_birth_place" > 
-        <input type="hidden" id="edit_birth_place_check" value="false">
-      </td>
-      <td >
-        AGE
-          <br>
-       
-        <input type="text" class="editInfo  form-control form-control-sm" value="<?= $row_resident['age'] ?>"  name="edit_age" id="edit_age" disabled> 
-      </td>
-      <td >
-        SINGLE PARENT
-          <br>
-          <select name="edit_single_parent" id="edit_single_parent" class="form-control">
-            <option value="YES" <?= $row_resident['single_parent'] == 'YES'? 'selected': '' ?>>YES</option>
-            <option value="NO" <?= $row_resident['single_parent'] == 'NO'? 'selected': '' ?>>NO</option>
-        </select>
-        <input type="hidden" id="edit_single_parent_check" value="false">
-      </td>
-   
-   
-    </tr>
-    <tr>
-    <td >
-        PWD
-          <br>
-          <select name="edit_pwd" id="edit_pwd" class="form-control">
-            <option value="YES" <?= $row_resident['pwd'] == 'YES'? 'selected': '' ?>>YES</option>
-            <option value="NO" <?= $row_resident['pwd'] == 'NO'? 'selected': '' ?>>NO</option>
-        </select>
-        <input type="hidden" id="edit_pwd_check" value="false">
-      </td>
-    <td >
-        TYPE OF PWD
-          <br>
-          <input type="text" class="editInfo  form-control form-control-sm" value="<?= $row_resident['pwd_info'] ?>"  name="edit_pwd_info" id="edit_pwd_info" <?= $row_resident['pwd_info'] == ''? 'disabled': '' ?>> 
-        <input type="hidden" id="edit_pwd_info_check" value="false">
-      </td>
-      <td>
-        GENDER
-        <br>
-        <select name="edit_gender" id="edit_gender" class="form-control">
-          <option value="Male" <?= $row_resident['gender'] == 'Male'? 'selected': '' ?>>Male</option>
-          <option value="Female" <?= $row_resident['gender'] == 'Female'? 'selected': '' ?>>Female</option>
-        </select>
-        <input type="hidden" id="edit_gender_check" value="false">
-      </td>
-      <td>
-        CIVIL STATUS
-        <br>
-        <select name="edit_civil_status" id="edit_civil_status" class="form-control">
-          <option value="Single" <?= $row_resident['civil_status'] == 'Single'? 'selected': ''; ?>>Single</option>
-          <option value="Married" <?= $row_resident['civil_status'] == 'Married'? 'selected': ''; ?>>Married</option>
-        </select>
-        <input type="hidden" id="edit_civil_status_check" value="false">
-      </td>
-    
-         
-    </tr>
-
-    <tr>
-    <td >
-        RELIGION
-        <br>
-        <input type="text" class="editInfo  form-control form-control-sm" value="<?= $row_resident['religion'] ?>" name="edit_religion" id="edit_religion">
-        <input type="hidden" id="edit_religion_check" value="false">
-      </td> 
-    <td>
-        NATIONALITY
-        <br>
-          <input type="text" class="editInfo  form-control form-control-sm" value="<?= $row_resident['nationality'] ?>" name="edit_nationality" id="edit_nationality">
-          <input type="hidden" id="edit_nationality_check" value="false">
-      </td> 
-      <td>
-       MUNICIPALITY
-        <br>
-       <input type="text" class="editInfo  form-control form-control-sm" value="<?= $row_resident['municipality'] ?>" name="edit_municipality" id="edit_municipality">
-       <input type="hidden" id="edit_municipality_check" value="false">
-      </td>
-      <td>
-        ZIP
-        <br>
-        <input type="text" class="editInfo  form-control form-control-sm" value="<?= $row_resident['zip'] ?>" name="edit_zip" id="edit_zip">
-        <input type="hidden" id="edit_zip_check" value="false">
-      </td>
-     
-    </tr>
-
-    <tr>
-    <td>
-        BARANGAY
-        <br>
-        <input type="text" class="editInfo  form-control form-control-sm" value="<?= $row_resident['barangay'] ?>" name="edit_barangay" id="edit_barangay">
-        <input type="hidden" id="edit_barangay_check" value="false">
-      </td>
-      <td>
-        HOUSE NUMBER
-        <br>
-        <input type="text" class="editInfo  form-control form-control-sm" value="<?= $row_resident['house_number'] ?>" name="edit_house_number" id="edit_house_number">
-        <input type="hidden" id="edit_house_number_check" value="false">
-      </td>
-      <td>
-        STREET
-        <br>
-        <input type="text" class="editInfo  form-control form-control-sm" value="<?= $row_resident['street'] ?>" name="edit_street" id="edit_street">
-        <input type="hidden" id="edit_street_check" value="false">
-      </td>
-      <td colspan="2">
-        ADDRESS
-        <br>
-        <input type="text" class="editInfo  form-control form-control-sm" value="<?= $row_resident['address'] ?>" name="edit_address" id="edit_address">
-        <input type="hidden" id="edit_address_check" value="false">
-      </td>      
-    </tr>
-
-    <tr>
-      <td colspan="2">
-        EMAIL ADDRESS
-        <br>
-        <input type="text" class="editInfo  form-control form-control-sm" value="<?= $row_resident['email_address'] ?>" name="edit_email_address" id="edit_email_address">
-        <input type="hidden" id="edit_email_address_check" value="false">
-      </td>
-      <td colspan="2">
-        CONTACT NUMBER
-        <br>
-        <input type="text" maxlength="11" class="editInfo  form-control form-control-sm" value="<?= $row_resident['contact_number'] ?>" name="edit_contact_number" id="edit_contact_number">
-        <input type="hidden" id="edit_contact_number_check" value="false">
-      </td>         
-    </tr>
-
-    <tr>
-      <td colspan="2">
-        FATHER'S NAME
-        <br>
-        <input type="text" class="editInfo  form-control form-control-sm" value="<?= $row_resident['fathers_name'] ?>" name="edit_fathers_name" id="edit_fathers_name">
-        <input type="hidden" id="edit_fathers_name_check" value="false">
-      </td>
-      <td colspan="2">
-        MOTHER'S NAME
-        <br>
-        <input type="text" class="editInfo  form-control form-control-sm" value="<?= $row_resident['mothers_name'] ?>" name="edit_mothers_name" id="edit_mothers_name">
-        <input type="hidden" id="edit_mothers_name_check" value="false">
-      </td>         
-    </tr>
-
-    <tr>
-      <td colspan="2">
-        GUARDIAN
-        <br>
-        <input type="text" class="editInfo  form-control form-control-sm" value="<?= $row_resident['guardian'] ?>" name="edit_guardian" id="edit_guardian">
-        <input type="hidden" id="edit_guardian_check" value="false">
-      </td>
-      <td colspan="2">
-        GUARDIAN CONTACT
-        <br>
-        <input type="text" class="editInfo  form-control form-control-sm" maxlength="11" value="<?= $row_resident['guardian_contact'] ?>" name="edit_guardian_contact" id="edit_guardian_contact">
-        <input type="hidden" id="edit_guardian_contact_check" value="false">
-      </td>         
-    </tr>
-  
-   </tbody>
-  </table>
+      </div>
   </div>
-                <button type="submit" class="btn btn-success elevation-5 px-3"><i class="fas fa-edit"></i>  UPDATE</button>
-            </div>
 
-        </div>
-
-
-
-
-
-          
-      
-
-
-
-
-        
-        </form>  
-      </div><!--/. container-fluid -->
-
-    
-
-
-     
-          
-               
-      
-     
-    </div>
-    <!-- /.content -->
-  </div>
-  <!-- /.content-wrapper -->
-  
- 
-
- 
-  <footer class="main-footer text-white" style="background-color: #0037af">
+  <footer class="main-footer">
     <div class="float-right d-none d-sm-block">
-    
+        <b>System Version</b> 1.0
     </div>
-  <i class="fas fa-map-marker-alt"></i> <?= $postal_address ?> 
+    <strong><i class="fas fa-map-marker-alt mr-2"></i> <?= $postal_address ?></strong>
   </footer>
- 
-
 
 </div>
-<!-- ./wrapper -->
 
-<!-- REQUIRED SCRIPTS -->
-<!-- jQuery -->
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
-<!-- Bootstrap -->
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
-<!-- overlayScrollbars -->
-<script src="../assets/plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js"></script>
-<!-- AdminLTE App -->
 <script src="../assets/dist/js/adminlte.js"></script>
-<script src="../assets/plugins/popper/umd/popper.min.js"></script>
-<script src="../assets/plugins/datatables/jquery.dataTables.min.js"></script>
-<script src="../assets/plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>
-<script src="../assets/plugins/datatables-responsive/js/dataTables.responsive.min.js"></script>
-<script src="../assets/plugins/datatables-responsive/js/responsive.bootstrap4.min.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/dataTables.buttons.min.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/buttons.bootstrap4.min.js"></script>
-<script src="../assets/plugins/jszip/jszip.min.js"></script>
-<script src="../assets/plugins/pdfmake/pdfmake.min.js"></script>
-<script src="../assets/plugins/pdfmake/vfs_fonts.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/buttons.html5.min.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/buttons.print.min.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/buttons.colVis.min.js"></script>
 <script src="../assets/plugins/sweetalert2/js/sweetalert2.all.min.js"></script>
-<script src="../assets/plugins/select2/js/select2.full.min.js"></script>
-<script src="../assets/plugins/moment/moment.min.js"></script>
-<script src="../assets/plugins/chart.js/Chart.min.js"></script>
 <script src="../assets/plugins/jquery-validation/jquery.validate.min.js"></script>
-<script src="../assets/plugins/jquery-validation/additional-methods.min.js"></script>
-<script src="../assets/plugins/jquery-validation/jquery-validate.bootstrap-tooltip.min.js"></script>
 
 <script>
-  $(document).ready(function(){
+$(document).ready(function(){
+    // 1. Output the PHP Alert if it exists
+    <?= $alert_script ?>
 
-   
+    // 2. PWD Toggle
+    $('#pwd_select').change(function(){
+        if($(this).val() == 'YES') { $('#pwd_info').prop('disabled', false); }
+        else { $('#pwd_info').prop('disabled', true).val(''); }
+    });
 
-    $(function () {
-
-
-      $("#edit_pwd").change(function(){
-        var edit_pwd_one = $(this).val();
-
-
-        if(edit_pwd_one == 'YES'){
-          $("#edit_pwd_info").prop('disabled', false)
-        }else{
-          $("#edit_pwd_info").prop('disabled', true)
+    // 3. Image Preview & Change Photo Click Handler
+    // Clicking either the image or the "Change Photo" text triggers the hidden file input
+    $('#display_img, #change_photo_trigger').click(function(){ $('#upload_img').click(); });
+    
+    $('#upload_img').change(function(){
+        if(this.files && this.files[0]){
+            var reader = new FileReader();
+            reader.onload = function(e){ $('#display_img').attr('src', e.target.result); }
+            reader.readAsDataURL(this.files[0]);
         }
+    });
 
-
-      })
-
-           var edit_first_name = $("#edit_first_name").val();
-            var edit_last_name = $("#edit_last_name").val();
-            var edit_term_from = $("#edit_term_from").val();
-            var edit_term_to = $("#edit_term_to").val();
-            var edit_voters = $("#edit_voters").val();
-            var edit_pwd = $("#edit_pwd").val();
-            var edit_birth_date = $("#edit_birth_date").val();
-            var edit_birth_place = $("#edit_birth_place").val();
-            var edit_middle_name = $("#edit_middle_name").val();
-            var edit_suffix = $("#edit_suffix").val();
-            var edit_gender = $("#edit_gender").val();
-            var edit_vivil_status = $("#edit_vivil_status").val();
-            var edit_nationality = $("#edit_nationality").val();
-            var edit_municipality = $("#edit_municipality").val();
-            var edit_zip = $("#edit_zip").val();
-            var edit_barangay = $("#edit_barangay").val();
-            var edit_house_number = $("#edit_house_number").val();
-            var edit_street = $("#edit_street").val();
-            var edit_address = $("#edit_address").val();
-            var edit_email_address = $("#edit_email_address").val();
-            var edit_contact_number = $("#edit_contact_number").val();
-            var edit_fathers_name = $("#edit_fathers_name").val();
-            var edit_mothers_name = $("#edit_mothers_name").val();
-            var edit_guardian = $("#edit_guardian").val();
-            var edit_guardian_contact = $("#edit_guardian_contact").val();
-            var edit_pwd_info = $("#edit_pwd_info").val();
-            var edit_single_parent = $("#edit_single_parent").val();
-
-
-            $("#edit_pwd_info").change(function(){
-
-              var newPwdIfo = $(this).val();
-
-              if(!(newPwdIfo == edit_pwd_info )){
-
-                $("#edit_pwd_info_check").val('true');
-
-              }else{
-
-                $("#edit_pwd_info_check").val('false');
-              }
-
-            })
-
-            $("#edit_single_parent").change(function(){
-
-              var newSingleParent = $(this).val();
-
-              if(!(newSingleParent == edit_single_parent )){
-
-                $("#edit_single_parent_check").val('true');
-
-              }else{
-
-                $("#edit_single_parent_check").val('false');
-              }
-
-            })
-
-
-            $("#edit_first_name").change(function(){
-
-                var newFirstName = $(this).val();
-
-                if(!(newFirstName == edit_first_name )){
-
-                  $("#edit_first_name_check").val('true');
-
-                }else{
-
-                  $("#edit_first_name_check").val('false');
-                }
-
-            })
-
-
-
-              $("#edit_last_name").change(function(){
-
-                var newLastName = $(this).val();
-
-                if(!(newLastName == edit_last_name )){
-
-                  $("#edit_last_name_check").val('true');
-
-                }else{
-
-                  $("#edit_last_name_check").val('false');
-
-                }
-
-              })
-
-          
-
-                $("#edit_voters").change(function(){
-
-                  var newVoters = $(this).val();
-
-                  if(!(newVoters == edit_voters )){
-
-                  $("#edit_voters_check").val('true');
-
-                  }else{
-
-                  $("#edit_voters_check").val('false');
-
-                  }
-
-                })
-
-                $("#edit_pwd").change(function(){
-
-                  var newPwd = $(this).val();
-
-                  if(!(newPwd == edit_pwd )){
-
-                  $("#edit_pwd_check").val('true');
-
-                  }else{
-
-                  $("#edit_pwd_check").val('false');
-
-                  }
-
-                })
-
-                $("#edit_birth_date").change(function(){
-
-                  var newBday = $(this).val();
-
-                  if(!(newBday == edit_birth_date )){
-
-                  $("#edit_birth_date_check").val('true');
-
-                  }else{
-
-                  $("#edit_birth_date_check").val('false');
-
-                  }
-
-                })
-
-                $("#edit_birth_place").change(function(){
-
-                  var newBplace = $(this).val();
-
-                  if(!(newBplace == edit_birth_place )){
-
-                  $("#edit_birth_place_check").val('true');
-
-                  }else{
-
-                  $("#edit_birth_place_check").val('false');
-
-                  }
-
-                })
-
-                $("#edit_middle_name").change(function(){
-
-                  var newMiddleName = $(this).val();
-
-                  if(!(newMiddleName == edit_middle_name )){
-
-                  $("#edit_middle_name_check").val('true');
-
-                  }else{
-
-                  $("#edit_middle_name_check").val('false');
-
-                  }
-
-                })
-
-                $("#edit_suffix").change(function(){
-
-                  var new_suffix = $(this).val();
-
-                  if(!(new_suffix == edit_suffix )){
-
-                  $("#edit_suffix_check").val('true');
-
-                  }else{
-
-                  $("#edit_suffix_check").val('false');
-
-                  }
-
-                })
-
-                $("#edit_gender").change(function(){
-
-                  var newGender = $(this).val();
-
-                  if(!(newGender == edit_gender )){
-
-                  $("#edit_gender_check").val('true');
-
-                  }else{
-
-                    $("#edit_gender_check").val('false');
-
-                  }
-
-                })
-
-                $("#edit_civil_status").change(function(){
-
-                  var newCivil = $(this).val();
-
-                  if(!(newCivil == edit_civil_status )){
-
-                  $("#edit_civil_status_check").val('true');
-
-                  }else{
-
-                    $("#edit_civil_status_check").val('false');
-                  }
-
-                })
-
-
-                $("#edit_religion").change(function(){
-
-                  var newReligion = $(this).val();
-
-                  if(!(newReligion == edit_religion )){
-
-                  $("#edit_religion_check").val('true');
-
-                  }else{
-
-                    $("#edit_religion_check").val('false');
-                  }
-
-                  })
-
-
-                $("#edit_nationality").change(function(){
-
-                var newNationality = $(this).val();
-
-                if(!(newNationality == edit_nationality )){
-
-                $("#edit_nationality_check").val('true');
-
-                }else{
-
-                $("#edit_nationality_check").val('false');
-                }
-
-                })
-
-                $("#edit_municipality").change(function(){
-
-                var newMunicipality = $(this).val();
-
-                if(!(newMunicipality == edit_municipality )){
-
-                $("#edit_municipality_check").val('true');
-
-                }else{
-
-                $("#edit_municipality_check").val('false');
-                }
-
-                })
-
-
-
-                $("#edit_zip").change(function(){
-
-                var newZip = $(this).val();
-
-                if(!(newZip == edit_zip )){
-
-                $("#edit_zip_check").val('true');
-
-                }else{
-
-                $("#edit_zip_check").val('false');
-                }
-
-                })
-
-
-                $("#edit_barangay").change(function(){
-
-                var newBarangay = $(this).val();
-
-                if(!(newBarangay == edit_barangay )){
-
-                $("#edit_barangay_check").val('true');
-
-                }else{
-
-                $("#edit_barangay_check").val('false');
-                }
-
-                })
-
-                $("#edit_house_number").change(function(){
-
-                var newHnumber = $(this).val();
-
-                if(!(newHnumber == edit_house_number )){
-
-                $("#edit_house_number_check").val('true');
-
-                }else{
-
-                $("#edit_house_number_check").val('false');
-                }
-
-                })
-
-                $("#edit_street").change(function(){
-
-                var newStreet = $(this).val();
-
-                if(!(newStreet == edit_street )){
-
-                $("#edit_street_check").val('true');
-
-                }else{
-
-                $("#edit_street_check").val('false');
-                }
-
-                })
-
-                $("#edit_address").change(function(){
-
-                var newAddress = $(this).val();
-
-                if(!(newAddress == edit_address )){
-
-                $("#edit_address_check").val('true');
-
-                }else{
-
-                $("#edit_address_check").val('false');
-                }
-
-                })
-
-                $("#edit_email_address").change(function(){
-
-                var newEmail = $(this).val();
-
-                if(!(newEmail == edit_email_address )){
-
-                $("#edit_email_address_check").val('true');
-
-                }else{
-
-                $("#edit_email_address_check").val('false');
-                }
-
-                })
-
-                $("#edit_contact_number").change(function(){
-
-                var newNumber = $(this).val();
-
-                if(!(newNumber == edit_contact_number )){
-
-                $("#edit_contact_number_check").val('true');
-
-                }else{
-
-                $("#edit_contact_number_check").val('false');
-                }
-
-                })
-
-                $("#edit_fathers_name").change(function(){
-
-                var newtatay = $(this).val();
-
-                if(!(newtatay == edit_fathers_name )){
-
-                $("#edit_fathers_name_check").val('true');
-
-                }else{
-
-                $("#edit_fathers_name_check").val('false');
-                }
-
-                })
-
-                $("#edit_mothers_name").change(function(){
-
-                var newNanay = $(this).val();
-
-                if(!(newNanay == edit_mothers_name )){
-
-                $("#edit_mothers_name_check").val('true');
-
-                }else{
-
-                $("#edit_mothers_name_check").val('false');
-                }
-
-                })
-
-                $("#edit_guardian").change(function(){
-
-                var newGuardian = $(this).val();
-
-                if(!(newGuardian == edit_guardian )){
-
-                $("#edit_guardian_check").val('true');
-
-                }else{
-
-                $("#edit_guardian_check").val('false');
-                }
-
-                })
-
-                $("#edit_guardian_contact").change(function(){
-
-                var newGcontact = $(this).val();
-
-                if(!(newGcontact == edit_guardian_contact )){
-
-                $("#edit_guardian_contact_check").val('true');
-
-                }else{
-
-                  $("#edit_guardian_contact_check").val('false');
-                }
-
-                })
-
-
-
-
-
-
-                $.validator.setDefaults({
-          submitHandler: function (form) {
-            Swal.fire({
-              title: '<strong class="text-warning">Are you sure?</strong>',
-              html: "<b>You want edit your details?</b>",
-              type: 'info',
-              showCancelButton: true,
-              confirmButtonColor: '#3085d6',
-              cancelButtonColor: '#d33',
-              confirmButtonText: 'Yes, Edit it!',
-              allowOutsideClick: false,
-              width: '400px',
-            }).then((result) => {
-              if (result.value) {
-
-                var formData = new FormData(form)
-                  
-                  formData.append("edit_first_name_check",$("#edit_first_name_check").val())
-                  formData.append("edit_last_name_check",$("#edit_last_name_check").val())
-                  formData.append("edit_voters_check",$("#edit_voters_check").val())
-                  formData.append("edit_pwd_check",$("#edit_pwd_check").val())
-                  formData.append("edit_birth_date_check",$("#edit_birth_date_check").val())
-                  formData.append("edit_birth_place_check",$("#edit_birth_place_check").val())
-                  formData.append("edit_middle_name_check",$("#edit_middle_name_check").val())
-                  formData.append("edit_suffix_check",$("#edit_suffix_check").val())
-                  formData.append("edit_gender_check",$("#edit_gender_check").val())
-                  formData.append("edit_civil_status_check",$("#edit_civil_status_check").val())
-                  formData.append("edit_religion_check",$("#edit_religion_check").val())
-                  formData.append("edit_nationality_check",$("#edit_nationality_check").val())
-                  formData.append("edit_municipality_check",$("#edit_municipality_check").val())
-                  formData.append("edit_zip_check",$("#edit_zip_check").val())
-                  formData.append("edit_barangay_check",$("#edit_barangay_check").val())
-                  formData.append("edit_house_number_check",$("#edit_house_number_check").val())
-                  formData.append("edit_street_check",$("#edit_street_check").val())
-                  formData.append("edit_address_check",$("#edit_address_check").val())
-                  formData.append("edit_email_address_check",$("#edit_email_address_check").val())
-                  formData.append("edit_contact_number_check",$("#edit_contact_number_check").val())
-                  formData.append("edit_fathers_name_check",$("#edit_fathers_name_check").val())
-                  formData.append("edit_mothers_name_check",$("#edit_mothers_name_check").val())
-                  formData.append("edit_guardian_check",$("#edit_guardian_check").val())
-                  formData.append("edit_guardian_contact_check",$("#edit_guardian_contact_check").val())
-                  formData.append("edit_pwd_info_check",$("#edit_pwd_info_check").val())
-                  formData.append("edit_single_parent_check",$("#edit_single_parent_check").val())
-                  
-
-                  $.ajax({
-                    url: 'editResidence.php',
-                    type: 'POST',
-                    data: formData,
-                    processData: false,
-                    contentType: false,
-                    cache: false,
-                    success:function(data){
-                      Swal.fire({
-                        title: '<strong class="text-success">SUCCESS</strong>',
-                        type: 'success',
-                        html: '<b>Updated Your Details has Successfully<b>',
-                        width: '400px',
-                        confirmButtonColor: '#6610f2',
-                        allowOutsideClick: false,
-                        showConfirmButton: false,
-                        timer: 2000,
-                      }).then(()=>{
-                        
-                          window.location.reload();
-                        
-                      })
-                    }
-                }).fail(function(){
-                    Swal.fire({
-                      title: '<strong class="text-danger">Ooppss..</strong>',
-                      type: 'error',
-                      html: '<b>Something went wrong with ajax !<b>',
-                      width: '400px',
-                      confirmButtonColor: '#6610f2',
-                    })
-                })
-              }
-            })
-            
-          }
-        });
-      $('#editResidenceForm').validate({
+    // 4. Form Validation - Personal Info
+    $('#myInfoForm').validate({
         rules: {
-          edit_first_name: {
-            required: true,
-            minlength: 2
-          },
-          edit_last_name: {
-            required: true,
-            minlength: 2
-          },
-          edit_birth_date: {
-            required: true,
-          },
-          edit_address:{
-            required: true,
-          },
-          edit_contact_number:{
-            required: true,
-            minlength: 11
-          },
-          edit_email_address:{
-            email: true,
-          },
+            edit_first_name: "required",
+            edit_last_name: "required",
+            edit_birth_date: "required",
+            edit_address: "required",
+            edit_email_address: { required: true, email: true },
+            edit_contact_number: { required: true, minlength: 11, maxlength: 11, digits: true }
+        },
+        errorElement: 'span',
+        errorPlacement: function (error, element) {
+            error.addClass('invalid-feedback');
+            element.closest('.form-group').append(error);
+        },
+        highlight: function (element) { $(element).addClass('is-invalid'); },
+        unhighlight: function (element) { $(element).removeClass('is-invalid'); },
+        
+        // --- ADDED CONFIRMATION DIALOG ---
+        submitHandler: function(form) {
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "You are about to update your personal information.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes, update it!',
+                background: '#1C1F26',
+                customClass: { title: 'text-white', content: 'text-white' }
+            }).then((result) => {
+                if (result.value) {
+                    form.submit();
+                }
+            });
+        }
+    });
+
+    // 5. Form Validation - Security Form
+    $('#securityForm').validate({
+        rules: {
+            username: "required",
+            current_password: "required",
+            new_password: { minlength: 6 },
+            retype_password: { equalTo: "#new_password" }
         },
         messages: {
-          edit_first_name: {
-            required: "<span class='text-danger text-bold'>First Name is Required</span>",
-            minlength: "<span class='text-danger'>First Name must be at least 2 characters long</span>"
-          },
-          edit_last_name: {
-            required: "<span class='text-danger text-bold'>Last Name is Required</span>",
-            minlength: "<span class='text-danger'>Last Name must be at least 2 characters long</span>"
-          },
-
-          edit_birth_date: {
-            required: "<span class='text-danger text-bold'>Birth Date is Required</span>",
-          },
-          edit_address: {
-            required: "<span class='text-danger text-bold'>Address is Required</span>",
-          },
-          edit_contact_number: {
-            required: "<span class='text-danger text-bold'>Contact Number is Required</span>",
-            minlength: "<span class='text-danger'>Input Exact Contact Number</span>"
-          },
-          edit_email_address:{
-            email:"<span class='text-danger text-bold'>Enter Valid Email!</span>",
-            },
+            retype_password: "Passwords do not match"
         },
-        tooltip_options: {
-          '_all_': {
-            placement: 'bottom',
-            html:true,
-          },
-          
+        errorElement: 'span',
+        errorPlacement: function (error, element) {
+            error.addClass('invalid-feedback');
+            element.closest('.form-group').append(error);
         },
-      });
-    })
-
-
-
-
-
-
-
-
-
-    $('#display_edit_image_residence').on('click',function(){
-      $("#edit_image_residence").click();
-    })
-    $("#edit_image_residence").change(function(){
-        editDsiplayImage(this);
-      })
-
-    function editDsiplayImage(input){
-        if(input.files && input.files[0]){
-          var reader = new FileReader();
-          var edit_image_residence = $("#edit_image_residence").val().split('.').pop().toLowerCase();
-
-          if(edit_image_residence != ''){
-            if(jQuery.inArray(edit_image_residence, ['gif','png','jpeg','jpg']) == -1){
-              Swal.fire({
-                title: '<strong class="text-danger">ERROR</strong>',
-                type: 'error',
-                html: '<b>Invalid Image File<b>',
-                width: '400px',
-                confirmButtonColor: '#6610f2',
-              })
-              $("#edit_image_residence").val('');
-              $("#display_edit_image_residence").attr('src', '<?= $row_resident['image_path'] ?>');
-              return false;
-            }
-          }
-            reader.onload = function(e){
-              $("#display_edit_image_residence").attr('src', e.target.result);
-              $("#display_edit_image_residence").hide();
-              $("#display_edit_image_residence").fadeIn(650);
-            }
-            reader.readAsDataURL(input.files[0]);
+        highlight: function (element) { $(element).addClass('is-invalid'); },
+        unhighlight: function (element) { $(element).removeClass('is-invalid'); },
+        
+        // --- ADDED CONFIRMATION DIALOG ---
+        submitHandler: function(form) {
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "You are about to change your account credentials.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes, save changes!',
+                background: '#1C1F26',
+                customClass: { title: 'text-white', content: 'text-white' }
+            }).then((result) => {
+                if (result.value) {
+                    form.submit();
+                }
+            });
         }
-      }
-  })
-</script>
-
-
-<script>
-// Restricts input for each element in the set of matched elements to the given inputFilter.
-(function($) {
-  $.fn.inputFilter = function(inputFilter) {
-    return this.on("input keydown keyup mousedown mouseup select contextmenu drop", function() {
-      if (inputFilter(this.value)) {
-        this.oldValue = this.value;
-        this.oldSelectionStart = this.selectionStart;
-        this.oldSelectionEnd = this.selectionEnd;
-      } else if (this.hasOwnProperty("oldValue")) {
-        this.value = this.oldValue;
-        this.setSelectionRange(this.oldSelectionStart, this.oldSelectionEnd);
-      } else {
-        this.value = "";
-      }
     });
-  };
-}(jQuery));
-
- 
-  $("#edit_contact_number, #edit_zip, #edit_guardian_contact, #edit_age").inputFilter(function(value) {
-  return /^-?\d*$/.test(value); 
-  
-  });
-
-
-  $("#edit_first_name, #edit_middle_name, #edit_last_name, #edit_suffix, #edit_religion, #edit_nationality, #edit_municipality, #edit_fathers_name, #edit_mothers_name, #edit_guardian").inputFilter(function(value) {
-  return /^[a-z, ]*$/i.test(value); 
-  });
-  
-  $("#edit_street, #edit_birth_place, #edit_house_number").inputFilter(function(value) {
-  return /^[0-9a-z, ,-]*$/i.test(value); 
-  });
-
+});
 </script>
-
 </body>
 </html>
