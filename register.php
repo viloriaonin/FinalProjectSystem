@@ -373,6 +373,8 @@ $(document).ready(function(){
     });
   });
 
+// asdasdasda
+
   $('#registerResidentForm').on('submit', function(e){
     e.preventDefault();
     if ($('#btnRegister').prop('disabled')) return;

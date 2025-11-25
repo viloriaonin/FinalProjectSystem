@@ -327,6 +327,8 @@ function make_slides($data, $barangay_name){
         </div>
     </div>
 
+<!-- asdasd -->
+
     <footer class="main-footer text-white text-center" style="background-color: #000000; padding: 20px 0;">
       <div class="container">
         <h5 class="font-weight-bold mb-2 text-uppercase"><?= htmlspecialchars($barangay) ?></h5>
