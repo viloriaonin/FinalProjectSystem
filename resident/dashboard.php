@@ -1,402 +1,438 @@
-
 <?php 
-
-include_once '../connection.php';
+include_once '../db_connection.php';
 session_start();
 
-
 try{
-  if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'resident'){
+    if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'resident'){
 
-    $user_id = $_SESSION['user_id'];
-    $sql_user = "SELECT * FROM `users` WHERE `id` = ? ";
-    $stmt_user = $con->prepare($sql_user) or die ($con->error);
-    $stmt_user->bind_param('s',$user_id);
-    $stmt_user->execute();
-    $result_user = $stmt_user->get_result();
-    $row_user = $result_user->fetch_assoc();
-    $first_name_user = $row_user['first_name'];
-    $last_name_user = $row_user['last_name'];
-    $user_type = $row_user['user_type'];
-    $user_image = $row_user['image'];
+        $user_id = $_SESSION['user_id'];
+        
+        // 1. Fetch User Account Info
+        // PDO Update: Using named parameter :uid
+        $sql_user = "SELECT * FROM `users` WHERE `user_id` = :uid ";
+        $stmt_user = $pdo->prepare($sql_user);
+        $stmt_user->execute(['uid' => $user_id]);
+        $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC); 
+        
+        // Check if user exists to avoid errors
+        if ($row_user) {
+            $first_name_user = $row_user['username'];
+            $last_name_user = $row_user['password'];
+            $user_type = $row_user['user_type'];
+        } else {
+            // Handle edge case where user is logged in but row deleted
+            $first_name_user = 'Resident';
+            $last_name_user = '';
+            $user_type = 'resident';
+        }
 
+        // 2. Fetch Barangay Info
+        // PDO Update: query() is sufficient for no-parameter selects
+        $sql = "SELECT * FROM `barangay_information`";
+        $stmt_brgy = $pdo->query($sql);
+        
+        $barangay = ''; 
+        $image_logo = ''; 
+        $postal_address = '';
 
-    $sql_resident = "SELECT * FROM residence_information WHERE residence_id = '$user_id'";
-    $query_resident = $con->query($sql_resident) or die ($con->error);
-    $row_resident = $query_resident->fetch_assoc();
+        while($row = $stmt_brgy->fetch(PDO::FETCH_ASSOC)){
+            $barangay = $row['barangay'];
+            $image_logo = $row['image']; // Make sure column name matches DB
+            $postal_address = $row['postal_address'];
+        }
 
+        // 3. Fetch Application Status
+        $app_status = 'None';
+        // PDO Update: Prepare and Execute
+        $sql_app = "SELECT status FROM residence_applications WHERE residence_id = :uid ORDER BY id DESC LIMIT 1";
+        $stmt_app = $pdo->prepare($sql_app);
+        $stmt_app->execute(['uid' => $user_id]);
+        
+        $is_verified = false;
+        $badge_class = 'badge-danger';
+        $status_text = 'Not Verified';
 
-    $sql = "SELECT * FROM `barangay_information`";
-    $query = $con->prepare($sql) or die ($con->error);
-    $query->execute();
-    $result = $query->get_result();
-    while($row = $result->fetch_assoc()){
-        $barangay = $row['barangay'];
-        $zone = $row['zone'];
-        $district = $row['district'];
-        $image = $row['image'];
-        $image_path = $row['image_path'];
-        $id = $row['id'];
-        $postal_address = $row['postal_address'];
+        if($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)){
+            $app_status = $row_app['status'];
+            if($app_status == 'Approved' || $app_status == 'Verified'){
+                $is_verified = true;
+                $badge_class = 'badge-success';
+                $status_text = 'Verified';
+            } elseif ($app_status == 'Pending') {
+                $badge_class = 'badge-warning';
+                $status_text = 'Pending';
+            }
+        }
+
+    }else{
+        echo '<script>window.location.href = "../login.php";</script>';
+        exit;
     }
 
-
-  }else{
-   echo '<script>
-          window.location.href = "../login.php";
-        </script>';
-  }
-
+}catch(PDOException $e){
+    echo "Database Error: " . $e->getMessage();
 }catch(Exception $e){
-  echo $e->getMessage();
+    echo "Error: " . $e->getMessage();
 }
-
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title></title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resident Dashboard</title>
 
- 
-  <!-- Font Awesome Icons -->
-  <link rel="stylesheet" href="../assets/plugins/fontawesome-free/css/all.min.css">
-  <!-- overlayScrollbars -->
-  <link rel="stylesheet" href="../assets/plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
-  <!-- Theme style -->
-  <link rel="stylesheet" href="../assets/dist/css/adminlte.min.css">
-  <link rel="stylesheet" href="../assets/plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
-  <link rel="stylesheet" href="../assets/plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
-  <link rel="stylesheet" href="../assets/plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
-  <link rel="stylesheet" href="../assets/plugins/sweetalert2/css/sweetalert2.min.css">
-  <!-- Tempusdominus Bbootstrap 4 -->
-  <link rel="stylesheet" href="../assets/plugins/tempusdominus-bootstrap-4/css/tempusdominus-bootstrap-4.min.css">
-  <link rel="stylesheet" href="../assets/plugins/select2/css/select2.min.css">
-  <link rel="stylesheet" href="../assets/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
-  <style>
-    .rightBar:hover{
-      border-bottom: 3px solid red;
-     
-    }
-    
+<link rel="stylesheet" href="../assets/plugins/fontawesome-free/css/all.min.css">
+<link rel="stylesheet" href="../assets/plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
+<link rel="stylesheet" href="../assets/dist/css/adminlte.min.css">
+<link rel="stylesheet" href="../assets/plugins/sweetalert2/css/sweetalert2.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 
-
-    
-    #barangay_logo{
-      height: 150px;
-      width:auto;
-      max-width:500px;
+<style>
+    /* 1. Color Variables & Base Setup */
+    :root {
+        --bg-dark: #0d1117;         
+        --card-bg: #161b22;         
+        --text-primary: #c9d1d9;    
+        --text-secondary: #8b949e;  
+        --accent-color: #238636;    
+        --hover-bg: #21262d;        
+        --border-color: #30363d;    
+        --accent-blue: #3b82f6;
     }
 
-    .logo{
-      height: 150px;
-      width:auto;
-      max-width:500px;
-    }
-    .content-wrapper{
-      background-image: url('../assets/logo/cover.jpg');
-      background-repeat:no-repeat;
-background-size:contain;
-background-size: cover;
-background-position:center;
-width: 100%;
-  height: auto;
-        animation-name: example;
-        animation-duration: 5s;
-       
-       
+    body {
+        font-family: 'Poppins', sans-serif;
+        background-color: var(--bg-dark) !important;
+        color: var(--text-primary);
+        font-size: 0.9rem;
     }
 
-
-@keyframes example {
-  from {opacity: 0;}
-  to {opacity: 1.5;}
-}
-
-
-
-
-
-  .card	li {
-		list-style: none;
-		position: relative;
-		display: inline-block;
-		width: 100px;
-		height: 100px;
-   
-	}
-
-	@-moz-keyframes rotate {
-		0% {transform: rotate(0deg);}
-		100% {transform: rotate(-360deg);}
-	}
-
-	@-webkit-keyframes rotate {
-		0% {transform: rotate(0deg);}
-		100% {transform: rotate(-360deg);}
-	}
-
-	@-o-keyframes rotate {
-		0% {transform: rotate(0deg);}
-		100% {transform: rotate(-360deg);}
-	}
-
-	@keyframes rotate {
-		0% {transform: rotate(0deg);}
-		100% {transform: rotate(-360deg);}
-	}
-
-	.round {
-		display: block;
-		position: absolute;
-		left: 0;
-		top: 0;
-  
-		width: 100%;
-		height: 100%;
-		padding-top: 30px;		
-		text-decoration: none;		
-		text-align: center;
-		font-size: 25px;		
-		text-shadow: 0 1px 0 rgba(255,255,255,.7);
-		letter-spacing: -.065em;
-		font-family: "Hammersmith One", sans-serif;		
-		-webkit-transition: all .25s ease-in-out;
-		-o-transition: all .25s ease-in-out;
-		-moz-transition: all .25s ease-in-out;
-		transition: all .25s ease-in-out;
-		box-shadow: 2px 2px 7px rgba(0,0,0,.2);
-
-		z-index: 1;
-		border-width: 4px;
-		border-style: solid;
-	}
-
-	.round:hover {
-		width: 130%;
-		height: 130%;
-		left: -15%;
-		top: -15%;
-		font-size: 33px;
-		padding-top: 38px;
-		-webkit-box-shadow: 5px 5px 10px rgba(0,0,0,.3);
-		-o-box-shadow: 5px 5px 10px rgba(0,0,0,.3);
-		-moz-box-shadow: 5px 5px 10px rgba(0,0,0,.3);
-		box-shadow: 5px 5px 10px rgba(0,0,0,.3);
-		z-index: 2;
-
-		-webkit-transform: rotate(-360deg);
-		-moz-transform: rotate(-360deg);
-		-o-transform: rotate(-360deg);
-		transform: rotate(-360deg);
-	}
-
-	a.red {
-		background-color: transparent;
-		color: white;
-		border: 2px solid red;
+    .content-wrapper {
+        background-color: var(--bg-dark) !important;
+        color: var(--text-primary);
+        padding-bottom: 60px;
+    }
     
-	}
+    /* 2. Welcome Card - Adjusted Margins to Remove Top Space */
+    .welcome-card {
+        background-color: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 20px 25px; /* Reduced top/bottom padding slightly */
+        text-align: left;
+        margin: 0 0 25px 0; /* Removed TOP margin */
+        width: 100%;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        position: relative;
+        overflow: hidden;
+    }
 
-	a.red:hover {
-		color: rgba(239,57,50,1);
+    .welcome-card::before {
+        content: '';
+        position: absolute;
+        top: -50%; left: -50%; width: 200%; height: 200%;
+        background: radial-gradient(circle at 10% 50%, rgba(58, 110, 165, 0.08) 0%, rgba(0,0,0,0) 50%);
+        z-index: 0; pointer-events: none;
+    }
+
+    .welcome-card h1 {
+        position: relative; z-index: 1;
+        font-weight: 600; font-size: 1.8rem;
+        color: #ffffff; margin: 0;
+    }
+    .welcome-card h1 span { color: #58a6ff; }
+    .logo-img { position: relative; z-index: 1; height: 50px; filter: drop-shadow(0 0 10px rgba(255,255,255,0.1)); } /* Smaller logo */
+    .welcome-card p { color: var(--text-secondary); margin-bottom: 15px; margin-top: 2px; font-size: 0.85rem;}
+
+    /* 3. Quick Actions Grid */
+    .quick-actions {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 12px;
+        margin-top: 10px;
+        position: relative; z-index: 1;
+    }
+
+    .action-card {
+        background-color: #21262d;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 15px;
+        text-decoration: none;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        transition: all 0.2s ease;
+    }
+
+    .action-card i { font-size: 1.6rem; margin-bottom: 8px; color: var(--text-secondary); transition: all 0.2s ease; }
+    .action-card-title { color: var(--text-primary); font-weight: 500; font-size: 0.85rem; letter-spacing: 0.3px; text-align: center; }
+    .action-card:hover { background-color: #30363d; transform: translateY(-3px); border-color: #8b949e; }
+    .action-card:hover i { transform: scale(1.1); color: #58a6ff; }
     
-	}
+    .action-card.my-info:hover i { color: #79c0ff; }
+    .action-card.certificate:hover i { color: #d2a8ff; }
+    .action-card.history:hover i { color: #ff7b72; }
+    .action-card.form:hover i { color: #7ee787; }
 
-	a.green {
-    background-color: transparent;
-		color: white;
-		border: 2px solid red;
-	}
+    /* 4. PROFILE SECTION STYLES */
+    .profile-container {
+        width: 100%;
+        margin: 0 0 30px 0;
+    }
 
-	a.green:hover {
-		color: rgba(239,57,50,1);
-	}
+    .profile-info-card {
+        background-color: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 25px 30px;
+        margin-bottom: 20px;
+        position: relative;
+    }
 
-	a.yellow {
-    background-color: transparent;
-		color: white;
-		border: 2px solid red;
-	}
+    .profile-avatar {
+        width: 90px; height: 90px;
+        border-radius: 50%;
+        border: 3px solid var(--card-bg);
+        box-shadow: 0 0 0 2px var(--accent-blue);
+        object-fit: cover;
+        margin-bottom: 10px;
+    }
 
-	a.yellow:hover {
-    color: rgba(239,57,50,1);
-	}
+    .profile-name { font-size: 1.25rem; font-weight: 700; margin-bottom: 2px; color: #fff; }
+    .profile-role { color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
 
-	.round span.round {
-		display: block;
-		opacity: 0;
-		-webkit-transition: all .5s ease-in-out;
-		-moz-transition: all .5s ease-in-out;
-		-o-transition: all .5s ease-in-out;
-		transition: all .5s ease-in-out;
-		font-size: 1px;
-		border: none;
-		padding: 40% 20% 0 20%;
-		color: #fff;
+    /* Status Badge */
+    .profile-status-badge {
+        display: inline-block; padding: 4px 10px;
+        border-radius: 50px; font-size: 0.75rem; font-weight: 600;
+        margin-bottom: 5px;
+    }
+    .badge-success { background-color: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-warning { background-color: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-danger { background-color: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    /* Info Grid */
+    .info-grid-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px 40px;
+    }
+
+    .info-group {
+        margin-bottom: 0;
+        border-bottom: 1px solid rgba(255,255,255,0.03);
+        padding-bottom: 8px;
+    }
     
-	}
+    .info-label {
+        color: var(--accent-blue);
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        font-weight: 700;
+        display: block;
+        margin-bottom: 2px;
+        letter-spacing: 0.5px;
+    }
+    
+    .info-value { font-size: 0.95rem; color: var(--text-primary); font-weight: 400; }
+    
+    .btn-edit { 
+        background-color: var(--accent-blue); 
+        color: white; 
+        border: none; 
+        padding: 6px 14px; 
+        border-radius: 6px; 
+        font-weight: 500; 
+        text-decoration: none; 
+        display: inline-block; 
+        font-size: 0.85rem;
+        margin-top: 10px;
+    }
+    .btn-edit:hover { background-color: #2563eb; color: white; }
+    
+    .btn-apply { 
+        background: transparent; 
+        border: 1px solid var(--text-secondary); 
+        color: var(--text-secondary); 
+        padding: 4px 10px; 
+        border-radius: 20px; 
+        font-size: 0.75rem; 
+        text-transform: uppercase;
+        font-weight: 600;
+        margin-top: 5px;
+        display: inline-block;
+    }
+    .btn-apply:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
 
-	.round span:hover {
-		opacity: .85;
-		font-size: 16px;
-		-webkit-text-shadow: 0 1px 1px rgba(0,0,0,.5);
-		-moz-text-shadow: 0 1px 1px rgba(0,0,0,.5);
-		-o-text-shadow: 0 1px 1px rgba(0,0,0,.5);
-		text-shadow: 0 1px 1px rgba(0,0,0,.5);	
-	}
+    .section-header { text-align: left; margin-bottom: 15px; position: relative; z-index: 2; }
+    .section-header span { background: var(--bg-dark); padding-right: 15px; color: var(--text-secondary); font-weight: 600; letter-spacing: 1px; text-transform: uppercase; font-size: 0.8rem; }
+    .section-divider { position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background: var(--border-color); z-index: -1; }
 
-	.green span {
-		background: rgba(255,23,152,.7);		
-    font-weight: 900;
-	}
+    /* Fixed Footer */
+    .main-footer {
+        background-color: var(--card-bg) !important;
+        border-top: 1px solid var(--border-color);
+        color: var(--text-secondary);
+        text-align: center;
+        padding: 10px;
+        font-size: 0.85rem;
+        position: fixed;
+        bottom: 0;
+        right: 0;
+        left: 260px;
+        z-index: 1030;
+        transition: left 0.3s ease-in-out;
+    }
 
-	.red span {
-    background: rgba(255,23,152,.7);		
-    font-weight: 900;
-	}
-
-	.yellow span {
-		background: rgba(255,23,152,.7);		
-    font-weight: 900;
-
-	}
-  </style>
+    @media (max-width: 768px) {
+        .main-footer { left: 0; }
+        .welcome-card { text-align: center; }
+        .quick-actions { justify-content: center; }
+        .profile-info-card { text-align: center; padding: 20px; }
+        .profile-info-card .row { flex-direction: column; }
+        .col-md-3, .col-md-9 { width: 100%; max-width: 100%; flex: 0 0 100%; }
+        .col-md-3 { margin-bottom: 25px; border-bottom: 1px dashed var(--border-color); padding-bottom: 20px; }
+        .text-left { text-align: center !important; }
+        .info-grid-row { grid-template-columns: 1fr; gap: 15px; text-align: left; }
+        .section-header { text-align: center; }
+        .section-header span { padding: 0 10px; }
+    }
+</style>
 </head>
-<body class="hold-transition layout-top-nav">
+<body class="hold-transition sidebar-mini layout-fixed layout-navbar-fixed">
 
 <div class="wrapper">
 
-  <!-- Navbar -->
-  <nav class="main-header navbar navbar-expand-md " style="background-color: #0037af">
-    <div class="container">
-      <a href="#" class="navbar-brand">
-        <img src="../assets/dist/img/<?= $image  ?>" alt="logo" class="brand-image img-circle " >
-        <span class="brand-text  text-white"  style="font-weight: 700">  <?= $barangay ?> <?= $zone ?>, <?= $district ?></span>
-      </a>
+    <?php include_once __DIR__ . '/../includes/menu_bar.php'; ?>
 
-      <button class="navbar-toggler order-1" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
+    <div class="content-wrapper">
+        <div class="content">
+        <div class="container-fluid" style="padding: 10px;"> 
+            
+            <div class="welcome-card">
+                <div class="d-flex align-items-center mb-2">
+                    <?php if(!empty($image_logo)): ?>
+                        <img src="../assets/dist/img/<?= $image_logo;?>" alt="logo" class="logo-img mr-3">
+                    <?php else: ?>
+                        <i class="fas fa-landmark fa-3x mr-3" style="color: #58a6ff;"></i>
+                    <?php endif; ?>
+                    <div>
+                        <h1>Welcome, <span><?= htmlspecialchars($first_name_user) ?></span></h1>
+                    </div>
+                </div>
+                <p>What would you like to do today?</p>
+                
+                <div class="quick-actions">
+                    <a href="myInfo.php" class="action-card my-info">
+                        <i class="fas fa-user-circle"></i>
+                        <div class="action-card-title">My Information</div>
+                    </a>
+                    <a href="form_application.php" class="action-card form">
+                        <i class="fas fa-folder-open"></i>
+                        <div class="action-card-title">Residency Application</div>
+                    </a>
+                    <a href="certificate_request.php" class="action-card certificate">
+                        <i class="fas fa-file-signature"></i>
+                        <div class="action-card-title">Request Certificate</div>
+                    </a>
+                    <a href="certificate_history.php" class="action-card history">
+                        <i class="fas fa-history"></i>
+                        <div class="action-card-title">Request History</div>
+                    </a>
+                </div>
+            </div>
 
-      <div class="collapse navbar-collapse order-3" id="navbarCollapse">
-        <!-- Left navbar links -->
+            <div class="section-header">
+                <div class="section-divider"></div>
+                <span>My Profile & Status</span>
+            </div>
 
+            <div class="profile-container">
+                <div class="profile-info-card">
+                    <div class="row align-items-start">
+                        
+                        <div class="col-md-3 text-center">
+                            <?php
+                                $img_src = (!empty($row_user['image_path'])) ? $row_user['image_path'] : '../assets/dist/img/default-user.jpg';
+                            ?>
+                            <img src="<?= $img_src ?>" alt="Profile" class="profile-avatar">
+                            
+                            <h2 class="profile-name">
+                                <?= htmlspecialchars($first_name_user . ' ' . $last_name_user) ?>
+                            </h2>
+                            <div class="profile-role">Resident ID: <span style="font-family: monospace;"><?= htmlspecialchars($user_id) ?></span></div>
 
-       
-      </div>
+                            <div class="profile-status-badge <?= $badge_class ?> mt-2">
+                                <?php if($is_verified): ?>
+                                    <i class="fas fa-check-circle mr-1"></i> 
+                                <?php elseif($app_status == 'Pending'): ?>
+                                    <i class="fas fa-clock mr-1"></i>
+                                <?php else: ?>
+                                    <i class="fas fa-times-circle mr-1"></i>
+                                <?php endif; ?>
+                                <?= $status_text ?>
+                            </div>
 
-      
+                            <?php if(!$is_verified && $app_status != 'Pending'): ?>
+                                <div class="mt-1">
+                                    <a href="form_application.php" class="btn-apply">Verify Now</a>
+                                </div>
+                            <?php endif; ?>
+                        </div>
 
-      <!-- Right navbar links -->
-      <ul class="order-1 order-md-3 navbar-nav navbar-no-expand ml-auto " >
-          <li class="nav-item">
-            <a href="#" class="nav-link text-white rightBar" style="  border-bottom: 3px solid red;"><i class="fas fa-home"></i> DASHOBARD</a>
-          </li>
-          <li class="nav-item">
-            <a href="profile.php" class="nav-link text-white rightBar" style="text-transform:uppercase;"><i class="fas fa-user-alt"></i> <?= $last_name_user ?>-<?= $user_id ?></a>
-          </li>
-          <li class="nav-item">
-            <a href="../logout.php" class="nav-link text-white rightBar" style="text-transform:uppercase;"><i class="fas fa-sign-out-alt"></i> Logout</a>
-          </li>
-      </ul>
+                        <div class="col-md-9 pl-md-4" style="border-left: 1px solid rgba(255,255,255,0.05);">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h4 class="text-white m-0" style="font-size: 1rem; font-weight: 600;"><i class="fas fa-info-circle mr-2" style="color: var(--accent-blue);"></i> Account Details</h4>
+                            </div>
+                            
+                            <div class="info-grid-row">
+                                <div class="info-group">
+                                    <span class="info-label">Username</span>
+                                    <span class="info-value"><?= htmlspecialchars($row_user['username']) ?></span>
+                                </div>
+                                <div class="info-group">
+                                    <span class="info-label">Contact Number</span>
+                                    <span class="info-value"><?= htmlspecialchars($row_user['contact_number']) ?></span>
+                                </div>
+                                <div class="info-group">
+                                    <span class="info-label">Account Status</span>
+                                    <span class="info-value text-success"><i class="fas fa-circle" style="font-size: 8px; vertical-align: middle;"></i> Active</span>
+                                </div>
+                                <div class="info-group">
+                                    <span class="info-label">Application Status</span>
+                                    <span class="info-value"><?= $app_status ? htmlspecialchars($app_status) : 'None' ?></span>
+                                </div>
+                            </div>
+
+                            <div class="text-right mt-3"> 
+                                <a href="myInfo.php" class="btn-edit"><i class="fas fa-edit mr-1"></i> Edit Info</a>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        </div>
     </div>
-  </nav>
-  <!-- /.navbar -->
 
-  <!-- Content Wrapper. Contains page content -->
-  <div class="content-wrapper" >
-    <!-- Content Header (Page header) -->
- 
-    
-  
-    <!-- /.content-header -->
-
-    <!-- Main content -->
-    <div class="content  " >
-      <div class="container-fluid pt-5">
-      <div class="card "  style=" background-color: rgba(0,54,175,.75);">
-      
-      <div class="card-body text-center text-white">
-      <img src="../assets/dist/img/<?= $image;?>" alt="logo" class="img-circle logo">
-                        <h1 class="card-text" >WELCOME, <span style="font-weight: 1000; text-transform: uppercase;"><?= $first_name_user ?></span></h1>
-       
-        
-      
-          <br>
-          <br>
-        
-          <ul>
-              <li class="mx-5"><a href="myInfo.php" class="round green"><i class="fas fa-user" style="font-size: 50px;"></i><span class="round"><br> MY INFO</span></a></li>
-              <li class="mx-5"><a href="certificate.php" class="round red"><i class="fas fa-certificate" style="font-size: 50px;"></i><span class="round"><br> CERTIFICATE </span></a></li>
-              <li class="mx-5"><a href="myRecord.php" class="round yellow"><i class="fas fa-book-open" style="font-size: 50px;"></i> <span class="round"><br> BLOTTER</span></a></li>
-            </ul> 
-
-      </div>
-    </div>
-
-      </div>
-
-  
-
-
-
-    
-
-
-     
-          
-               
-      
-     
-    </div>
-    <!-- /.content -->
-  </div>
-  <!-- /.content-wrapper -->
-
- 
-  <footer class="main-footer text-white" style="background-color: #0037af">
-    <div class="float-right d-none d-sm-block">
-    
-    </div>
-  <i class="fas fa-map-marker-alt"></i> <?= $postal_address ?> 
-  </footer>
- 
-
+    <footer class="main-footer">
+        <div class="float-right d-none d-sm-block">
+        <b>System Version</b> 1.0
+        </div>
+        <strong><i class="fas fa-map-marker-alt"></i> <?= $postal_address ?></strong>
+    </footer>
 
 </div>
-<!-- ./wrapper -->
 
-
-<!-- REQUIRED SCRIPTS -->
-<!-- jQuery -->
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
-<!-- Bootstrap -->
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
-<!-- overlayScrollbars -->
 <script src="../assets/plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js"></script>
-<!-- AdminLTE App -->
 <script src="../assets/dist/js/adminlte.js"></script>
-<script src="../assets/plugins/popper/umd/popper.min.js"></script>
-<script src="../assets/plugins/datatables/jquery.dataTables.min.js"></script>
-<script src="../assets/plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>
-<script src="../assets/plugins/datatables-responsive/js/dataTables.responsive.min.js"></script>
-<script src="../assets/plugins/datatables-responsive/js/responsive.bootstrap4.min.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/dataTables.buttons.min.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/buttons.bootstrap4.min.js"></script>
-<script src="../assets/plugins/jszip/jszip.min.js"></script>
-<script src="../assets/plugins/pdfmake/pdfmake.min.js"></script>
-<script src="../assets/plugins/pdfmake/vfs_fonts.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/buttons.html5.min.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/buttons.print.min.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/buttons.colVis.min.js"></script>
 <script src="../assets/plugins/sweetalert2/js/sweetalert2.all.min.js"></script>
-<script src="../assets/plugins/select2/js/select2.full.min.js"></script>
-<script src="../assets/plugins/moment/moment.min.js"></script>
-<script src="../assets/plugins/chart.js/Chart.min.js"></script>
-
-
+            
 </body>
 </html>
