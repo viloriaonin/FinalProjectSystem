@@ -1,51 +1,61 @@
-
 <?php 
 
-include_once '../connection.php';
+// 1. UPDATE: Point to your new PDO connection file
+include_once '../db_connection.php'; 
 session_start();
 
-try{
+try {
 
-
-  
   if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin'){
   
     $user_id = $_SESSION['user_id'];
-    $sql_user = "SELECT * FROM `users` WHERE `user_id` = ? ";
-    $stmt_user = $con->prepare($sql_user) or die ($con->error);
-    $stmt_user->bind_param('s',$user_id);
-    $stmt_user->execute();
-    $result_user = $stmt_user->get_result();
-    $row_user = $result_user->fetch_assoc();
+
+    // --- QUERY 1: FETCH USER ---
+    // UPDATE: Use PDO syntax
+    $sql_user = "SELECT * FROM `users` WHERE `user_id` = :user_id";
+    $stmt_user = $pdo->prepare($sql_user);
+    // Execute with array mapping (safest way)
+    $stmt_user->execute(['user_id' => $user_id]);
+    $row_user = $stmt_user->fetch(); // PDO::FETCH_ASSOC is default in your config
+
+    // Assign variables (using null coalescing ?? to prevent errors if empty)
     $username_user = $row_user['username'] ?? '';
     $password_user = $row_user['password'] ?? '';
-    $user_type = $row_user['user_type'] ?? '';
-    $email_user = $row_user['email_address'] ?? '';
+    $user_type     = $row_user['user_type'] ?? '';
+    $email_user    = $row_user['email_address'] ?? '';
   
-  
-    $sql = "SELECT * FROM `barangay_information`";
-  $query = $con->prepare($sql) or die ($con->error);
-  $query->execute();
-  $result = $query->get_result();
 
-     $row = $result->fetch_assoc();
-      $barangay = $row['barangay'];
-      $municipality = $row['municipality'];
-      $province  = $row['province'];
-      $image     = $row['images'];
-      $image_path = $row['image_path'];
-      $id = $row['barangay_id'];
+    // --- QUERY 2: FETCH BARANGAY INFO ---
+    $sql = "SELECT * FROM `barangay_information`";
+    $query = $pdo->prepare($sql);
+    $query->execute();
+    
+    $row = $query->fetch();
+
+    // Assign variables
+    if ($row) {
+        $barangay     = $row['barangay'];
+        $municipality = $row['municipality'];
+        $province     = $row['province'];
+        $image        = $row['images'];
+        $image_path   = $row['image_path'];
+        $id           = $row['barangay_id'];
+    } else {
+        // Handle case where barangay info is empty (optional)
+        $barangay = ''; $municipality = ''; $province = ''; $image = ''; $image_path = ''; $id = '';
+    }
   
-  
-  }else{
-   echo '<script>
-          window.location.href = "../login.php";
-        </script>';
+  } else {
+    echo '<script>
+           window.location.href = "../login.php";
+         </script>';
+    exit(); // Good practice to stop script execution after redirect
   }
   
-  }catch(Exception $e){
-    echo $e->getMessage();
-  }
+} catch(PDOException $e) {
+    // Show error message
+    echo "Error: " . $e->getMessage();
+}
 ?>
 
 <!DOCTYPE html>
@@ -53,20 +63,13 @@ try{
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title></title>
-
- 
-  <!-- Font Awesome Icons -->
-  <link rel="stylesheet" href="../assets/plugins/fontawesome-free/css/all.min.css">
-  <!-- overlayScrollbars -->
+  <title>Settings</title> <link rel="stylesheet" href="../assets/plugins/fontawesome-free/css/all.min.css">
   <link rel="stylesheet" href="../assets/plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
-  <!-- Theme style -->
   <link rel="stylesheet" href="../assets/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="../assets/plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/sweetalert2/css/sweetalert2.min.css">
-  <!-- Tempusdominus Bbootstrap 4 -->
   <link rel="stylesheet" href="../assets/plugins/tempusdominus-bootstrap-4/css/tempusdominus-bootstrap-4.min.css">
   <link rel="stylesheet" href="../assets/plugins/select2/css/select2.min.css">
   <link rel="stylesheet" href="../assets/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
@@ -86,26 +89,17 @@ try{
 
 <?php include_once 'adminSidebar.php'; ?>
 
-  <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper">
-    <!-- Content Header (Page header) -->
     <div class="content-header">
       <div class="container-fluid">
         <div class="row mb-2">
           <div class="col-sm-6" style="font-variant: small-caps;">
               <h3>Settings</h3>
-          </div><!-- /.col -->
-          <div class="col-sm-6">
+          </div><div class="col-sm-6">
             <ol class="breadcrumb float-sm-right">
               
             </ol>
-          </div><!-- /.col -->
-        </div><!-- /.row -->
-      </div><!-- /.container-fluid -->
-    </div>
-    <!-- /.content-header -->
-
-    <!-- Main content -->
+          </div></div></div></div>
     <section class="content">
       <div class="container-fluid">
           
@@ -164,18 +158,11 @@ try{
                 </div>
                 </form> 
              </div>
-           </div>     
+           </div>    
 
 
-      </div><!--/. container-fluid -->
-    </section>
-    <!-- /.content -->
-  </div>
-  <!-- /.content-wrapper -->
-
-
-
-  <!-- Main Footer -->
+      </div></section>
+    </div>
   <footer class="main-footer">
     <strong>Copyright &copy; <?php echo date("Y"); ?> - <?php echo date('Y', strtotime('+1 year'));?> </strong>
     
@@ -183,16 +170,9 @@ try{
     </div>
   </footer>
 </div>
-<!-- ./wrapper -->
-
-<!-- REQUIRED SCRIPTS -->
-<!-- jQuery -->
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
-<!-- Bootstrap -->
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
-<!-- overlayScrollbars -->
 <script src="../assets/plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js"></script>
-<!-- AdminLTE App -->
 <script src="../assets/dist/js/adminlte.js"></script>
 <script src="../assets/plugins/popper/umd/popper.min.js"></script>
 <script src="../assets/plugins/datatables/jquery.dataTables.min.js"></script>
@@ -220,8 +200,6 @@ try{
   timer: 2000
 });
 
-
-// ... (rest of your JS remains the same)
 
 $(document).ready(function() {
   $("#updateBtn").click(function(e) {
@@ -328,7 +306,6 @@ $(document).ready(function() {
 });
 
 
-// ... (rest of your JS remains the same)
 
         } else {
           Toast.fire({ type: 'error', title: 'Failed to Send OTP' });  // Fixed: 'icon' -> 'type'
