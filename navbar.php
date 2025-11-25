@@ -12,7 +12,7 @@
 <div class="wrapper">
 
   <!-- Navbar -->
-  <nav class="main-header navbar navbar-expand-md " style="background-color: #0037af">
+  <nav class="main-header navbar navbar-expand-md " style="background-color: #000000ff">
     <div class="container">
       <a href="" class="navbar-brand">
         <img src="assets/dist/img/<?= $image  ?>" alt="logo" class="brand-image img-circle " >

@@ -1,7 +1,7 @@
 <?php
 //index.php
 include_once 'db_connection.php';
-include_once 'navbar.php'; 
+// include_once 'navbar.php'; // REMOVED: Replaced with explicit code below
 session_start();
 
 // --- 1. SECURITY & REDIRECT CHECK ---
@@ -152,10 +152,13 @@ function make_slides($data, $barangay_name){
     
     /* General Section */
     .section-title {
-        color: #0037af; font-weight: 700; margin-bottom: 30px; position: relative;
+        color: #000000; 
+        font-weight: 700; margin-bottom: 30px; position: relative;
     }
     .section-title::after {
-        content: ''; display: block; width: 60px; height: 3px; background: #0037af; margin: 10px auto 0;
+        content: ''; display: block; width: 60px; height: 3px; 
+        background: #000000; 
+        margin: 10px auto 0;
     }
     
     /* Service & Info Cards */
@@ -167,7 +170,13 @@ function make_slides($data, $barangay_name){
         transform: translateY(-10px); box-shadow: 0 8px 30px rgba(0,0,0,0.1);
     }
     .service-card .card-body { padding: 2.5rem; }
-    .service-card i { font-size: 3.5rem; color: #0037af; margin-bottom: 1.5rem; }
+    
+    .service-card i { 
+        font-size: 3.5rem; 
+        color: #000000; 
+        margin-bottom: 1.5rem; 
+    }
+    
     .service-card h5 { font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem; }
     .service-card p, .service-card li { color: #6c757d; }
     .goals-list { text-align: left; display: inline-block; }
@@ -175,7 +184,33 @@ function make_slides($data, $barangay_name){
 </head>
 <body class="hold-transition layout-top-nav">
 
-  <div class="content-wrapper" >
+  <nav class="main-header navbar navbar-expand-md" style="background-color: #000000; border:0;">
+        <div class="container">
+          <a href="index.php" class="navbar-brand">
+            <img src="assets/dist/img/<?= htmlspecialchars($image) ?>" alt="logo" class="brand-image img-circle" style="opacity: .8">
+            <span class="brand-text text-white" style="font-weight: 700">BARANGAY PORTAL</span>
+          </a>
+
+          <button class="navbar-toggler order-1" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="fas fa-bars text-white"></span>
+          </button>
+
+          <div class="collapse navbar-collapse order-3" id="navbarCollapse"></div>
+
+          <ul class="order-1 order-md-3 navbar-nav navbar-no-expand ml-auto">
+              <li class="nav-item">
+                <a href="index.php" class="nav-link text-white rightBar" style="border-bottom: 3px solid red;">HOME</a>
+              </li>
+              <li class="nav-item">
+                <a href="ourofficial.php" class="nav-link text-white rightBar"><i class="fas fa-users mr-1"></i> OUR OFFICIALS</a>
+              </li>
+              <li class="nav-item">
+                <a href="login.php" class="nav-link text-white rightBar"><i class="fas fa-user-alt mr-1"></i> LOGIN</a>
+              </li>
+          </ul>
+        </div>
+    </nav>
+    <div class="content-wrapper" >
   
     <div id="heroCarousel" class="carousel slide" data-ride="carousel" data-interval="5000">
       <ol class="carousel-indicators">
@@ -198,12 +233,12 @@ function make_slides($data, $barangay_name){
       <div class="container">
          <div class="row pt-5 pb-4 justify-content-center">
             <div class="col-lg-10 text-center">
-                <div class="card card-body shadow-sm" style="border-top: 5px solid #0037af;">
-                    <h1 class="card-text" style="font-weight: 700; color: #0037af;">Welcome to the <?= htmlspecialchars($barangay) ?> Portal</h1>
+                <div class="card card-body shadow-sm" style="border-top: 5px solid #000000;">
+                    <h1 class="card-text" style="font-weight: 700; color: #000000;">Welcome to the <?= htmlspecialchars($barangay) ?> Portal</h1>
                     <p class="lead text-muted">Your online gateway for barangay services, announcements, and requests. <br>Register an account or log in to get started.</p>
                     <div class="mt-3">
-                        <a href="register.php" class="btn btn-lg px-4" style="background-color: #0037af; color: white; font-weight: 700"><i class="fas fa-user-plus mr-2"></i> REGISTER NOW</a>
-                        <a href="login.php" class="btn btn-outline-secondary btn-lg px-4 ml-2" style="font-weight: 700;"><i class="fas fa-sign-in-alt mr-2"></i> LOGIN</a>
+                        <a href="register.php" class="btn btn-lg px-4" style="background-color: #000000; color: white; font-weight: 700"><i class="fas fa-user-plus mr-2"></i> REGISTER NOW</a>
+                        <a href="login.php" class="btn btn-outline-dark btn-lg px-4 ml-2" style="font-weight: 700;"><i class="fas fa-sign-in-alt mr-2"></i> LOGIN</a>
                     </div>
                 </div>
             </div>
@@ -292,7 +327,7 @@ function make_slides($data, $barangay_name){
         </div>
     </div>
 
-    <footer class="main-footer text-white text-center" style="background-color: #0037af; padding: 20px 0;">
+    <footer class="main-footer text-white text-center" style="background-color: #000000; padding: 20px 0;">
       <div class="container">
         <h5 class="font-weight-bold mb-2 text-uppercase"><?= htmlspecialchars($barangay) ?></h5>
         <p class="mb-2">
