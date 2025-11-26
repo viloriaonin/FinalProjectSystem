@@ -2,47 +2,51 @@
 
 
 
-include_once 'connection.php';
+include_once 'db_connection.php';
+
+session_start();
 
 
 try{
 
   $check_username = $con->real_escape_string($_POST['check_username']);
   $check_number = $con->real_escape_string($_POST['check_number']);
-  $contact_number = $con->real_escape_string($_POST['contact_number']);
+  $otp_code = isset($_POST['otp_code']) ? $con->real_escape_string(trim($_POST['otp_code'])) : '';
   $new_password = $con->real_escape_string($_POST['new_password']);
   $new_confirm_password = $con->real_escape_string($_POST['new_confirm_password']);
 
 
-  $sql_check = "SELECT contact_number, password FROM users WHERE username = ? ";
-  $stmt_check = $con->prepare($sql_check) or die ($con->error);
-  $stmt_check->bind_param('s',$check_username);
-  $stmt_check->execute();
-  $result_check = $stmt_check->get_result();
-  $row_check = $result_check->fetch_assoc();
-
-  if(strlen((string)$row_check['contact_number']) == 11){
-    $check = $row_check['contact_number'][7] . $row_check['contact_number'][8] . $row_check['contact_number'][9] . $row_check['contact_number'][10];
-    
-  }else{
-    $check =  $row_check['contact_number'][6] . $row_check['contact_number'][7] . $row_check['contact_number'][8] . $row_check['contact_number'][9];
+  // validate OTP from session
+  if(!isset($_SESSION['password_reset_otp'][$check_username])){
+    exit('error_otp');
   }
 
-  if($contact_number != $check){
-    exit('error');
+  $otp_record = $_SESSION['password_reset_otp'][$check_username];
+  if(time() > $otp_record['expires']){
+    // remove expired OTP
+    unset($_SESSION['password_reset_otp'][$check_username]);
+    exit('error_otp_expired');
+  }
+
+  if($otp_code != $otp_record['otp']){
+    exit('error_otp');
   }
 
   if($new_password != $new_confirm_password){
     exit('error1');
   }
 
-
-
+  // update password
+  // Hash the new password before storing
+  $hashed = password_hash($new_password, PASSWORD_DEFAULT);
   $sql_update = "UPDATE users SET password = ? WHERE username = ?";
   $stmt_update = $con->prepare($sql_update) or die ($con->error);
-  $stmt_update->bind_param('ss',$new_password,$check_username);
+  $stmt_update->bind_param('ss', $hashed, $check_username);
   $stmt_update->execute();
   $stmt_update->close();
+
+  // clear OTP after successful reset
+  unset($_SESSION['password_reset_otp'][$check_username]);
  
   
 
