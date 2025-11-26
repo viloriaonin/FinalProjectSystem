@@ -22,6 +22,7 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_type']) || $_SESSION[
   <link rel="stylesheet" href="../assets/plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
+  <!-- SweetAlert2 CSS -->
   <link rel="stylesheet" href="../assets/plugins/sweetalert2/css/sweetalert2.min.css">
   <link rel="stylesheet" href="../assets/plugins/select2/css/select2.min.css">
   <link rel="stylesheet" href="../assets/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
@@ -109,8 +110,8 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_type']) || $_SESSION[
                 </thead>
                 <tbody>
   <?php
-  // Query barangay_applications table
-  $sql = "SELECT * FROM barangay_applications"; 
+  // Query residence_applications table
+  $sql = "SELECT * FROM residence_applications"; 
   $stmt = $pdo->query($sql);
 
   if ($stmt && $stmt->rowCount() > 0) {
@@ -157,6 +158,10 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_type']) || $_SESSION[
 
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+
+<!-- CHANGED: Use CDN to ensure SweetAlert loads even if local file is missing -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 <script src="../assets/plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js"></script>
 <script src="../assets/dist/js/adminlte.js"></script>
 <script src="../assets/plugins/datatables/jquery.dataTables.min.js"></script>
@@ -213,17 +218,25 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_type']) || $_SESSION[
     });
 
     // View Application Modal
+// View Application Modal
 $(document).on('click', '.viewApplication', function(){
     var applicant_id = $(this).data('id');
+    
+    // 1. Show the modal immediately (with the spinner inside)
     $("#viewApplicantModal").modal('show'); 
     
+    // 2. Fetch data
     $.ajax({
-        url: 'viewApplicantModal.php',
+        url: 'viewApplicantModal.php', // Make sure this file actually exists!
         type: 'POST',
         data: { applicant_id: applicant_id },
         success: function(data){
-            // Make sure you are targeting the .modal-content div to replace everything inside it
-            $("#viewApplicantModal .modal-content").html(data);
+            // CHANGE THIS LINE: Target .modal-body instead of .modal-content
+            $("#displayApplicationData").html(data);
+        },
+        error: function(xhr, status, error) {
+            console.error(xhr);
+            alert("Error fetching data: " + error);
         }
     });
 });

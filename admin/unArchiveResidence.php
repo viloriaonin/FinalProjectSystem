@@ -1,77 +1,70 @@
-<?php 
-
+<?php
 include_once '../db_connection.php';
 session_start();
 
-// Set header to JSON for the AJAX response
 header('Content-Type: application/json');
 
-try {
+if (isset($_POST['resident_id'])) {
+    $id = $_POST['resident_id'];
 
-    // Check if ID is sent (Using resident_id to match your database column)
-    if(isset($_POST['resident_id'])){
-        
-        $id = $_POST['resident_id'];
-        
-        // Start Transaction
+    try {
+        // 1. Start Transaction
         $pdo->beginTransaction();
 
-        // --- 1. GET RESIDENT INFO FOR ACTIVITY LOG (Before we move them) ---
-        // We select from archivedResidence because that's where they are right now
-        $sql_check = "SELECT first_name, last_name FROM archivedResidence WHERE resident_id = :id";
-        $stmt_check = $pdo->prepare($sql_check);
-        $stmt_check->execute([':id' => $id]);
-        $row_resident = $stmt_check->fetch();
+        // 2. Check collision with active list
+        $check = $pdo->prepare("SELECT resident_id FROM residence_information WHERE resident_id = :id");
+        $check->execute([':id' => $id]);
+        
+        if ($check->rowCount() > 0) {
+            throw new Exception("This resident ID ($id) already exists in the active list. Cannot restore.");
+        }
 
-        $first_name = $row_resident['first_name'] ?? 'Unknown';
-        $last_name  = $row_resident['last_name'] ?? 'Unknown';
+        // --- FIX FOR ERROR 1452 (Foreign Key) ---
+        // Check if the 'user_id' in the archive actually exists in the 'users' table.
+        // If the user account was deleted, we must set user_id to NULL before restoring.
+        
+        // A. Get the user_id from the archive
+        $stmtGetUid = $pdo->prepare("SELECT user_id FROM archivedResidence WHERE resident_id = :id");
+        $stmtGetUid->execute([':id' => $id]);
+        $archivedRow = $stmtGetUid->fetch(PDO::FETCH_ASSOC);
 
-        // --- 2. RESTORE: Copy back to main table ---
-        $sqlRestore = "INSERT INTO residence_information SELECT * FROM archivedResidence WHERE resident_id = :id";
-        $stmtRestore = $pdo->prepare($sqlRestore);
-        $stmtRestore->execute([':id' => $id]);
+        if ($archivedRow && !empty($archivedRow['user_id'])) {
+            $uid = $archivedRow['user_id'];
+            
+            // B. Check if this user_id exists in the main users table
+            // Note: Adjust 'user_id' to 'id' if your users table primary key is named 'id'
+            $stmtCheckUser = $pdo->prepare("SELECT id FROM users WHERE id = :uid"); 
+            $stmtCheckUser->execute([':uid' => $uid]);
 
-        // --- 3. DELETE: Remove from archive table ---
+            if ($stmtCheckUser->rowCount() == 0) {
+                // C. User is missing! Break the link by setting it to NULL in the archive first
+                $updateNull = $pdo->prepare("UPDATE archivedResidence SET user_id = NULL WHERE resident_id = :id");
+                $updateNull->execute([':id' => $id]);
+            }
+        }
+        // ----------------------------------------
+
+        // 3. Copy data FROM Archive TO Main Table
+        $sqlCopy = "INSERT INTO residence_information SELECT * FROM archivedResidence WHERE resident_id = :id";
+        $stmtCopy = $pdo->prepare($sqlCopy);
+        $stmtCopy->execute([':id' => $id]);
+
+        // 4. Delete from Archive Table
         $sqlDelete = "DELETE FROM archivedResidence WHERE resident_id = :id";
         $stmtDelete = $pdo->prepare($sqlDelete);
         $stmtDelete->execute([':id' => $id]);
 
-        // --- 4. INSERT ACTIVITY LOG ---
-        $date_activity = date("j-n-Y g:i A");
-        // Assuming the logged-in user is the admin performing the action
-        $admin_name = $_SESSION['username'] ?? 'ADMIN'; 
-        
-        $message = strtoupper($admin_name) . ': UNDELETED RESIDENT - ' . $id . ' | - ' . $first_name . ' ' . $last_name;
-        $status_log = 'restore'; // Changed from 'delete' to 'restore' to be more accurate, or keep 'delete' if you prefer
-
-        $sql_log = "INSERT INTO activity_log (`message`, `date`, `status`) VALUES (:message, :date, :status)";
-        $stmt_log = $pdo->prepare($sql_log);
-        $stmt_log->execute([
-            ':message' => $message,
-            ':date'    => $date_activity,
-            ':status'  => $status_log
-        ]);
-
-        // Commit changes
+        // 5. Commit changes
         $pdo->commit();
 
-        echo json_encode(['status' => 'success', 'message' => 'Resident unarchived successfully.']);
-    } else {
-        echo json_encode(['status' => 'error', 'message' => 'No ID provided.']);
-    }
+        echo json_encode(['status' => 'success', 'message' => 'Resident restored successfully.']);
 
-} catch(Exception $e){
-    // Rollback changes if anything failed
-    if ($pdo->inTransaction()) {
-        $pdo->rollBack();
+    } catch (Exception $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
     }
-    
-    // Check specifically for duplicate entry (if they are already in the main table)
-    if ($e->getCode() == 23000) {
-        echo json_encode(['status' => 'error', 'message' => 'Error: This resident ID already exists in the active list.']);
-    } else {
-        echo json_encode(['status' => 'error', 'message' => 'Database Error: ' . $e->getMessage()]);
-    }
+    exit();
 }
-
 ?>

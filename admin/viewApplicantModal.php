@@ -1,14 +1,14 @@
 <?php
-// admin/viewApplicationModal.php
+// admin/viewApplicantModal.php
 include_once '../db_connection.php'; 
 
 // Check if the ID was sent via POST
-if(isset($_POST['applicant_id'])){ // JS sends 'applicant_id'
+if(isset($_POST['applicant_id'])){ 
     $id = $_POST['applicant_id'];
 
     try {
         // Fetch all details for this Applicant
-        $stmt = $pdo->prepare("SELECT * FROM barangay_applications WHERE applicant_id = ?");
+        $stmt = $pdo->prepare("SELECT * FROM residence_applications WHERE applicant_id = ?");
         $stmt->execute([$id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -17,14 +17,11 @@ if(isset($_POST['applicant_id'])){ // JS sends 'applicant_id'
             $image = !empty($row['image_path']) ? $row['image_path'] : '../assets/dist/img/avatar5.png';
             
             // Full Name
-            // Adjust suffix if your table doesn't have it, or just leave it empty string
             $suffix = isset($row['suffix']) ? $row['suffix'] : '';
             $fullname = strtoupper($row['first_name'] . ' ' . $row['middle_name'] . ' ' . $row['last_name'] . ' ' . $suffix);
             
-            // Format Date
+            // Format Data
             $bdate = !empty($row['birth_date']) ? date('F j, Y', strtotime($row['birth_date'])) : 'N/A';
-            
-            // Handle other potentially missing columns with fallbacks
             $occupation = $row['occupation'] ?? 'N/A';
             $gender = $row['gender'] ?? 'N/A';
             $age = $row['age'] ?? 'N/A';
@@ -58,9 +55,9 @@ if(isset($_POST['applicant_id'])){ // JS sends 'applicant_id'
                             <div class="card-body box-profile">
                                 <div class="text-center">
                                     <img class="profile-user-img img-fluid img-circle"
-                                         src="<?= $image ?>"
-                                         alt="User profile picture" 
-                                         style="width: 150px; height: 150px; object-fit: cover; border: 3px solid #adb5bd;">
+                                           src="<?= $image ?>"
+                                           alt="User profile picture" 
+                                           style="width: 150px; height: 150px; object-fit: cover; border: 3px solid #adb5bd;">
                                 </div>
                                 <h3 class="profile-username text-center mt-3"><?= $fullname ?></h3>
                                 <p class="text-muted text-center"><?= $occupation ?></p>
@@ -136,9 +133,104 @@ if(isset($_POST['applicant_id'])){ // JS sends 'applicant_id'
                 </div>
             </div>
             
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            <div class="modal-footer justify-content-between">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                
+                <!-- Action Buttons Container -->
+                <div id="initialActions">
+                    <button type="button" class="btn btn-danger" onclick="toggleRejectInput()">Reject</button>
+                    <button type="button" class="btn btn-success" onclick="approveApplicant(<?= $id ?>)">Approve</button>
+                </div>
+
+                <!-- Hidden Reject Input Container -->
+                <div id="rejectContainer" style="display: none; width: 60%;">
+                    <div class="input-group">
+                        <input type="text" id="rejection_reason" class="form-control" placeholder="Reason for rejection (Required)">
+                        <div class="input-group-append">
+                            <button class="btn btn-danger" type="button" onclick="confirmReject(<?= $id ?>)">Confirm</button>
+                            <button class="btn btn-secondary" type="button" onclick="toggleRejectInput()">Cancel</button>
+                        </div>
+                    </div>
+                </div>
             </div>
+
+            <script>
+            // Toggle between buttons and text field
+            function toggleRejectInput() {
+                var actions = document.getElementById('initialActions');
+                var rejectDiv = document.getElementById('rejectContainer');
+                
+                if (actions.style.display === 'none') {
+                    actions.style.display = 'block';
+                    rejectDiv.style.display = 'none';
+                } else {
+                    actions.style.display = 'none';
+                    rejectDiv.style.display = 'block';
+                }
+            }
+
+            // APPROVE FUNCTION
+            function approveApplicant(id) {
+                Swal.fire({
+                    title: 'Approve Application?',
+                    text: "This will move the applicant to the Official Residents list.",
+                    type: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#28a745',
+                    cancelButtonColor: '#d33',
+                    confirmButtonText: 'Yes, Approve!'
+                }).then((result) => {
+                    if (result.value) {
+                        $.ajax({
+                            url: 'processApplicant.php',
+                            type: 'POST',
+                            data: { 
+                                action: 'approve',
+                                applicant_id: id 
+                            },
+                            success: function(response) {
+                                if(response.trim() == 'success') {
+                                    Swal.fire('Approved!', 'Applicant moved to residents.', 'success').then(() => {
+                                        location.reload();
+                                    });
+                                } else {
+                                    Swal.fire('Error!', response, 'error');
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+
+            // REJECT FUNCTION
+            function confirmReject(id) {
+                var reason = document.getElementById('rejection_reason').value;
+                
+                if(reason.trim() === "") {
+                    Swal.fire('Required', 'Please enter a reason for rejection.', 'warning');
+                    return;
+                }
+
+                $.ajax({
+                    url: 'processApplicant.php',
+                    type: 'POST',
+                    data: { 
+                        action: 'reject',
+                        applicant_id: id,
+                        reason: reason
+                    },
+                    success: function(response) {
+                        if(response.trim() == 'success') {
+                            Swal.fire('Rejected', 'Application has been rejected.', 'info').then(() => {
+                                location.reload();
+                            });
+                        } else {
+                            Swal.fire('Error!', response, 'error');
+                        }
+                    }
+                });
+            }
+            </script>
 
             <?php
         }

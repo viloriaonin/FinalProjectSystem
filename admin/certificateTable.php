@@ -1,149 +1,142 @@
 <?php 
+include_once '../db_connection.php'; 
 
+// Set header to JSON to prevent parsing errors on the frontend
+header('Content-Type: application/json');
 
-
-include_once '../connection.php';
-
-
-try{
-
-    $var_date_request = $con->real_escape_string($_REQUEST['date_request']);
-    $var_date_issued = $con->real_escape_string($_REQUEST['date_issued']);
-    $var_date_expired = $con->real_escape_string($_REQUEST['date_expired']);
-    $var_status = $con->real_escape_string($_REQUEST['status']);
-  
-
+try {
+    // 1. INITIALIZE VARIABLES
+    $params = [];
     $whereClause = [];
 
-    if(!empty($var_date_request)){
-      $whereClause[] = "date_request='$var_date_request'";
+    // 2. FILTERING
+    // We filter by 'created_at' because 'date_request' column doesn't exist in your screenshot
+    if(!empty($_REQUEST['date_request'])){
+        $whereClause[] = "DATE(created_at) = :date_request";
+        $params[':date_request'] = $_REQUEST['date_request'];
     }
 
-    if(!empty($var_date_issued)){
-      $whereClause[] = "date_issued='$var_date_issued'";
+    if(!empty($_REQUEST['status'])){
+        $whereClause[] = "status = :status";
+        $params[':status'] = $_REQUEST['status'];
     }
 
-    if(!empty($var_date_expired)){
-      $whereClause[] = "date_expired='$var_date_expired'";
-    }
-    if(!empty($var_status)){
-      $whereClause[] = "status='$var_status'";
-    }
-
-    $where = '';
-
+    $whereSql = '';
     if(count($whereClause) > 0){
-      $where .= ' AND '.implode(' AND ',$whereClause);
+        $whereSql = ' AND ' . implode(' AND ', $whereClause);
     }
 
+    // 3. BASE QUERY
+    // We select directly from certificate_requests. 
+    // We don't need to JOIN residence_information because 'full_name' is already in this table.
+    $sql_base = "SELECT * FROM certificate_requests WHERE 1=1 " . $whereSql;
 
-
-
-    
-    $sql_residencey = "SELECT certificate_request.*, residence_information.first_name, residence_information.middle_name,residence_information.last_name,residence_information.residence_id
-    FROM certificate_request LEFT JOIN residence_information ON  certificate_request.residence_id = residence_information.residence_id WHERE 1=1" .$where; 
-    if(isset($_REQUEST['search']['value'])){
-      $sql_residencey .= " AND (certificate_request.residence_id LIKE '%" .$_REQUEST['search']['value']. "%' ";
-      $sql_residencey .= " OR last_name LIKE '%" .$_REQUEST['search']['value']. "%' ";
-      $sql_residencey .= " OR purpose LIKE '%" .$_REQUEST['search']['value']. "%' ";
-      $sql_residencey .= " OR first_name LIKE '%" .$_REQUEST['search']['value']. "%' )";
+    // 4. SEARCHING
+    if(!empty($_REQUEST['search']['value'])){
+        $searchValue = $_REQUEST['search']['value'];
+        $sql_base .= " AND (resident_id LIKE :search 
+                        OR full_name LIKE :search 
+                        OR purpose LIKE :search 
+                        OR status LIKE :search )";
+        $params[':search'] = "%$searchValue%";
     }
 
-    $query_residency = $con->query($sql_residencey) or die ($con->error);
-    $totalData = $query_residency->num_rows;
-   
+    // 5. COUNT TOTAL (For Pagination)
+    $stmt = $pdo->prepare($sql_base);
+    $stmt->execute($params);
+    $totalData = $stmt->rowCount();
 
-
+    // 6. ORDERING
+    // Maps the Column Index from JS (0,1,2,3,4,5) to Database Columns
+    $columns = [
+        0 => 'resident_id',
+        1 => 'full_name',
+        2 => 'purpose',
+        3 => 'created_at',
+        4 => 'status',
+        5 => 'cert_id' // Tools column (no sort usually, but mapped to ID)
+    ];
 
     if(isset($_REQUEST['order'])){
-      $sql_residencey .= ' ORDER BY '.
-      $_REQUEST['order']['0']['column'].
-      ' '.
-      $_REQUEST['order']['0']['dir'].
-      ' ';
-    }else{
-      $sql_residencey .= ' ORDER BY a_i DESC ';
-    }
-    if ($_REQUEST['length'] != -1) {
-      $sql_residencey .= ' LIMIT ' . $_REQUEST['start'] . ' ,' . $_REQUEST['length'] . ' ';
+        $colIndex = $_REQUEST['order']['0']['column'];
+        $dir = $_REQUEST['order']['0']['dir'];
+        $orderBy = $columns[$colIndex] ?? 'created_at';
+        $sql_base .= " ORDER BY $orderBy $dir ";
+    } else {
+        $sql_base .= " ORDER BY created_at DESC ";
     }
 
-    $query_residency = $con->query($sql_residencey) or die ($con->error);
-
-$data = [];
-while($row_residency = $query_residency->fetch_assoc()){
-
-  $date_today = date("Y-m-d");  
-
-    if($row_residency['status'] == 'PENDING'){
-      $status = '<span class="badge badge-warning">'.$row_residency['status'].'</span>';
-      $tools = '<i  style="cursor: pointer;  color: yellow;  text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fas fa-eye text-lg px-2 acceptStatus" id="'.$row_residency['residence_id'].'" data-id="'.$row_residency['id'].'" data-toggle="tooltip" data-placement="left" title="View Request"></i> 
-               ';
-    }elseif($row_residency['status'] == 'ACCEPTED'){
-      $status = '<span class="badge badge-success">'.$row_residency['status'].'</span>';
-      
-      if($row_residency['date_expired'] < $date_today ){
-        $tools = '  <i  style="cursor: pointer;  color: red;  text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fas fa-times-circle text-lg px-2 acceptStatus" id="'.$row_residency['residence_id'].'" data-id="'.$row_residency['id'].'" data-toggle="tooltip" data-placement="left" title="Expired"></i>';
-      }else{
-        $tools = '<a href="printRequest.php?request='.$row_residency['residence_id'].'&purpose='.$row_residency['id'].'" target="_blank"  style="cursor: pointer;  color: pink;  text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fas fa-print text-lg px-2 printRequest"  data-toggle="tooltip" data-placement="left" title="Print"> </a>
-        <i  style="cursor: pointer;  color: lime;  text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fas fa-check text-lg px-2 acceptStatus" id="'.$row_residency['residence_id'].'" data-id="'.$row_residency['id'].'" data-toggle="tooltip" data-placement="left" title="View Record"></i>';
-      }
-
-
-
-
-    }else{
-      $status = '<span class="badge badge-danger">'.$row_residency['status'].'</span>';
-      $tools = ' <i  style="cursor: pointer;  color: red;  text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fas fa-times text-lg px-2 acceptStatus" id="'.$row_residency['residence_id'].'" data-id="'.$row_residency['id'].'" data-toggle="tooltip" data-placement="left" title="View Record"></i>';
+    // 7. LIMIT (Pagination)
+    if(isset($_REQUEST['length']) && $_REQUEST['length'] != -1){
+        $start = (int)$_REQUEST['start'];
+        $length = (int)$_REQUEST['length'];
+        $sql_base .= " LIMIT $start, $length";
     }
 
-      if($row_residency['date_issued'] != ''){
-        $date_issued = date("m/d/Y", strtotime($row_residency['date_issued']));
-      }else{
-        $date_issued = '';
-      }
+    // 8. EXECUTE FINAL QUERY
+    $stmt = $pdo->prepare($sql_base);
+    $stmt->execute($params);
 
-      if($row_residency['date_expired'] != ''){
-        $date_expired = date("m/d/Y", strtotime($row_residency['date_expired']));
-      }else{
-        $date_expired = '';
-      }
+    // 9. FORMAT DATA FOR JSON
+    $data = [];
+    while($row = $stmt->fetch(PDO::FETCH_ASSOC)){
+        
+        // A. Status Badge Logic
+        $status_badge = '';
+        if($row['status'] == 'Pending'){
+            $status_badge = '<span class="badge badge-warning">Pending</span>';
+        } elseif($row['status'] == 'Approved'){
+            $status_badge = '<span class="badge badge-success">Approved</span>';
+        } elseif($row['status'] == 'Rejected'){
+            $status_badge = '<span class="badge badge-danger">Rejected</span>';
+        } else {
+            $status_badge = '<span class="badge badge-secondary">'.$row['status'].'</span>';
+        }
 
+        // B. Tools/Buttons Logic
+        // Adjusted to remove 'Expired' logic since that column is missing
+        $tools = '<div class="btn-group">';
+        
+        // View Button (Always visible)
+        $tools .= '<button type="button" class="btn btn-info btn-sm acceptStatus" id="'.$row['resident_id'].'" data-id="'.$row['cert_id'].'" title="View/Manage">
+                    <i class="fas fa-eye"></i>
+                   </button>';
 
-  
+        // Print Button (Only if Approved)
+        if($row['status'] == 'Approved'){
+             $tools .= ' <a href="printRequest.php?id='.$row['cert_id'].'" target="_blank" class="btn btn-primary btn-sm" title="Print">
+                            <i class="fas fa-print"></i>
+                         </a>';
+        }
+        $tools .= '</div>';
 
-    $subdata = [];
-    $subdata[] = $row_residency['residence_id'];
-    $subdata[] = $row_residency['first_name'] .' '. $row_residency['last_name'];
-    $subdata[] = $row_residency['purpose'];
-    $subdata[] = $row_residency['date_request'];
-    $subdata[] =  $date_issued;
-    $subdata[] =  $date_expired;
-    $subdata[] = $status;
-    $subdata[] = $tools;
-    $data[] = $subdata;
+        // C. Format Date
+        $date_request = date("m/d/Y", strtotime($row['created_at']));
+
+        // D. Build the Row (Must match the 6 columns in your JS)
+        $subdata = [];
+        $subdata[] = $row['resident_id'];     // Col 0
+        $subdata[] = $row['full_name'];       // Col 1
+        $subdata[] = $row['purpose'];         // Col 2
+        $subdata[] = $date_request;           // Col 3
+        $subdata[] = $status_badge;           // Col 4
+        $subdata[] = $tools;                  // Col 5
+
+        $data[] = $subdata;
+    }
+
+    // 10. RETURN JSON
+    $json_data = [
+        "draw"            => intval($_REQUEST['draw']),
+        "recordsTotal"    => intval($totalData),
+        "recordsFiltered" => intval($totalData),
+        "data"            => $data
+    ];
+
+    echo json_encode($json_data);
+
+} catch(PDOException $e) {
+    // Return error as JSON so DataTable handles it gracefully
+    echo json_encode(['error' => $e->getMessage()]);
 }
-
-
-
-$json_residency = [
-  'draw' => intval($_REQUEST['draw']),
-  'recordsTotal' => intval($totalData),
-  'recordsFiltered' => intval($totalData),
-  'data' => $data,
-  'total' => number_format($totalData),
-];
-
-echo json_encode($json_residency);
-
-}catch(Exception $e){
-  echo $e->getMessage();
-}
-
-
-
-
-
-
-
 ?>
