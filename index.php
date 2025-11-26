@@ -1,7 +1,6 @@
 <?php
 //index.php
 include_once 'db_connection.php';
-// include_once 'navbar.php'; // REMOVED: Replaced with explicit code below
 session_start();
 
 // --- 1. SECURITY & REDIRECT CHECK ---
@@ -13,7 +12,6 @@ if(isset($_SESSION['user_id']) && isset($_SESSION['user_type'])){
     $stmt = $pdo->prepare($sql);
     $stmt->execute([':user_id' => $user_id]);
     
-    // No need for PDO::FETCH_ASSOC argument because you set it as default in db_connection.php
     if($row = $stmt->fetch()){
         $account_type = $row['user_type'];
         
@@ -30,47 +28,19 @@ if(isset($_SESSION['user_id']) && isset($_SESSION['user_type'])){
     }
 }
 
-// --- 2. FETCH BARANGAY INFORMATION ---
-$sql_brgy = "SELECT * FROM `barangay_information` LIMIT 1";
-$stmt_brgy = $pdo->prepare($sql_brgy);
-$stmt_brgy->execute();
+// --- 2. CAROUSEL HELPER FUNCTIONS ---
+// (Moved to top so they are always available)
 
-// Default variables
-$barangay = "Barangay";
-$municipality = "Municipality";
-$province = "Province";
-$image = "default.png";
-$postal_address = "";
-
-if($row_brgy = $stmt_brgy->fetch()){
-    $barangay = $row_brgy['barangay'];
-    $municipality = $row_brgy['municipality'];
-    $province = $row_brgy['province'];
-    // Handle potential nulls
-    $image = $row_brgy['image'] ?? $row_brgy['images']; 
-    $image_path = $row_brgy['image_path'] ?? '';
-    $id = $row_brgy['barangay_id'] ?? $row_brgy['id'] ?? null;
-    
-    // Address logic
-    if(!empty($row_brgy['postal_address'])){
-        $postal_address = $row_brgy['postal_address'];
-    } else {
-        $postal_address = $barangay . ', ' . $municipality . ', ' . $province;
+function get_carousel_data($pdo){
+    try {
+        $sql = "SELECT * FROM carousel";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute();
+        return $stmt->fetchAll(); 
+    } catch (PDOException $e) {
+        return []; // Return empty array on error
     }
 }
-
-// --- 3. CAROUSEL FUNCTIONS ---
-
-// Fetch all carousel data once using $pdo
-function get_carousel_data($pdo){
-    $sql = "SELECT * FROM carousel";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute();
-    return $stmt->fetchAll(); // Returns associative array based on your config
-}
-
-// Store data in a variable to pass to functions below
-$carousel_items = get_carousel_data($pdo);
 
 function make_slide_indicators($data){
     $output = ''; 
@@ -89,11 +59,13 @@ function make_slides($data, $barangay_name){
     
     foreach($data as $row) {
         $active = ($count == 0) ? 'active' : '';
+        // Fallback for missing images
+        $img_src = !empty($row["banner_image_path"]) ? htmlspecialchars($row["banner_image_path"]) : 'assets/dist/img/default_banner.jpg';
         
         $output .= '
         <div class="carousel-item '.$active.'">
             <div class="carousel-image-overlay"></div> 
-            <img class="d-block w-100" src="'.htmlspecialchars($row["banner_image_path"]).'" alt="'.htmlspecialchars($row["banner_title"]).'" />
+            <img class="d-block w-100" src="'.$img_src.'" alt="'.htmlspecialchars($row["banner_title"]).'" />
             <div class="carousel-caption">
                 <h1 class="display-4 font-weight-bold">'.htmlspecialchars($row["banner_title"]).'</h1>
                 <p class="lead">Welcome to the official portal of '.htmlspecialchars($barangay_name).'</p>
@@ -103,6 +75,35 @@ function make_slides($data, $barangay_name){
     }
     return $output;
 }
+
+// --- 3. FETCH BARANGAY INFORMATION ---
+// Default variables
+$barangay = "Barangay";
+$municipality = "Municipality";
+$province = "Province";
+$image = "default.png";
+
+try {
+    $sql_brgy = "SELECT * FROM `barangay_information` LIMIT 1";
+    $stmt_brgy = $pdo->prepare($sql_brgy);
+    $stmt_brgy->execute();
+
+    if($row_brgy = $stmt_brgy->fetch()){
+        $barangay = $row_brgy['barangay'];
+        $municipality = $row_brgy['municipality'];
+        $province = $row_brgy['province'];
+        // Handle potential nulls
+        $image = !empty($row_brgy['image']) ? $row_brgy['image'] : ($row_brgy['images'] ?? 'default.png'); 
+        $image_path = $row_brgy['image_path'] ?? '';
+        $id = $row_brgy['barangay_id'] ?? $row_brgy['id'] ?? null;
+    } // <--- FIXED: Added closing brace here
+} catch (PDOException $e) {
+    // Silent fail, stick to defaults
+}
+
+// --- 4. PREPARE CAROUSEL DATA ---
+$carousel_items = get_carousel_data($pdo);
+
 ?>
 
 <!DOCTYPE html>
@@ -210,6 +211,7 @@ function make_slides($data, $barangay_name){
           </ul>
         </div>
     </nav>
+
     <div class="content-wrapper" >
   
     <div id="heroCarousel" class="carousel slide" data-ride="carousel" data-interval="5000">
@@ -326,18 +328,6 @@ function make_slides($data, $barangay_name){
             </div>
         </div>
     </div>
-
-<!-- asdasd -->
-
-    <footer class="main-footer text-white text-center" style="background-color: #000000; padding: 20px 0;">
-      <div class="container">
-        <h5 class="font-weight-bold mb-2 text-uppercase"><?= htmlspecialchars($barangay) ?></h5>
-        <p class="mb-2">
-          <i class="fas fa-map-marker-alt mr-2"></i> <?= htmlspecialchars($postal_address) ?>
-        </p>
-        <small style="opacity: 0.7;">&copy; <?= date('Y') ?> Barangay Portal. All Rights Reserved.</small>
-      </div>
-    </footer>
   
   </div>
 

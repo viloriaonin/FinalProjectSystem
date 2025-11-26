@@ -1,17 +1,21 @@
 <?php
+// 1. ENABLE ERROR REPORTING (To see why it is blank)
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 // --- DEBUGGING & SECURITY BLOCK ---
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    // Check if upload exceeded server limits (common silent failure)
+    // Check if upload exceeded server limits
     if (empty($_POST) && empty($_FILES) && $_SERVER['CONTENT_LENGTH'] > 0) {
         die("<div style='background:#ef4444;color:white;padding:20px;font-family:sans-serif;'><strong>ERROR:</strong> The file you uploaded is too large for the server. Please try a smaller image.</div>");
     }
 }
 // ----------------------------------
 
-include_once '../db_connection.php';
+include_once '../db_connection.php'; // Ensure this path is correct
 session_start();
 
-// 1. SECURITY CHECK
+// 2. SECURITY CHECK
 if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] != 'resident') {
     echo '<script>window.location.href = "../login.php";</script>';
     exit;
@@ -21,7 +25,7 @@ $user_id = $_SESSION['user_id'];
 $has_application = false;
 $application_status = 'Pending';
 $admin_remarks = '';
-$app_data = []; // To store fetched data for pre-filling
+$app_data = []; 
 
 try {
     // ---------------------------------------------------------
@@ -29,39 +33,32 @@ try {
     // ---------------------------------------------------------
     if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application'])) {
         
-        // 1. Prepare Variables
+        // Prepare Variables
         $fname = $_POST['first_name'] ?? '';
         $mname = $_POST['middle_name'] ?? '';
         $lname = $_POST['last_name'] ?? '';
         $suffix = $_POST['suffix'] ?? '';
         $gender = $_POST['gender'] ?? '';
-        
-        // Handle Date (Convert empty to NULL for SQL)
         $dob = !empty($_POST['dob']) ? $_POST['dob'] : NULL;
-        
         $pob = $_POST['pob'] ?? '';
         $nationality = $_POST['nationality'] ?? '';
         $civil = $_POST['civil_status'] ?? '';
         $religion = $_POST['religion'] ?? '';
         $blood = $_POST['blood_type'] ?? '';
         $occ = $_POST['occupation'] ?? '';
-        
         $address = $_POST['full_address'] ?? '';
         $house = $_POST['house_number'] ?? '';
         $purok = $_POST['purok'] ?? '';
         $contact = $_POST['contact_number'] ?? '';
         $email = $_POST['email_address'] ?? '';
-        
         $voter = $_POST['voter'] ?? '';
         $pwd = $_POST['pwd'] ?? '';
         $single = $_POST['single_parent'] ?? '';
         $senior = $_POST['senior_citizen'] ?? '';
-        
         $father = $_POST['father_name'] ?? '';
         $mother = $_POST['mother_name'] ?? '';
         $guardian = $_POST['guardian'] ?? '';
         $g_contact = $_POST['guardian_contact'] ?? '';
-        
         $duration = $_POST['residency_months'] ?? '';
         $gov = $_POST['gov_beneficiary'] ?? '';
         $gov_type = $_POST['beneficiary_type'] ?? '';
@@ -70,7 +67,6 @@ try {
         $f_occ = $_POST['father_occupation'] ?? ''; 
         $f_age = !empty($_POST['father_age']) ? $_POST['father_age'] : 0; 
         $f_educ = $_POST['father_education'] ?? '';
-        
         $m_occ = $_POST['mother_occupation'] ?? ''; 
         $m_age = !empty($_POST['mother_age']) ? $_POST['mother_age'] : 0; 
         $m_educ = $_POST['mother_education'] ?? '';
@@ -92,7 +88,7 @@ try {
                  $valid_id_path = $target_dir . $new_filename;
             }
         } else {
-            // If editing and no new file, keep old path (fetch it first)
+            // Check if existing file
             $old_file_q = $pdo->prepare("SELECT valid_id_path FROM residence_applications WHERE residence_id = :uid");
             $old_file_q->execute(['uid' => $user_id]);
             if($old_row = $old_file_q->fetch(PDO::FETCH_ASSOC)){
@@ -101,7 +97,6 @@ try {
         }
 
         // INSERT ... ON DUPLICATE KEY UPDATE ...
-        // This allows resubmission without deleting the old record, effectively updating it
         $sql_insert = "INSERT INTO residence_applications 
         (residence_id, first_name, middle_name, last_name, suffix, gender, birth_date, birth_place, nationality, civil_status, religion, blood_type, occupation, full_address, house_number, purok, contact_number, email_address, voter_status, pwd_status, single_parent_status, senior_status, father_name, mother_name, guardian_name, guardian_contact, father_occupation, father_age, father_education, mother_occupation, mother_age, mother_education, residency_duration, gov_beneficiary, beneficiary_type, children_list, siblings_list, valid_id_path, status, admin_remarks)
         VALUES 
@@ -121,7 +116,6 @@ try {
 
         $stmt = $pdo->prepare($sql_insert);
         
-        // Execute with exact order of ? placeholders (38 items)
         $result = $stmt->execute([
             $user_id, $fname, $mname, $lname, $suffix, $gender, $dob, $pob, $nationality, $civil, $religion, $blood, $occ, 
             $address, $house, $purok, $contact, $email, $voter, $pwd, $single, $senior, 
@@ -151,26 +145,18 @@ try {
         $admin_remarks = $app_data['admin_remarks'];
     }
 
-    // LOGIC C: HANDLE EDIT MODE (If "Edit" clicked on Decline)
     $is_editing = false;
     if(isset($_GET['action']) && $_GET['action'] == 'edit' && ($application_status == 'Rejected' || $application_status == 'Declined')){
-        $has_application = false; // Hide status screen to show form
-        $is_editing = true;       // Flag to pre-fill form
+        $has_application = false; 
+        $is_editing = true;       
     }
 
-    // Fetch Barangay Info
-    $b_info_q = "SELECT postal_address FROM barangay_information LIMIT 1";
-    $b_res = $pdo->query($b_info_q);
-    $postal_address = "";
-    if($b_row = $b_res->fetch(PDO::FETCH_ASSOC)){
-        $postal_address = $b_row['postal_address'];
-    }
 
 } catch(PDOException $e) {
-    die("<div style='color:white;'>Database Error: " . $e->getMessage() . "</div>");
+    // 3. FIXED ERROR VISIBILITY (Changed color from white to red/black so you can see it)
+    die("<div style='color:red; background:white; padding:20px; font-weight:bold;'>Database Error: " . $e->getMessage() . "</div>");
 }
 
-// Helper function to populate fields
 function getVal($key, $data){
     global $is_editing;
     return ($is_editing && isset($data[$key])) ? htmlspecialchars($data[$key]) : '';
@@ -593,10 +579,7 @@ function isSel($key, $val, $data){
   </div>
 </div>
 
-<footer class="main-footer text-center">
-  <i class="fas fa-map-marker-alt mr-1"></i> <?= $postal_address ?>
-</footer>
-</div>
+
 
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>

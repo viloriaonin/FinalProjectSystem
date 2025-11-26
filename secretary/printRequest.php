@@ -218,7 +218,6 @@ if($count_official != 0){
     <br>
 
     <p class="pl-5 ml-5" style="font-size:20pt; padding: 0; margin: 0;">This is certify that <b><u style="text-transform: uppercase"><?= $row['first_name'] .' '.  $middle_name_resident . $row['last_name'].', '. $row['age']?></u></b> years of age, <?= $row['civil_status'] ?></p>
-    <p class="pl-5"  style="font-size:20pt; ">whose signature appears below is a bonafide resident of this Barangay with postal address <b><?= $row_barangay_information['postal_address'] ?></b></p>
  
     <p class="pl-5 ml-5" style="font-size:20pt; padding: 0; margin: 0;">He/She is a person of good moral character and a law-abiding citizen of </p>
     <p class="pl-5"  style="font-size:20pt; "><?= $row_barangay_information['barangay'] ?>, <?= $row_barangay_information['zone'] ?>. As per record, He/She has no derogatroy, no criminal record has been file against him/her in the Barangay as of this date.</p>

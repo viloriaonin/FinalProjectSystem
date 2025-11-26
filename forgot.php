@@ -47,7 +47,7 @@ $sql = "SELECT * FROM `barangay_information`";
       $image = $row['image'];
       $image_path = $row['image_path'];
       $id = $row['id'];
-      $postal_address = $row['postal_address'];
+  
   }
 
 }catch(Exception $e){

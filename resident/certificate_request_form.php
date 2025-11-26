@@ -34,20 +34,7 @@ if ($type === '') {
 </head>
 <body class="hold-transition layout-top-nav">
 
-<?php
-// Fetch only Barangay Info for the footer
-$postal_address = '';
-try {
-    $sql = "SELECT postal_address FROM `barangay_information` LIMIT 1";
-    // PDO Update: Use $pdo->query() and fetch(PDO::FETCH_ASSOC)
-    $stmt = $pdo->query($sql);
-    if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $postal_address = $row['postal_address'];
-    }
-} catch (PDOException $e) {
-    // ignore
-}
-?>
+
 
 <?php include_once __DIR__ . '/../includes/menu_bar.php'; ?>
 
@@ -84,10 +71,7 @@ try {
         </div>
     </div>
 
-    <footer class="main-footer text-white" style="background-color: #0037af">
-        <div class="float-right d-none d-sm-block"></div>
-        <i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($postal_address); ?>
-    </footer>
+
 
 </div>
 

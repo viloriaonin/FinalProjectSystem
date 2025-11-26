@@ -42,21 +42,9 @@ $barangay = "Barangay";
 $municipality = "Municipality";
 $province = "Province";
 $image = "default.png";
-$postal_address = "Barangay Hall Address";
 
-if(isset($result_brgy) && $row_brgy = $result_brgy->fetch_assoc()){
-    $barangay = $row_brgy['barangay'];
-    $municipality = $row_brgy['municipality'];
-    $province = $row_brgy['province'];
-    $image = $row_brgy['images'] ?? $row_brgy['image'] ?? 'default.png'; 
-    $image_path = $row_brgy['image_path'] ?? '';
-    
-    if(!empty($row_brgy['postal_address'])){
-        $postal_address = $row_brgy['postal_address'];
-    } else {
-        $postal_address = $barangay . ', ' . $municipality . ', ' . $province;
-    }
-}
+
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -186,15 +174,7 @@ if(isset($result_brgy) && $row_brgy = $result_brgy->fetch_assoc()){
     </div>
   </div>
   
-  <footer class="main-footer text-white text-center" style="background-color: #000000; padding: 20px 0;">
-    <div class="container">
-      <h5 class="font-weight-bold mb-2 text-uppercase"><?= htmlspecialchars($barangay) ?></h5>
-      <p class="mb-2">
-        <i class="fas fa-map-marker-alt mr-2"></i> <?= htmlspecialchars($postal_address) ?>
-      </p>
-      <small style="opacity: 0.7;">&copy; <?= date('Y') ?> Barangay Portal. All Rights Reserved.</small>
-    </div>
-  </footer>
+
   
 </div>
 <script src="assets/plugins/jquery/jquery.min.js"></script>

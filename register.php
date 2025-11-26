@@ -248,16 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         </div>
     </div>
 
-    <footer class="main-footer text-white text-center" style="background-color: #000000; padding: 20px 0; border:0;">
-      <div class="container">
-        <h5 class="font-weight-bold mb-2 text-uppercase"><?= htmlspecialchars($barangay) ?></h5>
-        <p class="mb-2">
-          <i class="fas fa-map-marker-alt mr-2"></i> <?= htmlspecialchars($postal_address) ?>
-        </p>
-        <small style="opacity: 0.7;">&copy; <?= date('Y') ?> Barangay Portal. All Rights Reserved.</small>
-      </div>
-    </footer>
-  
+
 </div>
 
 <script src="assets/plugins/jquery/jquery.min.js"></script>

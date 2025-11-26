@@ -87,7 +87,7 @@ CREATE TABLE `barangay_information` (
   `zone` varchar(255) NOT NULL DEFAULT 'none',
   `district` varchar(255) NOT NULL DEFAULT 'none',
   `address` varchar(69) NOT NULL DEFAULT 'none',
-  `postal_address` varchar(255) NOT NULL DEFAULT 'none',
+
   `image` varchar(255) NOT NULL DEFAULT 'none',
   `image_path` varchar(255) NOT NULL DEFAULT 'none'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -96,8 +96,8 @@ CREATE TABLE `barangay_information` (
 -- Dumping data for table `barangay_information`
 --
 
-INSERT INTO `barangay_information` (`id`, `barangay`, `zone`, `district`, `address`, `postal_address`, `image`, `image_path`) VALUES
-('32432432432432432', 'Barnagay', 'Zone', 'District', 'Manila', 'Postal Address', '165897181867eb5acf2e8c4.jpg', '../assets/dist/img/165897181867eb5acf2e8c4.jpg');
+INSERT INTO `barangay_information` (`id`, `barangay`, `zone`, `district`, `address`, `image`, `image_path`) VALUES
+('32432432432432432', 'Barnagay', 'Zone', 'District', 'Manila', '165897181867eb5acf2e8c4.jpg', '../assets/dist/img/165897181867eb5acf2e8c4.jpg');
 
 -- --------------------------------------------------------
 

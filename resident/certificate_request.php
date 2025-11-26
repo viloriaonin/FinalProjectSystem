@@ -43,7 +43,7 @@ $certificate_types = [
 
 $is_verified = false; // Default to locked
 $app_status = 'None';
-$postal_address = ''; // Initialize variable
+
 
 // Fetch user and barangay info if available
 try {
@@ -51,37 +51,30 @@ try {
         $user_id = $_SESSION['user_id'];
         
         // 1. Fetch User Info
-        // PDO Update: prepare -> execute array -> fetch
-        $sql_user = "SELECT * FROM `users` WHERE `id` = :uid";
+        $sql_user = "SELECT * FROM `users` WHERE `user_id` = :uid";
         $stmt_user = $pdo->prepare($sql_user);
         $stmt_user->execute(['uid' => $user_id]);
         $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC);
 
-        // 2. Fetch Barangay Info
-        // PDO Update: query -> fetch loop
-        $sql = "SELECT * FROM `barangay_information`";
-        $stmt_brgy = $pdo->query($sql);
-        while ($row = $stmt_brgy->fetch(PDO::FETCH_ASSOC)) {
-            $barangay = $row['barangay'];
-            $postal_address = isset($row['postal_address']) ? $row['postal_address'] : '';
-        }
-
-        // 3. CHECK RESIDENCY APPLICATION STATUS [NEW LOGIC]
-        // PDO Update: prepare -> execute array -> fetch
+        // 2. CHECK RESIDENCY APPLICATION STATUS [UPDATED LOGIC]
         $sql_app = "SELECT status FROM residence_applications WHERE residence_id = :uid ORDER BY id DESC LIMIT 1";
         $stmt_app = $pdo->prepare($sql_app);
         $stmt_app->execute(['uid' => $user_id]);
         
         if ($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)) {
             $app_status = $row_app['status'];
-            // Check if Approved or Verified
-            if ($app_status == 'Approved' || $app_status == 'Verified') {
+            
+            // CLEAN THE STATUS (Remove spaces, make lowercase)
+            $clean_status = trim(strtolower($app_status));
+
+            // Check against cleaned values
+            if ($clean_status == 'approved' || $clean_status == 'verified') {
                 $is_verified = true;
             }
         }
     }
 } catch (PDOException $e) {
-    // ignore
+    // error_log($e->getMessage());
 }
 ?>
 
@@ -331,11 +324,6 @@ try {
         </div>
     </div>
   </div>
-
-  <footer class="main-footer">
-    <div class="float-right d-none d-sm-block"></div>
-    <i class="fas fa-map-marker-alt mr-2"></i> <?php echo isset($postal_address) ? $postal_address : ''; ?>
-  </footer>
 
 </div>
 

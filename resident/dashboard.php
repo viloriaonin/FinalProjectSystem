@@ -33,13 +33,9 @@ try{
         
         $barangay = ''; 
         $image_logo = ''; 
-        $postal_address = '';
+     
 
-        while($row = $stmt_brgy->fetch(PDO::FETCH_ASSOC)){
-            $barangay = $row['barangay'];
-            $image_logo = $row['image']; // Make sure column name matches DB
-            $postal_address = $row['postal_address'];
-        }
+     
 
         // 3. Fetch Application Status
         $app_status = 'None';
@@ -419,14 +415,7 @@ try{
         </div>
     </div>
 
-    <footer class="main-footer">
-        <div class="float-right d-none d-sm-block">
-        <b>System Version</b> 1.0
-        </div>
-        <strong><i class="fas fa-map-marker-alt"></i> <?= $postal_address ?></strong>
-    </footer>
 
-</div>
 
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>

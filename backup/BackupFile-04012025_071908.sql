@@ -53,7 +53,6 @@ CREATE TABLE `barangay_information` (
   `zone` varchar(255) NOT NULL DEFAULT 'none',
   `district` varchar(255) NOT NULL DEFAULT 'none',
   `address` varchar(69) NOT NULL DEFAULT 'none',
-  `postal_address` varchar(255) NOT NULL DEFAULT 'none',
   `image` varchar(255) NOT NULL DEFAULT 'none',
   `image_path` varchar(255) NOT NULL DEFAULT 'none',
   PRIMARY KEY (`id`)
