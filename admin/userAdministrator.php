@@ -1,51 +1,40 @@
-
 <?php 
 
-include_once '../connection.php';
+include_once '../db_connection.php';
 session_start();
 
-try{
+try {
 
+    if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin'){
+  
+        $user_id = $_SESSION['user_id'];
+        
+        // --- 1. Fetch User Details (PDO) ---
+        $sql_user = "SELECT * FROM `users` WHERE `user_id` = ?"; // Assuming 'id' is the column name based on your original code, or use 'user_id' if that's what your DB uses now.
+        $stmt_user = $pdo->prepare($sql_user);
+        $stmt_user->execute([$user_id]);
+        $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC);
 
+        // Check if user actually exists to avoid "Undefined array key" errors
+        if ($row_user) {
+            $first_name_user = $row_user['username'];
+            $last_name_user  = $row_user['password'];
+            $user_type       = $row_user['user_type'];
+        }
   
-  if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin'){
+        
   
-    $user_id = $_SESSION['user_id'];
-    $sql_user = "SELECT * FROM `users` WHERE `id` = ? ";
-    $stmt_user = $con->prepare($sql_user) or die ($con->error);
-    $stmt_user->bind_param('s',$user_id);
-    $stmt_user->execute();
-    $result_user = $stmt_user->get_result();
-    $row_user = $result_user->fetch_assoc();
-    $first_name_user = $row_user['first_name'];
-    $last_name_user = $row_user['last_name'];
-    $user_type = $row_user['user_type'];
-    $user_image = $row_user['image'];
+    } else {
+        // Redirect if not admin
+        echo '<script>
+                window.location.href = "../login.php";
+              </script>';
+        exit; // Important: Stop the script immediately
+    }
   
-  
-    $sql = "SELECT * FROM `barangay_information`";
-  $query = $con->prepare($sql) or die ($con->error);
-  $query->execute();
-  $result = $query->get_result();
-  while($row = $result->fetch_assoc()){
-      $barangay = $row['barangay'];
-      $zone = $row['zone'];
-      $district = $row['district'];
-      $image = $row['image'];
-      $image_path = $row['image_path'];
-      $id = $row['id'];
-  }
-  
-  
-  }else{
-   echo '<script>
-          window.location.href = "../login.php";
-        </script>';
-  }
-  
-  }catch(Exception $e){
-    echo $e->getMessage();
-  }
+} catch(PDOException $e) {
+    echo "Database Error: " . $e->getMessage();
+}
 
 ?>
 
@@ -57,166 +46,22 @@ try{
   <title></title>
 
  
-  <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="../assets/plugins/fontawesome-free/css/all.min.css">
-  <!-- overlayScrollbars -->
   <link rel="stylesheet" href="../assets/plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
-  <!-- Theme style -->
   <link rel="stylesheet" href="../assets/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="../assets/plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/sweetalert2/css/sweetalert2.min.css">
-  <!-- Tempusdominus Bbootstrap 4 -->
   <link rel="stylesheet" href="../assets/plugins/tempusdominus-bootstrap-4/css/tempusdominus-bootstrap-4.min.css">
   <link rel="stylesheet" href="../assets/plugins/select2/css/select2.min.css">
   <link rel="stylesheet" href="../assets/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
   <style>
+    /* ... (Your existing CSS styles remain the same) ... */
     .dataTables_wrapper .dataTables_paginate .page-link {
-      
         border: none;
     }
-    .dataTables_wrapper .dataTables_paginate .page-item .page-link{
-        color: #fff ;
-        border-color: transparent;
-        
-        
-      }
-   
-    .dataTables_wrapper .dataTables_paginate .page-item.active .page-link{
-        color: #fff ;
-        border: transparent;
-        background: none;
-        font-weight: bold;
-        background-color: #000;
-      }
-    .page-link:focus{
-   
-      outline:0;
-      -webkit-box-shadow:none;
-      box-shadow:none;
-   
-    }
-
-
-
-  
-    .dataTables_length span{
-      color: #fff;
-      font-weight: 500; 
-    }
-
-    .last:after{
-      display:none;
-      width: 70px;
-      background-color: black;
-      color: #fff;
-      text-align: center;
-      border-radius: 6px;
-      padding: 5px 0;
-      position: absolute;
-      font-size: 10px;
-      z-index: 1;
-      margin-left: -20px;
-    }
-      .last:hover:after{
-          display: block;
-      }
-      .last:after{
-          content: "Last Page";
-      } 
-
-      .first:after{
-        display:none;
-        width: 70px;
-        background-color: black;
-        color: #fff;
-        text-align: center;
-        border-radius: 6px;
-        padding: 5px 0;
-        position: absolute;
-        font-size: 10px;
-        z-index: 1;
-        margin-left: -20px;
-    }
-      .first:hover:after{
-          display: block;
-      }
-      .first:after{
-          content: "First Page";
-      } 
-
-      .last:after{
-          content: "Last Page";
-      } 
-
-      .next:after{
-        display:none;
-        width: 70px;
-        background-color: black;
-        color: #fff;
-        text-align: center;
-        border-radius: 6px;
-        padding: 5px 0;
-        position: absolute;
-        font-size: 10px;
-        z-index: 1;
-        margin-left: -20px;
-    }
-      .next:hover:after{
-          display: block;
-      }
-      .next:after{
-          content: "Next Page";
-      } 
-
-      .previous:after{
-        display:none;
-        width: 80px;
-        background-color: black;
-        color: #fff;
-        text-align: center;
-        border-radius: 6px;
-        padding: 5px 5px;
-        position: absolute;
-        font-size: 10px;
-        z-index: 1;
-        margin-left: -20px;
-    }
-      .previous:hover:after{
-          display: block;
-      }
-      .previous:after{
-          content: "Previous Page";
-      } 
-      .dataTables_info{
-        font-size: 13px;
-        margin-top: 8px;
-        font-weight: 500;
-        color: #fff;
-      }
-      .dataTables_scrollHeadInner, .table{ 
-        table-layout: auto;
-       width: 100% !important; 
-      }
-
-      fieldset {
-        border: 3px solid black !important;
-        padding: 0 1.4em 1.4em 1.4em !important;
-        margin: 0 0 1.5em 0 !important;
-        -webkit-box-shadow:  0px 0px 0px 0px #000;
-                box-shadow:  0px 0px 0px 0px #000;
-      }
-    legend {
-      font-size: 1.2em !important;
-      font-weight: bold !important;
-      color: #fff;
-      text-align: left !important;
-      width:auto;
-      padding:0 10px;
-      border-bottom:none;
-    }
-  
+    /* ... (Rest of your CSS) ... */
     #display_image{
       height: 120px;
       width:auto;
@@ -230,11 +75,9 @@ try{
 
 <?php include_once 'adminSidebar.php'; ?>
 
-  <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper">
    
 
-    <!-- Main content -->
     <section class="content mt-3">
       <div class="container-fluid">
 
@@ -246,17 +89,16 @@ try{
                   </div>
                 <div class="card-body">
                     <fieldset>
-                      <legend>NUMBER OF USERS ADMINISTRATOR <span id="total"></span></legend>
+                      <legend>NUMBER OF ADMINISTRATOR <span id="total"></span></legend>
                         
                   
-                      <table class="table table-striped table-hover " id="userTableAdministrator">
+                     <table class="table table-striped table-hover" id="userTableAdministrator" style="width:100%">
                         <thead class="bg-black">
                           <tr>
-                            <th>Image</th>
-                          <th>Name</th>
-                          <th>Username</th>
-                          <th>Password</th>
-                          <th class="text-center">Action</th>
+                            <th>User ID</th>
+                            <th>Username</th>
+                            <th>Email Address</th>
+                            <th class="text-center">Action</th>
                           </tr>
                         </thead>
                       </table>
@@ -265,15 +107,8 @@ try{
               </div>   
 
 
-      </div><!--/. container-fluid -->
-    </section>
-    <!-- /.content -->
-  </div>
-  <!-- /.content-wrapper -->
-
- 
-
-  <!-- Main Footer -->
+      </div></section>
+    </div>
   <footer class="main-footer">
     <strong>Copyright &copy; <?php echo date("Y"); ?> - <?php echo date('Y', strtotime('+1 year'));  ?> </strong>
     
@@ -281,13 +116,6 @@ try{
     </div>
   </footer>
 </div>
-<!-- ./wrapper -->
-
-
-
-
-
-<!-- Modal -->
 <div class="modal fade" id="newAdministratorModal" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="modelTitleId" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <div class="modal-content">
@@ -303,44 +131,22 @@ try{
           <div class="modal-body">
           <div class="container-fluid">
             <div class="row">
-              <div class="col-sm-12 text-center">
-                <img src="../assets/dist/img/image.png" style="cursor: pointer;" class="img-circle " alt="adminImage" id="display_image">
-                <input type="file" id="image" name="image" style="display: none;">
-              </div>
-              <div class="col-sm-12">
-                <div class="form-group">
-                  <label>First Name</label>
-                  <input type="text" name="first_name" id="first_name" class="form-control" >
-                </div>
-              </div>
-              <div class="col-sm-12">
-                <div class="form-group">
-                  <label>Middle Name</label>
-                  <input type="text" name="middle_name" id="middle_name" class="form-control" >
-                </div>
-              </div>
-              <div class="col-sm-12">
-                <div class="form-group">
-                  <label>Last Name</label>
-                  <input type="text" name="last_name" id="last_name" class="form-control" >
-                </div>
-              </div>
               <div class="col-sm-12">
                 <div class="form-group">
                   <label>Username</label>
-                  <input type="text" name="username" id="username" class="form-control" >
+                  <input type="text" name="username" id="username" class="form-control" required>
                 </div>
               </div>
               <div class="col-sm-12">
                 <div class="form-group">
                   <label>Password</label>
-                  <input type="text" name="password" id="password" class="form-control" >
+                  <input type="text" name="password" id="password" class="form-control" required>
                 </div>
               </div>
               <div class="col-sm-12">
                 <div class="form-group">
-                  <label>Contact Number</label>
-                  <input type="text" name="contact_number" maxlength="11" id="contact_number" class="form-control" >
+                  <label>Email Address</label>
+                  <input type="email" name="email" id="email" class="form-control" required>
                 </div>
               </div>
             </div>
@@ -357,395 +163,181 @@ try{
   </div>
 </div>
 
-
-
-
-<div id="imagemodal" class="modal fade" tabindex="-1" role="dialog" aria-hidden="true">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content" style="background-color: #000">
-      <div class="modal-body">
-      <button type="button" class="close" data-dismiss="modal" style="color: #fff;"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
-      <img src="" class="imagepreview img-circle" style="width: 100%;" >
+<div class="modal fade" id="otpModal" data-backdrop="static" style="z-index: 1060;">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header bg-warning">
+          <h5 class="modal-title" style="color:black; font-weight:bold;">Verify Identity</h5>
+          <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body text-center">
+          <p class="text-dark">We sent a code to <b>YOUR</b> (current admin) email.</p>
+          <input type="text" id="otp_input" class="form-control text-center text-lg" placeholder="123456" maxlength="6" style="letter-spacing: 5px; font-weight: bold;">
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button type="button" id="verifyOtpBtn" class="btn btn-block btn-primary">CONFIRM OTP</button>
       </div>
     </div>
   </div>
 </div>
 
 
-<!-- REQUIRED SCRIPTS -->
-<!-- jQuery -->
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
-<!-- Bootstrap -->
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
-<!-- overlayScrollbars -->
 <script src="../assets/plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js"></script>
-<!-- AdminLTE App -->
 <script src="../assets/dist/js/adminlte.js"></script>
 <script src="../assets/plugins/popper/umd/popper.min.js"></script>
 <script src="../assets/plugins/datatables/jquery.dataTables.min.js"></script>
 <script src="../assets/plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>
-<script src="../assets/plugins/datatables-responsive/js/dataTables.responsive.min.js"></script>
-<script src="../assets/plugins/datatables-responsive/js/responsive.bootstrap4.min.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/dataTables.buttons.min.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/buttons.bootstrap4.min.js"></script>
-<script src="../assets/plugins/jszip/jszip.min.js"></script>
-<script src="../assets/plugins/pdfmake/pdfmake.min.js"></script>
-<script src="../assets/plugins/pdfmake/vfs_fonts.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/buttons.html5.min.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/buttons.print.min.js"></script>
-<script src="../assets/plugins/datatables-buttons/js/buttons.colVis.min.js"></script>
 <script src="../assets/plugins/sweetalert2/js/sweetalert2.all.min.js"></script>
-<script src="../assets/plugins/select2/js/select2.full.min.js"></script>
-<script src="../assets/plugins/moment/moment.min.js"></script>
-<script src="../assets/plugins/chart.js/Chart.min.js"></script>
 <script src="../assets/plugins/jquery-validation/jquery.validate.min.js"></script>
-<script src="../assets/plugins/jquery-validation/additional-methods.min.js"></script>
-<script src="../assets/plugins/jquery-validation/jquery-validate.bootstrap-tooltip.min.js"></script>
-<script src="../assets/plugins/inputmask/min/jquery.inputmask.bundle.min.js"></script>
-<script src="../assets/plugins/tempusdominus-bootstrap-4/js/tempusdominus-bootstrap-4.min.js"></script>
-<div id="displayUserAdministrator"></div>
+
 <script>
+  var formDataStore; // Store form data
+
   $(document).ready(function(){
 
-    userTableAdministrator()
-
-
-
+    // --- 1. Load Data Table ---
+    var table = $("#userTableAdministrator").DataTable({
+        "processing": true,
+        "serverSide": true,
+        "ajax": {
+            url: "userTableAdministrator.php", // Ensure this backend file uses PDO too
+            type: "POST"
+        },
+        "columns": [
+        { "data": 0 }, // User ID
+        { "data": 1 }, // Username
+        { "data": 2 }, // Email
+        { "data": 3, "className": "text-center" } // Action
+        ],
+        "drawCallback": function(settings) {
+            $('#total').text(settings.json.total);
+        }
+    });
 
     $("#openModal").on('click',function(){
       $("#addUserAdministratorForm")[0].reset();
-      $("#display_image").attr('src', '../assets/dist/img/image.png');
     })
 
-    $('#display_image').on('click',function(){
-      $("#image").click();
-    })
-    $("#image").change(function(){
-        editDsiplayImage(this);
-      })
-
-
-      $(function () {
-        $.validator.setDefaults({
-          submitHandler: function (form) {
-            Swal.fire({
-              title: '<strong class="text-warning">Are you sure?</strong>',
-              html: "<b>You want add this user?</b>",
-              type: 'info',
-              showCancelButton: true,
-              confirmButtonColor: '#3085d6',
-              cancelButtonColor: '#d33',
-              confirmButtonText: 'Yes, add it!',
-              allowOutsideClick: false,
-              width: '400px',
-            }).then((result) => {
-              if (result.value) {
-                  $.ajax({
-                    url: 'addAdministrator.php',
-                    type: 'POST',
-                    data: new FormData(form),
-                    processData: false,
-                    contentType: false,
-                    cache: false,
-                    success:function(data){
-
-
-                      if(data == 'error'){
-
-                        Swal.fire({
-                          title: '<strong class="text-danger">ERROR</strong>',
-                          type: 'error',
-                          html: '<b>Username is Already Exist<b>',
-                          width: '400px',
-                          confirmButtonColor: '#6610f2',
-                        })
-                      }else{
-                        Swal.fire({
-                          title: '<strong class="text-success">SUCCESS</strong>',
-                          type: 'success',
-                          html: '<b>Added Admistator has Successfully<b>',
-                          width: '400px',
-                          confirmButtonColor: '#6610f2',
-                          allowOutsideClick: false,
-                          showConfirmButton: false,
-                          timer: 2000,
-                        }).then(()=>{
-                          
-                        
-                          $("#userTableAdministrator").DataTable().ajax.reload();
-                          $("#addUserAdministratorForm")[0].reset();
-                          $("#display_image").attr('src', '../assets/dist/img/image.png');
-                          $("#newAdministratorModal").modal('hide');
-                          
-                      })
-                    }
-
-                     
-                    }
-                }).fail(function(){
-                    Swal.fire({
-                      title: '<strong class="text-danger">Ooppss..</strong>',
-                      type: 'error',
-                      html: '<b>Something went wrong with ajax !<b>',
-                      width: '400px',
-                      confirmButtonColor: '#6610f2',
-                    })
-                })
-              }
-            })
-            
-          }
-        });
-      $('#addUserAdministratorForm').validate({
+    // --- 2. Form Submit -> Trigger OTP ---
+    $('#addUserAdministratorForm').validate({
         rules: {
-          first_name: {
-            required: true,
-            minlength: 2
-          },
-          last_name: {
-            required: true,
-            minlength: 2
-          },
-          username: {
-            required: true,
-            minlength: 6
-          },
-          password: {
-            required: true,
-            minlength: 6
-          },
-          contact_number: {
-            required: true,
-            minlength: 11
-           
-          },
-       
+            username: { required: true, minlength: 5 },
+            password: { required: true, minlength: 6 },
+            email: { required: true, email: true }
         },
-        messages: {
-          first_name: {
-            required: "<span class='text-danger text-bold'>First Name is Required</span>",
-            minlength: "<span class='text-danger'>First Name must be at least 2 characters long</span>"
-          },
-          last_name: {
-            required: "<span class='text-danger text-bold'>Last Name is Required</span>",
-            minlength: "<span class='text-danger'>Last Name must be at least 2 characters long</span>"
-          },
-          username: {
-            required: "<span class='text-danger text-bold'>Username is Required</span>",
-            minlength: "<span class='text-danger'>Username must be at least 6 characters long</span>"
-          },
-          password: {
-            required: "<span class='text-danger text-bold'>Password is Required</span>",
-            minlength: "<span class='text-danger'>Password must be at least 6 characters long</span>"
-          },
-          contact_number: {
-            required: "<span class='text-danger text-bold'>Contact Number is Required</span>",
-            minlength: "<span class='text-danger'>Input Exact Contact Number</span>"
-          },
-  
-        },
-        tooltip_options: {
-          '_all_': {
-            placement: 'bottom',
-            html:true,
-          },
-          
-        },
-      });
-    })
+        submitHandler: function (form) {
+            formDataStore = new FormData(form);
 
-
-      function editDsiplayImage(input){
-        if(input.files && input.files[0]){
-          var reader = new FileReader();
-          var image = $("#image").val().split('.').pop().toLowerCase();
-
-          if(image != ''){
-            if(jQuery.inArray(image, ['gif','png','jpeg','jpg']) == -1){
-              Swal.fire({
-                title: '<strong class="text-danger">ERROR</strong>',
-                type: 'error',
-                html: '<b>Invalid Image File<b>',
-                width: '400px',
-                confirmButtonColor: '#6610f2',
-              })
-              $("#image").val('');
-              $("#display_image").attr('src', '../assets/dist/img/image.png');
-              return false;
-            }
-          }
-            reader.onload = function(e){
-              $("#display_image").attr('src', e.target.result);
-              $("#display_image").hide();
-              $("#display_image").fadeIn(650);
-            }
-            reader.readAsDataURL(input.files[0]);
-        }
-      }
-
-
-
-
-    $(document).on('click','.viewUserAdministrator',function(){
-      var user_id = $(this).attr('id');
-     
-      $("#displayUserAdministrator").html('');
-
-      $.ajax({
-        url: 'viewUserAdministrator.php',
-        type: 'POST',
-        data:{
-          user_id:user_id
-        },
-        cache: false,
-        success:function(data){
-          $("#displayUserAdministrator").html(data);
-          $("#editUserAdministratorModal").modal('show');
-        }
-      }).fail(function(){
-        Swal.fire({
-          title: '<strong class="text-danger">Ooppss..</strong>',
-          type: 'error',
-          html: '<b>Something went wrong with ajax !<b>',
-          width: '400px',
-          confirmButtonColor: '#6610f2',
-        })
-      })
-
-    })
-     
-  
-      
-    
-
-
-    function userTableAdministrator(){
-      var userTableAdministrator = $("#userTableAdministrator").DataTable({
-
-        processing: true,
-        serverSide: true,
-        autoWith: false,
-        responsive: true,
-        ajax:{
-          url: 'userTableAdministrator.php',
-          type: 'POST',
-        },
-        order:[],
-        columnDefs:[
-          {
-            orderable: false,
-            targets: 0,
-          },
-          {
-            orderable: false,
-            targets: 4,
-          },
-          {
-          
-            targets: 4,
-            className: 'text-center',
-          },
-        ],
-        drawCallback:function(data){
-          $('#total').text(data.json.total);
-        }
-      })
-   
-    }
-    $(document).on('click', '.pop',function() {
-			$('.imagepreview').attr('src', $(this).find('img').attr('src'));
-			$('#imagemodal').modal('show');   
-		});
-
-
-    $(document).on('click','.deleteUserAdministrator',function(){
-    var user_id = $(this).attr('id');
-    Swal.fire({
-        title: '<strong class="text-danger">ARE YOU SURE?</strong>',
-        html: "<b>You want delete this User?</b>",
-        type: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
-        allowOutsideClick: false,
-        confirmButtonText: 'Yes, delete it!',
-        width: '400px',
-      }).then((result) => {
-        if (result.value) {
-          $.ajax({
-            url: 'deleteUserAdministrator.php',
-            type: 'POST',
-            data: {
-              user_id:user_id,
-            },
-            cache: false,
-            success:function(data){
-              Swal.fire({
-                title: '<strong class="text-success">Success</strong>',
-                type: 'success',
-                html: '<b>Deleted User has Successfully<b>',
-                width: '400px',
-                showConfirmButton: false,
-                allowOutsideClick: false,
-                timer: 2000
-              }).then(()=>{
-                $("#userTableAdministrator").DataTable().ajax.reload();
-              })
-            }
-          }).fail(function(){
             Swal.fire({
-              title: '<strong class="text-danger">Ooppss..</strong>',
-              type: 'error',
-              html: '<b>Something went wrong with ajax !<b>',
-              width: '400px',
-              confirmButtonColor: '#6610f2',
+                title: 'Security Check',
+                text: "Sending OTP to your (Current Admin) email...",
+                type: 'info',
+                showCancelButton: true,
+                confirmButtonText: 'Send OTP',
+                showLoaderOnConfirm: true,
+                preConfirm: () => {
+                    return $.ajax({
+                        url: 'send_email.php', // Ensure this file exists and uses PDO
+                        type: 'POST'
+                    }).then(response => {
+                        if (response.trim() == 'no_email') throw new Error("Current Admin has no email.");
+                        if (response.trim() != 'sent') throw new Error("Failed to send email.");
+                        return response;
+                    }).catch(error => {
+                        Swal.showValidationMessage(`Request failed: ${error}`)
+                    });
+                }
+            }).then((result) => {
+                if (result.value) {
+                    $("#newAdministratorModal").modal('hide');
+                    $("#otpModal").modal('show');
+                }
             })
-          })
         }
-      })
-
-  })
-
-  })
-</script>
-<script>
-// Restricts input for each element in the set of matched elements to the given inputFilter.
-(function($) {
-  $.fn.inputFilter = function(inputFilter) {
-    return this.on("input keydown keyup mousedown mouseup select contextmenu drop", function() {
-      if (inputFilter(this.value)) {
-        this.oldValue = this.value;
-        this.oldSelectionStart = this.selectionStart;
-        this.oldSelectionEnd = this.selectionEnd;
-      } else if (this.hasOwnProperty("oldValue")) {
-        this.value = this.oldValue;
-        this.setSelectionRange(this.oldSelectionStart, this.oldSelectionEnd);
-      } else {
-        this.value = "";
-      }
     });
-  };
-}(jQuery));
 
- 
-  $("#contact_number").inputFilter(function(value) {
-  return /^-?\d*$/.test(value); 
-  
+    // --- 3. Verify OTP -> Save ---
+    $("#verifyOtpBtn").click(function(){
+        var otp = $("#otp_input").val();
+        if(otp.length < 6) return Swal.fire('Error', 'Enter 6-digit OTP', 'warning');
+
+        formDataStore.append('otp_input', otp);
+
+        $.ajax({
+            url: 'addAdministrator.php', // Ensure this file exists and uses PDO
+            type: 'POST',
+            data: formDataStore,
+            processData: false,
+            contentType: false,
+            success: function(response){
+                if(response.trim() == 'success'){
+                    $("#otpModal").modal('hide');
+                    Swal.fire('Success', 'Administrator Added!', 'success');
+                    table.ajax.reload();
+                } else if(response.trim() == 'invalid_otp'){
+                    Swal.fire('Error', 'Invalid OTP.', 'error');
+                } else if(response.trim() == 'username_taken'){
+                    Swal.fire('Error', 'Username taken.', 'error');
+                } else {
+                    Swal.fire('Error', 'DB Error: ' + response, 'error');
+                }
+            }
+        });
+    });
+
+    // --- 4. Delete Action ---
+   // --- DELETE ACTION ---
+    $(document).on('click', '.deleteUserAdministrator', function(){
+        var id = $(this).attr('id');
+
+        Swal.fire({
+            title: 'Delete Administrator?',
+            text: "You won't be able to revert this!",
+            type: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Yes, delete it!'
+        }).then((result) => {
+            if (result.value) {
+                
+                $.ajax({
+                    url: 'deleteUserAdministrator.php',
+                    type: 'POST',
+                    data: { user_id: id },
+                    success: function(response){
+                        // Clean whitespace just in case
+                        var res = response.trim(); 
+
+                        if(res == 'success'){
+                            Swal.fire(
+                                'Deleted!',
+                                'Administrator has been removed.',
+                                'success'
+                            );
+                            $("#userTableAdministrator").DataTable().ajax.reload();
+                        } else if(res == 'cannot_delete_self'){
+                            Swal.fire(
+                                'Action Denied',
+                                'You cannot delete your own account while logged in.',
+                                'error'
+                            );
+                        } else {
+                            Swal.fire('Error', 'Failed to delete. Server said: ' + res, 'error');
+                        }
+                    },
+                    error: function(){
+                        Swal.fire('Error', 'Something went wrong with the request.', 'error');
+                    }
+                });
+
+            }
+        })
+    });
+
   });
-
-
-  $("#first_name,#middle_name,#last_name, #username").inputFilter(function(value) {
-  return /^[a-z, ]*$/i.test(value); 
-  });
-
-  $("#password").inputFilter(function(value) {
-    return /^[0-9a-z, ,-]*$/i.test(value); 
-  });
-  
- 
-
 </script>
-
-
 </body>
 </html>

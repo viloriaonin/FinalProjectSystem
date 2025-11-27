@@ -680,6 +680,49 @@ input:checked + .slider .off{
 
       })
     }
+
+    // --- DELETE PERMANENTLY ACTION ---
+    $(document).on('click', '.deleteArchivedResidence', function(){
+        var id = $(this).attr('id');
+
+        Swal.fire({
+            title: 'Delete Permanently?',
+            text: "You cannot undo this action! The record will be gone forever.",
+            type: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Yes, delete it!'
+        }).then((result) => {
+            if (result.value) {
+                
+                $.ajax({
+                    url: 'archiveResidenceTable.php', // Same file as the table!
+                    type: 'POST',
+                    data: { 
+                        action: 'delete', // This tells PHP to run the delete block
+                        resident_id: id 
+                    },
+                    success: function(response){
+                        // Clean whitespace
+                        if(response.trim() == 'success'){
+                            Swal.fire(
+                                'Deleted!',
+                                'The resident has been permanently deleted.',
+                                'success'
+                            );
+                            $("#archiveResidenceTable").DataTable().ajax.reload();
+                        } else {
+                            Swal.fire('Error!', 'Failed to delete. ' + response, 'error');
+                        }
+                    },
+                    error: function(){
+                        Swal.fire('Error!', 'Server connection failed.', 'error');
+                    }
+                });
+            }
+        })
+    });
   
   });
 </script>

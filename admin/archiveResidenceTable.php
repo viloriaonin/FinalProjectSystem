@@ -1,9 +1,34 @@
 <?php 
-
-// 1. Include the PDO connection file
+// archivedResidenceTable.php
 include_once '../db_connection.php'; 
 
-// 2. Read Inputs
+
+// 1. HANDLE DELETE ACTION (If 'action' is sent via AJAX)
+if(isset($_POST['action']) && $_POST['action'] == 'delete') {
+    
+    $id = $_POST['resident_id'];
+
+    try {
+        // Prepare DELETE statement
+        $stmt = $pdo->prepare("DELETE FROM archivedResidence WHERE resident_id = ?");
+        
+        if($stmt->execute([$id])){
+            echo "success";
+        } else {
+            echo "error";
+        }
+    } catch (PDOException $e) {
+        echo "Database Error: " . $e->getMessage();
+    }
+
+    // IMPORTANT: Stop the script here so we don't output the table JSON
+    exit; 
+}
+
+
+// 2. HANDLE TABLE DATA FETCH (Default behavior)
+
+// Read Inputs
 $draw        = $_POST['draw'] ?? 1;
 $start       = $_POST['start'] ?? 0;
 $length      = $_POST['length'] ?? 10;
@@ -13,95 +38,68 @@ $middle_name = $_POST['middle_name'] ?? '';
 $last_name   = $_POST['last_name'] ?? '';
 $resident_id = $_POST['resident_id'] ?? '';
 
-// 3. BUILD THE QUERY
-// CHANGED: We now select FROM 'archivedResidence'
-// We removed the JOIN to residence_status because typically archive tables 
-// are standalone copies. If you still need the JOIN, let me know.
+// Query Builder
 $sqlBase = " FROM archivedResidence WHERE 1=1 ";
-
 $params = [];
 
-// Use 'resident_id' to match your delete script logic
 if(!empty($resident_id)) {
     $sqlBase .= " AND resident_id = :resident_id";
     $params[':resident_id'] = $resident_id;
 }
-
 if(!empty($first_name)) {
     $sqlBase .= " AND first_name LIKE :first_name";
     $params[':first_name'] = "%$first_name%";
 }
-
 if(!empty($middle_name)) {
     $sqlBase .= " AND middle_name LIKE :middle_name";
     $params[':middle_name'] = "%$middle_name%";
 }
-
 if(!empty($last_name)) {
     $sqlBase .= " AND last_name LIKE :last_name";
     $params[':last_name'] = "%$last_name%";
 }
 
-// 4. Count Total Records (Before Filtering)
-// CHANGED: Count from archivedResidence
+// Counts
 $stmtTotal = $pdo->prepare("SELECT COUNT(*) FROM archivedResidence");
 $stmtTotal->execute();
 $totalData = $stmtTotal->fetchColumn();
 
-// 5. Count Filtered Records (After Search)
 $stmtFiltered = $pdo->prepare("SELECT COUNT(*) " . $sqlBase);
 $stmtFiltered->execute($params);
 $totalFiltered = $stmtFiltered->fetchColumn();
 
-// 6. Sorting
-// Removed table prefixes (e.g., residence_information.)
+// Sorting
 $columns = [
     0 => 'image',
     1 => 'resident_id', 
     2 => 'first_name', 
     3 => 'age',
-    4 => 'pwd', // Changed to match logic mapping, was 'pwd_info'
+    4 => 'pwd', 
     5 => 'single_parent',
     6 => 'voters',
     7 => 'status',
     8 => 'resident_id'
 ];
-
 $orderColumnIndex = $_POST['order'][0]['column'] ?? null;
 $orderDir = $_POST['order'][0]['dir'] ?? 'DESC';
+$orderBy = (isset($orderColumnIndex) && isset($columns[$orderColumnIndex])) ? $columns[$orderColumnIndex] : 'resident_id';
 
-if(isset($orderColumnIndex) && isset($columns[$orderColumnIndex])){
-    $orderBy = $columns[$orderColumnIndex];
-} else {
-    $orderBy = 'resident_id'; // Default sort
-}
-
-// 7. Fetch Data
-// CHANGED: Removed table prefixes (e.g., residence_information.first_name -> first_name)
-// NOTE: This assumes your archivedResidence table has ALL these columns.
+// Fetch Data
 $sqlData = "SELECT * " . $sqlBase . " ORDER BY $orderBy $orderDir LIMIT :limit OFFSET :offset";
-
 $stmt = $pdo->prepare($sqlData);
 
-// Bind filter parameters
 foreach($params as $key => $value){
     $stmt->bindValue($key, $value);
 }
-
-// Bind pagination parameters
 $stmt->bindValue(':limit', (int)$length, PDO::PARAM_INT);
 $stmt->bindValue(':offset', (int)$start, PDO::PARAM_INT);
-
 $stmt->execute();
 $empRecords = $stmt->fetchAll();
 
-// 8. Format Data for JSON
+// Format Data
 $data = [];
-
 foreach($empRecords as $row) {
-
     // Image Logic
-    // Check if image_path exists in the row
     if(!empty($row['image_path'])){
         $image = '<span style="cursor: pointer;" class="pop"><img src="'.$row['image_path'].'" alt="residence_image" class="img-circle" width="40"></span>';
     } else {
@@ -109,63 +107,41 @@ foreach($empRecords as $row) {
     }
 
     // Name Logic
-    if(!empty($row['middle_name'])){
-        $middle_name_display = ucfirst($row['middle_name'][0]).'.';
-    } else {
-        $middle_name_display = '';
-    }
+    $middle_name_display = !empty($row['middle_name']) ? ucfirst($row['middle_name'][0]).'.' : '';
 
-    // Voters Badge 
-    // Note: Ensure 'voter' or 'voters' is the correct column name in archivedResidence
+    // Badges
     $voterVal = $row['voter'] ?? $row['voters'] ?? 'NO'; 
-    if($voterVal == 'Yes' || $voterVal == 'YES'){
-        $voters = '<span class="badge badge-success text-md ">YES</span>';
-    } else {
-        $voters = '<span class="badge badge-danger text-md ">NO</span>';
-    }
+    $voters = ($voterVal == 'Yes' || $voterVal == 'YES') ? '<span class="badge badge-success text-md ">YES</span>' : '<span class="badge badge-danger text-md ">NO</span>';
 
-    // Single Parent Badge
     $spVal = $row['single_parent'] ?? 'NO';
-    if($spVal == 'Yes' || $spVal == 'YES'){
-        $single_parent = '<span class="badge badge-info text-md ">YES</span>';
-    } else {
-        $single_parent = '<span class="badge badge-warning text-md ">NO</span>';
-    }
+    $single_parent = ($spVal == 'Yes' || $spVal == 'YES') ? '<span class="badge badge-info text-md ">YES</span>' : '<span class="badge badge-warning text-md ">NO</span>';
 
-    // --- PWD LOGIC START (Copied from allResidenceTable.php) ---
-    // Ensure we check if 'pwd' column exists, default to 'No' if missing
     $pwdVal = $row['pwd'] ?? 'No'; 
-    
     if($pwdVal == 'Yes' || $pwdVal == 'YES'){
-        // Badge for YES - Primary (Blue)
         $pwd_display = '<span class="badge badge-primary">YES</span>';
-        
-        // If info exists, add it in BOLD
         if(!empty($row['pwd_info'])){
             $pwd_display .= ' <small style="font-weight: bold; font-size: 85%;">('.$row['pwd_info'].')</small>';
         }
     } else {
-        // Badge for NO - Secondary (Grey)
         $pwd_display = '<span class="badge badge-secondary">NO</span>';
     }
-    // --- PWD LOGIC END ---
 
-    // Status Switch (For Archive, usually we display "ARCHIVED")
     $status = '<span class="badge badge-danger">ARCHIVED</span>';
 
-    // Action Icons
-    // Update ID to match your DB Column (resident_id)
+    // Action Buttons
     $id = $row['resident_id'];
-    
-    $action = '<i style="cursor: pointer; color: yellow; text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fa fa-eye text-lg px-3 viewResidence" id="'.$id.'"></i>
-               <i style="cursor: pointer; color: #28a745; text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fa fa-trash-restore text-lg px-2 unArchiveResidence" id="'.$id.'"></i>';
+    $action = '<div class="d-flex justify-content-center">';
+    $action .= '<i style="cursor: pointer; color: yellow; text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fa fa-eye text-lg px-2 viewResidence" id="'.$id.'" title="View Details"></i>';
+    $action .= '<i style="cursor: pointer; color: #28a745; text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fa fa-trash-restore text-lg px-2 unArchiveResidence" id="'.$id.'" title="Restore Resident"></i>';
+    $action .= '<i style="cursor: pointer; color: red; text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fas fa-trash text-lg px-2 deleteArchivedResidence" id="'.$id.'" title="Delete Permanently"></i>';
+    $action .= '</div>';
 
     $subdata = [];
     $subdata[] = $image;
     $subdata[] = $id;
     $subdata[] = ucfirst($row['first_name']).' '. $middle_name_display .' '. ucfirst($row['last_name']); 
     $subdata[] = $row['age'];
-    $subdata[] = $pwd_display; // Replaced direct $row['pwd_info'] with new logic
+    $subdata[] = $pwd_display; 
     $subdata[] = $single_parent; 
     $subdata[] = $voters;
     $subdata[] = $status;
@@ -174,14 +150,10 @@ foreach($empRecords as $row) {
     $data[] = $subdata;
 }
 
-// 9. Return JSON
-$json_data = [
+echo json_encode([
     'draw'            => intval($draw),
     'recordsTotal'    => intval($totalData),
     'recordsFiltered' => intval($totalFiltered),
     'data'            => $data,
-];
-
-echo json_encode($json_data);
-
+]);
 ?>

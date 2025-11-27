@@ -1,40 +1,45 @@
 
 <?php 
 
-include_once '../connection.php';
+include_once '../db_connection.php';
 session_start();
 
-try{
+try {
 
+    if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin'){
+  
+        $user_id = $_SESSION['user_id'];
+        
+        // 1. Prepare the statement
+        // Note: Assuming your connection variable in 'db_connection.php' is named $pdo
+        $sql_user = "SELECT * FROM `users` WHERE `user_id` = ?";
+        $stmt_user = $pdo->prepare($sql_user);
+        
+        // 2. Execute with bound parameters (replaces bind_param)
+        $stmt_user->execute([$user_id]);
+        
+        // 3. Fetch the data
+        $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC);
 
+        // Check if user was actually found to avoid errors
+        if ($row_user) {
+            $first_name_user = $row_user['username'];
+            $last_name_user  = $row_user['password'];
+            $user_type       = $row_user['user_type'];
+        }
   
-  if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin'){
+    } else {
+        echo '<script>
+                window.location.href = "../login.php";
+              </script>';
+        exit; // Important: Stop script execution after redirect
+    }
   
-    $user_id = $_SESSION['user_id'];
-    $sql_user = "SELECT * FROM `users` WHERE `id` = ? ";
-    $stmt_user = $con->prepare($sql_user) or die ($con->error);
-    $stmt_user->bind_param('s',$user_id);
-    $stmt_user->execute();
-    $result_user = $stmt_user->get_result();
-    $row_user = $result_user->fetch_assoc();
-    $first_name_user = $row_user['username'];
-    $last_name_user = $row_user['password'];
-    $user_type = $row_user['user_type'];
-  
-  
-  
-  }else{
-   echo '<script>
-          window.location.href = "../login.php";
-        </script>';
-  }
-  
-  }catch(Exception $e){
-    echo $e->getMessage();
-  }
+} catch(PDOException $e) {
+    echo "Database Error: " . $e->getMessage();
+}
 
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -356,7 +361,7 @@ input:checked + .slider .off{
                 <div class="col-sm-4">
                   <div class="input-group mb-3">
                     <div class="input-group-prepend">
-                      <span class="input-group-text bg-indigo">FIRST NAME</span>
+                      <span class="input-group-text bg-indigo">USERNAME</span>
                     </div>
                         <input type="search" name="first_name" id="first_name" class="form-control"> 
                       </select>
@@ -365,27 +370,9 @@ input:checked + .slider .off{
                 <div class="col-sm-4">
                   <div class="input-group mb-3">
                     <div class="input-group-prepend">
-                      <span class="input-group-text bg-indigo">MIDDLE NAME</span>
+                      <span class="input-group-text bg-indigo">USER ID</span>
                     </div>
-                        <input type="search" name="middle_name" id="middle_name" class="form-control"> 
-                      </select>
-                  </div>
-                </div>
-                <div class="col-sm-4">
-                  <div class="input-group mb-3">
-                    <div class="input-group-prepend">
-                      <span class="input-group-text bg-indigo">LAST NAME</span>
-                    </div>
-                        <input type="search" name="last_name" id="last_name" class="form-control"> 
-                      </select>
-                  </div>
-                </div>
-                <div class="col-sm-4">
-                  <div class="input-group mb-3">
-                    <div class="input-group-prepend">
-                      <span class="input-group-text bg-indigo">RESIDENT NUMBER</span>
-                    </div>
-                        <input type="search" name="resident_id" id="resident_id" class="form-control"> 
+                        <input type="search" name="user_id" id="user_id" class="form-control"> 
                       </select>
                   </div>
                 </div>
@@ -398,11 +385,9 @@ input:checked + .slider .off{
             <table class="table table-striped table-hover " id="userTableResidence">
               <thead class="bg-black">
                 <tr>
-                 <th>Image</th>
-                 <th>Resident Number</th>
-                 <th>Name</th>
+                 <th>User ID</th>
                  <th>Username</th>
-                 <th>Password</th>
+                 <th>User Type</th>
                  <th class="text-center">Action</th>
                 </tr>
               </thead>
@@ -486,8 +471,8 @@ input:checked + .slider .off{
       var first_name = $("#first_name").val();
       var middle_name = $("#middle_name").val();
       var last_name = $("#last_name").val();
-      var resident_id = $("#resident_id").val();
-
+      var resident_id = $("#user_id").val();
+      
       if(first_name != '' || middle_name != '' || last_name != '' || resident_id !=''){
         $("#userTableResidence").DataTable().destroy();
         userResidentTable()
@@ -506,36 +491,49 @@ input:checked + .slider .off{
 
     })
 
-    $(document).on('click','.viewUserResidence',function(){
-      var residence_id = $(this).attr('id');
-      
-      $("#dislay_user").html('');
 
-      $.ajax({
-        url: 'viewResidenceUser.php',
-        type: 'POST',
-        data:{
-          residence_id:residence_id,
-        },
-        cache: false,
-        dataType: 'html',
-        success:function(data){
-          $("#dislay_user").html(data);
-          $("#displayUserModal").modal('show');
+    // --- DELETE USER ACTION ---
+    $(document).on('click', '.deleteUser', function(){
+      var id = $(this).attr('id');
+
+      Swal.fire({
+        title: 'Are you sure?',
+        text: "You are about to delete this user completely!",
+        type: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!'
+      }).then((result) => {
+        if (result.value) {
+          
+          $.ajax({
+            url: 'userResidenceTable.php', // UPDATED: Same file as the table
+            type: 'POST',
+            data: { 
+                action: 'delete', // UPDATED: Tell PHP this is a delete request
+                user_id: id 
+            },
+            success: function(response){
+              if(response.trim() == 'success'){
+                Swal.fire(
+                  'Deleted!',
+                  'The user has been deleted.',
+                  'success'
+                );
+                $("#userTableResidence").DataTable().ajax.reload();
+              } else {
+                Swal.fire('Error!', 'Failed to delete user.', 'error');
+              }
+            },
+            error: function(){
+               Swal.fire('Error!', 'Something went wrong with the server.', 'error');
+            }
+          });
+
         }
-      }).fail(function(){
-        Swal.fire({
-          title: '<strong class="text-danger">Ooppss..</strong>',
-          type: 'error',
-          html: '<b>Something went wrong with ajax !<b>',
-          width: '400px',
-          confirmButtonColor: '#6610f2',
-        })
       })
-        
-    })
-
-
+    });
 
     function userResidentTable(){
       var resident_id = $("#resident_id").val();
@@ -552,12 +550,10 @@ input:checked + .slider .off{
           url: 'userResidenceTable.php',
           type: 'POST',
           data:{
-            first_name:first_name,
-            middle_name:middle_name,
-            last_name:last_name,
-            resident_id:resident_id
-          }
-        },
+                first_name: first_name,
+                user_id: resident_id  // <--- Send it as 'user_id' to match PHP
+              }
+          },
         scrollY: '665',
         dom: "<'row'<'col-sm-12 col-md-6'><'col-sm-12 col-md-6'f>>" +
                 "<'row'<'col-sm-12'tr>>" +
@@ -571,11 +567,10 @@ input:checked + .slider .off{
           },
           {
             orderable: false,
-            targets: 5,
+            targets: 3, // <--- FIXED (Action column is index 3)
           },
           {
-          
-            targets: 5,
+            targets: 3, // <--- FIXED
             className: 'text-center',
           },
         ],
