@@ -17,10 +17,11 @@ if(!isset($menu_base)){
   if (!$found) { $menu_base = '../'; }
 }
 
-// 2. CHECK RESIDENCY VERIFICATION STATUS (FIXED: Using PDO)
+// 2. CHECK RESIDENCY VERIFICATION STATUS
 $verified_label = "Not Verified";
 $verified_color = "#EF4444"; // Red
 $verified_icon  = "fa-times-circle";
+$display_res_id = "Pending"; // Default display if no profile exists
 
 if(isset($_SESSION['user_id'])){
     $chk_uid = $_SESSION['user_id'];
@@ -28,22 +29,34 @@ if(isset($_SESSION['user_id'])){
     // Check if $pdo exists (it should be included by the parent page)
     if(isset($pdo)){
         try {
-            $chk_sql = "SELECT status FROM residence_applications WHERE residence_id = :uid ORDER BY id DESC LIMIT 1";
-            $stmt_chk = $pdo->prepare($chk_sql);
-            $stmt_chk->execute([':uid' => $chk_uid]);
-            
-            if($chk_row = $stmt_chk->fetch(PDO::FETCH_ASSOC)){
-                // Normalize status to lowercase for easier checking
-                $status_raw = trim(strtolower($chk_row['status']));
+            // STEP A: Get Resident ID from User ID first
+            $sql_res = "SELECT resident_id FROM residence_information WHERE user_id = :uid LIMIT 1";
+            $stmt_res = $pdo->prepare($sql_res);
+            $stmt_res->execute([':uid' => $chk_uid]);
+            $row_res = $stmt_res->fetch(PDO::FETCH_ASSOC);
+
+            if ($row_res) {
+                $resident_id = $row_res['resident_id'];
+                $display_res_id = $resident_id; // Store for display
+
+                // STEP B: Check Application Status using Resident ID
+                $chk_sql = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
+                $stmt_chk = $pdo->prepare($chk_sql);
+                $stmt_chk->execute([':rid' => $resident_id]);
                 
-                if($status_raw == 'approved' || $status_raw == 'verified'){
-                    $verified_label = "Verified";
-                    $verified_color = "#10B981"; // Green
-                    $verified_icon  = "fa-check-circle";
-                } elseif($status_raw == 'pending'){
-                     $verified_label = "Pending";
-                     $verified_color = "#F59E0B"; // Orange
-                     $verified_icon  = "fa-clock";
+                if($chk_row = $stmt_chk->fetch(PDO::FETCH_ASSOC)){
+                    // Normalize status to lowercase for easier checking
+                    $status_raw = trim(strtolower($chk_row['status']));
+                    
+                    if($status_raw == 'approved' || $status_raw == 'verified'){
+                        $verified_label = "Verified";
+                        $verified_color = "#10B981"; // Green
+                        $verified_icon  = "fa-check-circle";
+                    } elseif($status_raw == 'pending'){
+                         $verified_label = "Pending";
+                         $verified_color = "#F59E0B"; // Orange
+                         $verified_icon  = "fa-clock";
+                    }
                 }
             }
         } catch (PDOException $e) {
@@ -303,7 +316,9 @@ if(isset($_SESSION['user_id'])){
         
         <div class="profile-info">
             <strong><?= isset($first_name_user) ? $first_name_user : 'User' ?></strong>
-            <div class="resident-id-badge">ID: <?= isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'N/A' ?></div>
+            
+            <div class="resident-id-badge">RESIDENT ID: <?= $display_res_id ?></div>
+            
             <div class="d-block">
                 <div class="status-text" style="color: <?= $verified_color ?>;">
                     <i class="fas <?= $verified_icon ?> mr-1"></i> <?= $verified_label ?>

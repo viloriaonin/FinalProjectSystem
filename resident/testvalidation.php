@@ -2,7 +2,7 @@
 include_once '../db_connection.php';
 session_start();
 
-// --- ADMIN SECURITY CHECK (Optional: Uncomment if you have admin sessions) ---
+// --- ADMIN SECURITY CHECK (Optional) ---
 /*
 if (!isset($_SESSION['user_type']) || $_SESSION['user_type'] != 'admin') {
     header("Location: ../login.php");
@@ -16,22 +16,23 @@ if (!isset($_SESSION['user_type']) || $_SESSION['user_type'] != 'admin') {
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     if (isset($_POST['action'])) {
+        // FIX 1: Ensure we get the correct ID from the form
         $app_id = $_POST['application_id'];
         $action = $_POST['action'];
         $remarks = $_POST['remarks'] ?? '';
 
         try {
             if ($action == 'approve') {
-                $new_status = 'Approved'; // Or 'Verified'
-                // PDO Update: Prepared statement with named parameters or ?
-                $sql = "UPDATE residence_applications SET status = ?, admin_remarks = 'Application Verified' WHERE id = ?";
+                $new_status = 'Approved'; 
+                // FIX 2: Use 'applicant_id' in the WHERE clause
+                $sql = "UPDATE residence_applications SET status = ?, admin_remarks = 'Application Verified' WHERE applicant_id = ?";
                 $stmt = $pdo->prepare($sql);
                 $result = $stmt->execute([$new_status, $app_id]);
                 
             } elseif ($action == 'decline') {
                 $new_status = 'Declined';
-                // PDO Update
-                $sql = "UPDATE residence_applications SET status = ?, admin_remarks = ? WHERE id = ?";
+                // FIX 3: Use 'applicant_id' in the WHERE clause
+                $sql = "UPDATE residence_applications SET status = ?, admin_remarks = ? WHERE applicant_id = ?";
                 $stmt = $pdo->prepare($sql);
                 $result = $stmt->execute([$new_status, $remarks, $app_id]);
             }
@@ -52,15 +53,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 // ---------------------------------------------------------
 $result_rows = [];
 try {
-    // PDO Update: query() for SELECT
-    $sql = "SELECT * FROM residence_applications ORDER BY CASE WHEN status = 'Pending' THEN 0 ELSE 1 END, id DESC";
+    // Select all rows, order by Pending first
+    $sql = "SELECT * FROM residence_applications ORDER BY CASE WHEN status = 'Pending' THEN 0 ELSE 1 END, applicant_id DESC";
     $stmt = $pdo->query($sql);
-    
-    // Fetch all rows
     $result_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
 } catch (PDOException $e) {
-    // Handle error appropriately
     // error_log($e->getMessage());
 }
 ?>
@@ -154,7 +152,7 @@ try {
                             $json_data = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
                         ?>
                         <tr>
-                            <td>#<?= $row['id'] ?></td>
+                            <td>#<?= $row['applicant_id'] ?></td>
                             <td>
                                 <div style="font-weight:600;"><?= $fullname ?></div>
                                 <small class="text-muted"><?= $row['email_address'] ?></small>
@@ -168,13 +166,13 @@ try {
                                 
                                 <?php if($row['status'] == 'Pending'): ?>
                                     <form method="POST" style="display:inline-block;">
-                                        <input type="hidden" name="application_id" value="<?= $row['id'] ?>">
+                                        <input type="hidden" name="application_id" value="<?= $row['applicant_id'] ?>">
                                         <input type="hidden" name="action" value="approve">
                                         <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Approve this resident?')">
                                             <i class="fas fa-check"></i>
                                         </button>
                                     </form>
-                                    <button class="btn btn-sm btn-danger btn-decline" data-id="<?= $row['id'] ?>">
+                                    <button class="btn btn-sm btn-danger btn-decline" data-id="<?= $row['applicant_id'] ?>">
                                         <i class="fas fa-times"></i>
                                     </button>
                                 <?php endif; ?>

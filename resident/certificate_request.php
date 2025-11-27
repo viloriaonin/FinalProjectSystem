@@ -2,7 +2,6 @@
 include_once '../db_connection.php';
 session_start();
 
-// Certificate Request UI integrated with resident layout
 $certificate_types = [
     [
         'id' => 'barangay_clearance',
@@ -41,7 +40,7 @@ $certificate_types = [
     ]
 ];
 
-$is_verified = false; // Default to locked
+$is_verified = false; 
 $app_status = 'None';
 
 
@@ -56,20 +55,29 @@ try {
         $stmt_user->execute(['uid' => $user_id]);
         $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC);
 
-        // 2. CHECK RESIDENCY APPLICATION STATUS [UPDATED LOGIC]
-        $sql_app = "SELECT status FROM residence_applications WHERE residence_id = :uid ORDER BY id DESC LIMIT 1";
-        $stmt_app = $pdo->prepare($sql_app);
-        $stmt_app->execute(['uid' => $user_id]);
-        
-        if ($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)) {
-            $app_status = $row_app['status'];
-            
-            // CLEAN THE STATUS (Remove spaces, make lowercase)
-            $clean_status = trim(strtolower($app_status));
+        // 2. CRITICAL FIX: Get Resident ID & Check Status
+        $sql_res = "SELECT resident_id FROM residence_information WHERE user_id = :uid LIMIT 1";
+        $stmt_res = $pdo->prepare($sql_res);
+        $stmt_res->execute(['uid' => $user_id]);
+        $res_row = $stmt_res->fetch(PDO::FETCH_ASSOC);
 
-            // Check against cleaned values
-            if ($clean_status == 'approved' || $clean_status == 'verified') {
-                $is_verified = true;
+        if ($res_row) {
+            $resident_id = $res_row['resident_id'];
+
+            // Check Status
+            $sql_app = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
+            $stmt_app = $pdo->prepare($sql_app);
+            $stmt_app->execute(['rid' => $resident_id]);
+            
+            if ($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)) {
+                $app_status = $row_app['status'];
+                
+                // CLEAN THE STATUS
+                $clean_status = trim(strtolower($app_status));
+
+                if ($clean_status == 'approved' || $clean_status == 'verified') {
+                    $is_verified = true;
+                }
             }
         }
     }
@@ -121,7 +129,7 @@ try {
         box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         padding: 30px;
         max-width: 800px;
-        margin: 0 auto; /* Center Horizontally */
+        margin: 0 auto; 
     }
 
     /* Header */

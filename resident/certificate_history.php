@@ -11,17 +11,14 @@ $user_id = $_SESSION['user_id'];
 // Default Values
 $is_verified = false; 
 $app_status = 'None';
-$postal_address = 'Barangay Hall'; // Default fallback
+$postal_address = 'Barangay Hall'; 
 
 try { 
-    // 2. FETCH BARANGAY INFO (FIXED)
-    // The previous code failed because 'postal_address' column does not exist in your database.
-    // We construct the address from barangay, municipality, and province instead.
+    // 2. FETCH BARANGAY INFO
     $sql_b = "SELECT barangay, municipality, province FROM barangay_information LIMIT 1";
     $stmt_b = $pdo->query($sql_b);
     
     if ($rb = $stmt_b->fetch(PDO::FETCH_ASSOC)){
-        // Combine fields to make the address
         $parts = [];
         if(!empty($rb['barangay'])) $parts[] = $rb['barangay'];
         if(!empty($rb['municipality'])) $parts[] = $rb['municipality'];
@@ -32,43 +29,44 @@ try {
         }
     }
 
-    // 3. CHECK RESIDENCY STATUS
-    // We check the 'residence_applications' table for the latest status
-    $sql_app = "SELECT status FROM residence_applications WHERE resident_id = ? ORDER BY resident_id DESC LIMIT 1";
-    $stmt_app = $pdo->prepare($sql_app);
-    $stmt_app->execute([$user_id]);
-    
-    if ($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)) {
-        $app_status = trim($row_app['status']);
+    // 3. CRITICAL FIX: GET RESIDENT ID FIRST
+    $stmt_res = $pdo->prepare("SELECT resident_id FROM residence_information WHERE user_id = :uid LIMIT 1");
+    $stmt_res->execute(['uid' => $user_id]);
+    $res_row = $stmt_res->fetch(PDO::FETCH_ASSOC);
+    $my = [];
 
-        // Case-insensitive check
-        if (strcasecmp($app_status, 'approved') == 0 || strcasecmp($app_status, 'verified') == 0) {
-            $is_verified = true;
+    if ($res_row) {
+        $resident_id = $res_row['resident_id'];
+
+        // 4. CHECK RESIDENCY STATUS (Using resident_id)
+        $sql_app = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
+        $stmt_app = $pdo->prepare($sql_app);
+        $stmt_app->execute(['rid' => $resident_id]);
+        
+        if ($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)) {
+            $app_status = trim($row_app['status']);
+            // Case-insensitive check
+            if (strcasecmp($app_status, 'approved') == 0 || strcasecmp($app_status, 'verified') == 0) {
+                $is_verified = true;
+            }
         }
-    } else {
-        $app_status = 'None';
+
+        // 5. LOAD REQUESTS (Using resident_id)
+        if ($is_verified) {
+            $sql_req = "SELECT request_code, type, purpose, status, created_at 
+                        FROM certificate_requests 
+                        WHERE resident_id = :rid 
+                        ORDER BY created_at DESC";
+            $stmt_r = $pdo->prepare($sql_req);
+            $stmt_r->execute(['rid' => $resident_id]);
+            $my = $stmt_r->fetchAll(PDO::FETCH_ASSOC);
+        }
     }
 
 } catch (PDOException $e) {
-    // Show the actual error for debugging instead of generic "DB Error"
     $app_status = "Error: " . $e->getMessage();
 }
 
-// 4. LOAD REQUESTS (Only if verified)
-$my = [];
-if ($is_verified) {
-    try {
-        $sql_req = "SELECT id, request_code, type, purpose, status, created_at, admin_notes 
-                    FROM certificate_requests 
-                    WHERE user_id = ? 
-                    ORDER BY created_at DESC";
-        $stmt_r = $pdo->prepare($sql_req);
-        $stmt_r->execute([$user_id]);
-        $my = $stmt_r->fetchAll(PDO::FETCH_ASSOC);
-    } catch (PDOException $e) {
-       // Silent error
-    }
-}
 ?>
 <!doctype html>
 <html>
@@ -145,7 +143,11 @@ if ($is_verified) {
                             <td><?php echo date('M d, Y', strtotime($r['created_at'])); ?></td>
                             <td>
                                 <?php if($st == 'pending'): ?>
-                                <button class="btn btn-sm btn-danger cancel-btn" data-id="<?php echo $r['request_code']; ?>">Cancel</button>
+                                    <button class="btn btn-sm btn-danger cancel-btn" data-id="<?php echo $r['request_code']; ?>">Cancel</button>
+                                <?php elseif($st == 'approved'): ?>
+                                    <a href="print_receipt.php?code=<?php echo $r['request_code']; ?>" target="_blank" class="btn btn-sm btn-success">
+                                        <i class="fas fa-receipt"></i> Claim Stub
+                                    </a>
                                 <?php endif; ?>
                             </td>
                         </tr>

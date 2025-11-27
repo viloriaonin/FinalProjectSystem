@@ -1,5 +1,5 @@
 <?php
-// 1. ENABLE ERROR REPORTING (To see why it is blank)
+// 1. ENABLE ERROR REPORTING
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 }
 // ----------------------------------
 
-include_once '../db_connection.php'; // Ensure this path is correct
+include_once '../db_connection.php'; 
 session_start();
 
 // 2. SECURITY CHECK
@@ -22,6 +22,27 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] != 'resident') {
 }
 
 $user_id = $_SESSION['user_id'];
+$resident_id = null;
+
+// --- CRITICAL DATABASE FIX: Get or Create Resident ID ---
+try {
+    // Check if this user already has a resident profile linked
+    $stmt_check_res = $pdo->prepare("SELECT resident_id FROM residence_information WHERE user_id = :uid");
+    $stmt_check_res->execute(['uid' => $user_id]);
+    $res_row = $stmt_check_res->fetch(PDO::FETCH_ASSOC);
+
+    if ($res_row) {
+        $resident_id = $res_row['resident_id'];
+    } else {
+        // Create placeholder if needed
+        $stmt_create_res = $pdo->prepare("INSERT INTO residence_information (user_id, first_name, last_name) SELECT user_id, username, 'Resident' FROM users WHERE user_id = :uid");
+        $stmt_create_res->execute(['uid' => $user_id]);
+        $resident_id = $pdo->lastInsertId();
+    }
+} catch (PDOException $e) {
+    die("Error resolving Resident ID: " . $e->getMessage());
+}
+
 $has_application = false;
 $application_status = 'Pending';
 $admin_remarks = '';
@@ -59,7 +80,12 @@ try {
         $mother = $_POST['mother_name'] ?? '';
         $guardian = $_POST['guardian'] ?? '';
         $g_contact = $_POST['guardian_contact'] ?? '';
+        
+        // Residency Details
         $duration = $_POST['residency_months'] ?? '';
+        $years_living = !empty($_POST['years_of_living']) ? $_POST['years_of_living'] : 0; // NEW
+        $res_since = !empty($_POST['residence_since']) ? $_POST['residence_since'] : NULL; // NEW
+        
         $gov = $_POST['gov_beneficiary'] ?? '';
         $gov_type = $_POST['beneficiary_type'] ?? '';
         
@@ -82,25 +108,29 @@ try {
             if (!file_exists($target_dir)) { mkdir($target_dir, 0777, true); }
             
             $file_ext = pathinfo($_FILES['valid_id_image']['name'], PATHINFO_EXTENSION);
-            $new_filename = "ID_" . $user_id . "_" . time() . "." . $file_ext;
+            $new_filename = "ID_" . $resident_id . "_" . time() . "." . $file_ext;
             
             if(move_uploaded_file($_FILES['valid_id_image']['tmp_name'], $target_dir . $new_filename)){
                  $valid_id_path = $target_dir . $new_filename;
             }
         } else {
             // Check if existing file
-            $old_file_q = $pdo->prepare("SELECT valid_id_path FROM residence_applications WHERE resident_id = :uid");
-            $old_file_q->execute(['uid' => $user_id]);
+            $old_file_q = $pdo->prepare("SELECT valid_id_path FROM residence_applications WHERE resident_id = :rid");
+            $old_file_q->execute(['rid' => $resident_id]);
             if($old_row = $old_file_q->fetch(PDO::FETCH_ASSOC)){
                 $valid_id_path = $old_row['valid_id_path'];
             }
         }
 
-        // INSERT ... ON DUPLICATE KEY UPDATE ...
+        // UPDATED SQL INSERT
         $sql_insert = "INSERT INTO residence_applications 
-        (resident_id, first_name, middle_name, last_name, suffix, gender, birth_date, birth_place, nationality, civil_status, religion, blood_type, occupation, full_address, house_number, purok, contact_number, email_address, voter_status, pwd_status, single_parent_status, senior_status, father_name, mother_name, guardian_name, guardian_contact, father_occupation, father_age, father_education, mother_occupation, mother_age, mother_education, residency_duration, gov_beneficiary, beneficiary_type, children_list, siblings_list, valid_id_path, status, admin_remarks)
+        (resident_id, first_name, middle_name, last_name, suffix, gender, birth_date, birth_place, nationality, civil_status, religion, blood_type, occupation, full_address, house_number, purok, contact_number, email_address, voter_status, pwd_status, single_parent_status, senior_status, father_name, mother_name, guardian_name, guardian_contact, father_occupation, father_age, father_education, mother_occupation, mother_age, mother_education, 
+        residency_duration, years_of_living, residence_since, 
+        gov_beneficiary, beneficiary_type, children_list, siblings_list, valid_id_path, status, admin_remarks)
         VALUES 
-        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', '')
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+        ?, ?, ?, 
+        ?, ?, ?, ?, ?, 'Pending', '')
         ON DUPLICATE KEY UPDATE 
             status='Pending', admin_remarks='',
             first_name=VALUES(first_name), middle_name=VALUES(middle_name), last_name=VALUES(last_name), suffix=VALUES(suffix), 
@@ -111,17 +141,19 @@ try {
             father_name=VALUES(father_name), mother_name=VALUES(mother_name), guardian_name=VALUES(guardian_name), guardian_contact=VALUES(guardian_contact),
             father_occupation=VALUES(father_occupation), father_age=VALUES(father_age), father_education=VALUES(father_education),
             mother_occupation=VALUES(mother_occupation), mother_age=VALUES(mother_age), mother_education=VALUES(mother_education),
-            residency_duration=VALUES(residency_duration), gov_beneficiary=VALUES(gov_beneficiary), beneficiary_type=VALUES(beneficiary_type),
+            residency_duration=VALUES(residency_duration), years_of_living=VALUES(years_of_living), residence_since=VALUES(residence_since),
+            gov_beneficiary=VALUES(gov_beneficiary), beneficiary_type=VALUES(beneficiary_type),
             children_list=VALUES(children_list), siblings_list=VALUES(siblings_list), valid_id_path=VALUES(valid_id_path)";
 
         $stmt = $pdo->prepare($sql_insert);
         
         $result = $stmt->execute([
-            $user_id, $fname, $mname, $lname, $suffix, $gender, $dob, $pob, $nationality, $civil, $religion, $blood, $occ, 
+            $resident_id, $fname, $mname, $lname, $suffix, $gender, $dob, $pob, $nationality, $civil, $religion, $blood, $occ, 
             $address, $house, $purok, $contact, $email, $voter, $pwd, $single, $senior, 
             $father, $mother, $guardian, $g_contact, 
             $f_occ, $f_age, $f_educ, $m_occ, $m_age, $m_educ, 
-            $duration, $gov, $gov_type, $children_json, $siblings_json, $valid_id_path
+            $duration, $years_living, $res_since, // NEW FIELDS
+            $gov, $gov_type, $children_json, $siblings_json, $valid_id_path
         ]);
 
         if ($result) {
@@ -135,9 +167,9 @@ try {
     // ---------------------------------------------------------
     // LOGIC B: CHECK STATUS & FETCH DATA
     // ---------------------------------------------------------
-    $check_sql = "SELECT * FROM residence_applications WHERE resident_id = :uid ORDER BY resident_id DESC LIMIT 1";
+    $check_sql = "SELECT * FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
     $stmt_check = $pdo->prepare($check_sql);
-    $stmt_check->execute(['uid' => $user_id]);
+    $stmt_check->execute(['rid' => $resident_id]);
     
     if ($app_data = $stmt_check->fetch(PDO::FETCH_ASSOC)) {
         $has_application = true;
@@ -153,7 +185,6 @@ try {
 
 
 } catch(PDOException $e) {
-    // 3. FIXED ERROR VISIBILITY (Changed color from white to red/black so you can see it)
     die("<div style='color:red; background:white; padding:20px; font-weight:bold;'>Database Error: " . $e->getMessage() . "</div>");
 }
 
@@ -173,213 +204,45 @@ function isSel($key, $val, $data){
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Resident | Application Form</title>
-
 <link rel="stylesheet" href="../assets/plugins/fontawesome-free/css/all.min.css">
 <link rel="stylesheet" href="../assets/plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
 <link rel="stylesheet" href="../assets/dist/css/adminlte.min.css">
 <link rel="stylesheet" href="../assets/plugins/sweetalert2/css/sweetalert2.min.css">
-
 <style>
   /* --- PREMIUM DARK UI THEME --- */
-  :root {
-      --bg-dark: #0F1115;       
-      --card-bg: #1C1F26;       
-      --input-bg: #0F1115;      
-      --border-color: #2D333B;  
-      --text-main: #FFFFFF;
-      --text-muted: #9CA3AF;
-      --accent-color: #3B82F6;  
-      --danger: #EF4444;
-      --success: #10B981;
-      --warning: #F59E0B;
-      --radius: 8px;
-  }
-
-  body {
-      background-color: var(--bg-dark);
-      color: var(--text-main);
-      font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  }
-
-  .content-wrapper {
-      background-color: var(--bg-dark) !important;
-      background-image: none !important;
-  }
-
-  /* Card Styling */
-  .ui-card {
-      background-color: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius);
-      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-      padding: 0;
-      max-width: 1100px;
-      margin: 0 auto;
-  }
-
-  .ui-card-header {
-      padding: 25px 30px;
-      border-bottom: 1px solid var(--border-color);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: rgba(255,255,255,0.01);
-  }
-  
+  :root { --bg-dark: #0F1115; --card-bg: #1C1F26; --input-bg: #0F1115; --border-color: #2D333B; --text-main: #FFFFFF; --text-muted: #9CA3AF; --accent-color: #3B82F6; --danger: #EF4444; --success: #10B981; --warning: #F59E0B; --radius: 8px; }
+  body { background-color: var(--bg-dark); color: var(--text-main); font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+  .content-wrapper { background-color: var(--bg-dark) !important; background-image: none !important; }
+  .ui-card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius); box-shadow: 0 4px 20px rgba(0,0,0,0.4); padding: 0; max-width: 1100px; margin: 0 auto; }
+  .ui-card-header { padding: 25px 30px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.01); }
   .ui-card-body { padding: 30px; }
-
-  .header-title h3 {
-      margin: 0;
-      font-size: 1.4rem;
-      font-weight: 600;
-      color: var(--text-main);
-  }
-  
-  .header-badge {
-      background-color: rgba(59, 130, 246, 0.15);
-      color: var(--accent-color);
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 0.75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      border: 1px solid rgba(59, 130, 246, 0.3);
-  }
-
-  /* Tabs Styling */
-  .nav-tabs {
-      border-bottom: 1px solid var(--border-color);
-      margin-bottom: 30px;
-  }
+  .header-title h3 { margin: 0; font-size: 1.4rem; font-weight: 600; color: var(--text-main); }
+  .header-badge { background-color: rgba(59, 130, 246, 0.15); color: var(--accent-color); padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(59, 130, 246, 0.3); }
+  .nav-tabs { border-bottom: 1px solid var(--border-color); margin-bottom: 30px; }
   .nav-tabs .nav-item { margin-bottom: -1px; }
-  .nav-tabs .nav-link {
-      color: var(--text-muted);
-      border: none;
-      border-bottom: 2px solid transparent;
-      background: transparent;
-      padding: 12px 20px;
-      font-weight: 500;
-      transition: all 0.2s;
-  }
+  .nav-tabs .nav-link { color: var(--text-muted); border: none; border-bottom: 2px solid transparent; background: transparent; padding: 12px 20px; font-weight: 500; transition: all 0.2s; }
   .nav-tabs .nav-link:hover { color: var(--text-main); }
-  .nav-tabs .nav-link.active {
-      color: var(--accent-color);
-      background-color: transparent;
-      border-bottom: 2px solid var(--accent-color);
-  }
-
-  /* Form Inputs */
-  .form-group label {
-      color: var(--text-muted);
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      font-weight: 600;
-      margin-bottom: 8px;
-      letter-spacing: 0.5px;
-  }
-
-  .form-control {
-      background-color: var(--input-bg);
-      border: 1px solid var(--border-color);
-      color: var(--text-main);
-      border-radius: 6px;
-      height: 48px; 
-      padding: 10px 15px;
-      transition: border-color 0.2s;
-  }
-
-  .form-control:focus {
-      background-color: var(--input-bg);
-      color: var(--text-main);
-      border-color: var(--accent-color);
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-  }
-  
+  .nav-tabs .nav-link.active { color: var(--accent-color); background-color: transparent; border-bottom: 2px solid var(--accent-color); }
+  .form-group label { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; letter-spacing: 0.5px; }
+  .form-control { background-color: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 6px; height: 48px; padding: 10px 15px; transition: border-color 0.2s; }
+  .form-control:focus { background-color: var(--input-bg); color: var(--text-main); border-color: var(--accent-color); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
   .form-control::placeholder { color: #4B5563; }
   select option { background-color: var(--card-bg); color: white; }
-
-  /* Input Groups */
-  .input-group-text {
-      background-color: #232730;
-      border: 1px solid var(--border-color);
-      border-right: none;
-      color: var(--text-muted);
-  }
+  .input-group-text { background-color: #232730; border: 1px solid var(--border-color); border-right: none; color: var(--text-muted); }
   .input-group .form-control { border-left: none; }
   .input-group:focus-within .input-group-text { border-color: var(--accent-color); }
-
-  /* Date Picker Dark Mode Fix */
-  input[type="date"]::-webkit-calendar-picker-indicator {
-      filter: invert(1) opacity(0.6);
-      cursor: pointer;
-  }
-
-  /* Section Titles */
-  .section-title {
-      color: var(--accent-color);
-      font-size: 1.1rem;
-      font-weight: 600;
-      margin-top: 15px;
-      margin-bottom: 25px;
-      padding-bottom: 10px;
-      border-bottom: 1px dashed var(--border-color);
-      display: flex;
-      align-items: center;
-  }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.6); cursor: pointer; }
+  .section-title { color: var(--accent-color); font-size: 1.1rem; font-weight: 600; margin-top: 15px; margin-bottom: 25px; padding-bottom: 10px; border-bottom: 1px dashed var(--border-color); display: flex; align-items: center; }
   .section-title i { margin-right: 12px; opacity: 0.8; }
-
-  /* Buttons */
-  .btn-primary {
-      background-color: var(--accent-color);
-      border-color: var(--accent-color);
-      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
-      font-weight: 600;
-      padding: 10px 25px;
-      border-radius: 6px;
-  }
-  .btn-primary:hover {
-      background-color: #2563eb;
-      box-shadow: 0 6px 15px rgba(59, 130, 246, 0.35);
-  }
-
-  .btn-outline-light {
-      border-color: var(--border-color);
-      color: var(--text-muted);
-      padding: 10px 25px;
-  }
-  .btn-outline-light:hover {
-      background-color: var(--border-color);
-      color: white;
-  }
-  
-  /* Tables */
+  .btn-primary { background-color: var(--accent-color); border-color: var(--accent-color); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25); font-weight: 600; padding: 10px 25px; border-radius: 6px; }
+  .btn-primary:hover { background-color: #2563eb; box-shadow: 0 6px 15px rgba(59, 130, 246, 0.35); }
+  .btn-outline-light { border-color: var(--border-color); color: var(--text-muted); padding: 10px 25px; }
+  .btn-outline-light:hover { background-color: var(--border-color); color: white; }
   .table-dark-custom { background-color: transparent; color: var(--text-main); }
-  .table-dark-custom th {
-      border-top: none;
-      border-bottom: 1px solid var(--border-color);
-      color: var(--text-muted);
-      font-weight: 600;
-      font-size: 0.9rem;
-  }
-  .table-dark-custom td {
-      border-top: 1px solid var(--border-color);
-      vertical-align: middle;
-  }
-  .table-dark-custom input, .table-dark-custom select {
-      height: 38px;
-      font-size: 0.9rem;
-      background-color: #232730;
-  }
-
-  /* Footer */
-  .main-footer {
-      background-color: var(--card-bg) !important;
-      border-top: 1px solid var(--border-color);
-      color: var(--text-muted) !important;
-  }
-  
-  /* Status Animations */
+  .table-dark-custom th { border-top: none; border-bottom: 1px solid var(--border-color); color: var(--text-muted); font-weight: 600; font-size: 0.9rem; }
+  .table-dark-custom td { border-top: 1px solid var(--border-color); vertical-align: middle; }
+  .table-dark-custom input, .table-dark-custom select { height: 38px; font-size: 0.9rem; background-color: #232730; }
+  .main-footer { background-color: var(--card-bg) !important; border-top: 1px solid var(--border-color); color: var(--text-muted) !important; }
   @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(0.95); } 100% { opacity: 1; transform: scale(1); } }
   .pulse-icon { animation: pulse 2s infinite; }
   .status-container { padding: 80px 20px; text-align: center; }
@@ -508,12 +371,43 @@ function isSel($key, $val, $data){
                     
                     <div class="section-title"><i class="fas fa-file-contract"></i> Residency Verification</div>
                     <div class="row">
-                      <div class="col-md-6"><div class="form-group"><label>Length of Residency</label><select class="form-control" name="residency_months"><option value="">Select Duration</option><option value="below_6" <?= isSel('residency_duration','below_6',$app_data) ?>>Less than 6 months</option><option value="above_6" <?= isSel('residency_duration','above_6',$app_data) ?>>6 months or more</option></select></div></div>
-                      <div class="col-md-6"><div class="form-group"><label>Upload Valid ID</label><div class="input-group"><div class="input-group-prepend"><span class="input-group-text"><i class="fas fa-upload"></i></span></div><input type="file" class="form-control" name="valid_id_image" style="padding-top: 10px;"></div>
-                         <?php if($is_editing && !empty($app_data['valid_id_path'])): ?>
-                             <small class="text-success"><i class="fas fa-check mr-1"></i> Current file: <?= basename($app_data['valid_id_path']) ?></small>
-                         <?php endif; ?>
-                      </div></div>
+                      <div class="col-md-4">
+                          <div class="form-group">
+                              <label>Length Category</label>
+                              <select class="form-control" name="residency_months">
+                                  <option value="">Select Category</option>
+                                  <option value="below_6" <?= isSel('residency_duration','below_6',$app_data) ?>>Less than 6 months</option>
+                                  <option value="above_6" <?= isSel('residency_duration','above_6',$app_data) ?>>6 months or more</option>
+                              </select>
+                          </div>
+                      </div>
+                      <div class="col-md-4">
+                          <div class="form-group">
+                              <label>Years of Living</label>
+                              <input type="number" class="form-control" name="years_of_living" placeholder="e.g. 10" value="<?= getVal('years_of_living',$app_data) ?>">
+                          </div>
+                      </div>
+                      <div class="col-md-4">
+                          <div class="form-group">
+                              <label>Residence Since</label>
+                              <input type="date" class="form-control" name="residence_since" value="<?= getVal('residence_since',$app_data) ?>">
+                          </div>
+                      </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="form-group">
+                                <label>Upload Valid ID</label>
+                                <div class="input-group">
+                                    <div class="input-group-prepend"><span class="input-group-text"><i class="fas fa-upload"></i></span></div>
+                                    <input type="file" class="form-control" name="valid_id_image" style="padding-top: 10px;">
+                                </div>
+                                 <?php if($is_editing && !empty($app_data['valid_id_path'])): ?>
+                                     <small class="text-success"><i class="fas fa-check mr-1"></i> Current file: <?= basename($app_data['valid_id_path']) ?></small>
+                                 <?php endif; ?>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="section-title"><i class="fas fa-baby"></i> Children (0-59 Months)</div>
@@ -578,8 +472,6 @@ function isSel($key, $val, $data){
     </div>
   </div>
 </div>
-
-
 
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>

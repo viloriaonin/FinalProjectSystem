@@ -8,7 +8,6 @@ try{
         $user_id = $_SESSION['user_id'];
         
         // 1. Fetch User Account Info
-        // PDO Update: Using named parameter :uid
         $sql_user = "SELECT * FROM `users` WHERE `user_id` = :uid ";
         $stmt_user = $pdo->prepare($sql_user);
         $stmt_user->execute(['uid' => $user_id]);
@@ -17,7 +16,6 @@ try{
         // Check if user exists to avoid errors
         if ($row_user) {
             $first_name_user = $row_user['username'];
-            
             $user_type = $row_user['user_type'];
         } else {
             // Handle edge case where user is logged in but row deleted
@@ -26,37 +24,45 @@ try{
         }
 
         // 2. Fetch Barangay Info
-        // PDO Update: query() is sufficient for no-parameter selects
         $sql = "SELECT * FROM `barangay_information`";
         $stmt_brgy = $pdo->query($sql);
-        
         $barangay = ''; 
         $image_logo = ''; 
      
 
-     
-
-        // 3. Fetch Application Status
+        // 3. CRITICAL FIX: Fetch Application Status Correctly
+        // Must fetch resident_id first, then check status
         $app_status = 'None';
-        // PDO Update: Prepare and Execute
-        $sql_app = "SELECT status FROM residence_applications WHERE resident_id = :uid ORDER BY id DESC LIMIT 1";
-        $stmt_app = $pdo->prepare($sql_app);
-        $stmt_app->execute(['uid' => $user_id]);
+        
+        $sql_res = "SELECT resident_id FROM residence_information WHERE user_id = :uid LIMIT 1";
+        $stmt_res = $pdo->prepare($sql_res);
+        $stmt_res->execute(['uid' => $user_id]);
+        $res_row = $stmt_res->fetch(PDO::FETCH_ASSOC);
+
+        if ($res_row) {
+            $resident_id = $res_row['resident_id'];
+
+            // Now check status using resident_id
+            $sql_app = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
+            $stmt_app = $pdo->prepare($sql_app);
+            $stmt_app->execute(['rid' => $resident_id]);
+            
+            if($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)){
+                $app_status = $row_app['status'];
+            }
+        }
         
         $is_verified = false;
         $badge_class = 'badge-danger';
         $status_text = 'Not Verified';
 
-        if($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)){
-            $app_status = $row_app['status'];
-            if($app_status == 'Approved' || $app_status == 'Verified'){
-                $is_verified = true;
-                $badge_class = 'badge-success';
-                $status_text = 'Verified';
-            } elseif ($app_status == 'Pending') {
-                $badge_class = 'badge-warning';
-                $status_text = 'Pending';
-            }
+        if($app_status == 'Approved' || $app_status == 'Verified'){
+            $is_verified = true;
+            $badge_class = 'badge-success';
+            $status_text = 'Verified';
+        } elseif ($app_status == 'Pending') {
+            $badge_class = 'badge-warning';
+            $status_text = 'Pending';
         }
 
     }else{
@@ -110,14 +116,14 @@ try{
         padding-bottom: 60px;
     }
     
-    /* 2. Welcome Card - Adjusted Margins to Remove Top Space */
+    /* 2. Welcome Card */
     .welcome-card {
         background-color: var(--card-bg);
         border: 1px solid var(--border-color);
         border-radius: 12px;
-        padding: 20px 25px; /* Reduced top/bottom padding slightly */
+        padding: 20px 25px; 
         text-align: left;
-        margin: 0 0 25px 0; /* Removed TOP margin */
+        margin: 0 0 25px 0; 
         width: 100%;
         box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         position: relative;
@@ -138,7 +144,7 @@ try{
         color: #ffffff; margin: 0;
     }
     .welcome-card h1 span { color: #58a6ff; }
-    .logo-img { position: relative; z-index: 1; height: 50px; filter: drop-shadow(0 0 10px rgba(255,255,255,0.1)); } /* Smaller logo */
+    .logo-img { position: relative; z-index: 1; height: 50px; filter: drop-shadow(0 0 10px rgba(255,255,255,0.1)); } 
     .welcome-card p { color: var(--text-secondary); margin-bottom: 15px; margin-top: 2px; font-size: 0.85rem;}
 
     /* 3. Quick Actions Grid */
@@ -350,14 +356,15 @@ try{
                         
                         <div class="col-md-3 text-center">
                             <?php
+                                // Note: In a real scenario, this should also fetch from residence_information if available
                                 $img_src = (!empty($row_user['image_path'])) ? $row_user['image_path'] : '../assets/dist/img/default-user.jpg';
                             ?>
                             <img src="<?= $img_src ?>" alt="Profile" class="profile-avatar">
                             
                             <h2 class="profile-name">
-                                <?= htmlspecialchars($first_name_user . ' ' .$user_type) ?>
+                                <?= htmlspecialchars($first_name_user) ?>
                             </h2>
-                            <div class="profile-role">Resident ID: <span style="font-family: monospace;"><?= htmlspecialchars($user_id) ?></span></div>
+                            <div class="profile-role">Resident ID: <span style="font-family: monospace;"><?= isset($resident_id) ? $resident_id : 'N/A' ?></span></div>
 
                             <div class="profile-status-badge <?= $badge_class ?> mt-2">
                                 <?php if($is_verified): ?>
@@ -413,8 +420,6 @@ try{
         </div>
         </div>
     </div>
-
-
 
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
