@@ -1,92 +1,103 @@
-<?php 
+<?php
+// userTableAdministrator.php
 
-include_once '../connection.php';
+// 1. Setup clean output environment
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ob_start();
 
+include_once '../db_connection.php';
+header('Content-Type: application/json');
 
-try{
+try {
+    // 2. Define Columns (4 Columns: ID, Username, Email, Action)
+    $columns = array( 
+        0 => 'user_id', 
+        1 => 'username', 
+        2 => 'email_address', 
+        3 => 'user_id' 
+    );
 
+    // 3. Query
+    $sql = "SELECT user_id, username, email_address FROM users WHERE user_type = 'admin' ";
+    $count_sql = "SELECT count(*) FROM users WHERE user_type = 'admin' ";
+    $params = [];
 
-
-
-  
-  $sql = "SELECT * FROM users WHERE user_type != 'resident' AND user_type !='admin'";
-  if($_REQUEST['search']['value']){
-    $sql .= " AND (first_name LIKE '%" .$_REQUEST['search']['value']. "%' ";
-    $sql .= " OR last_name LIKE '%" .$_REQUEST['search']['value']. "%' ";
-    $sql .= " OR username LIKE '%" .$_REQUEST['search']['value']. "%' ";
-    $sql .= " OR password LIKE '%" .$_REQUEST['search']['value']. "%' )";
-  }
-
-  $query = $con->query($sql) or die ($con->error);
-  $totalData = $query->num_rows;
-
-
-  if(isset($_REQUEST['order'])){
-    $sql .= ' ORDER BY '.
-    $_REQUEST['order']['0']['column'].
-    ' '.
-    $_REQUEST['order']['0']['dir'].
-    ' ';
-  }else{
-    $sql .= ' ORDER BY username DESC ';
-  }
-
-
-  if($_REQUEST['length'] != -1){
-    $sql .= ' LIMIT '.
-    $_REQUEST['start'].
-    ' ,'.
-    $_REQUEST['length'].
-    ' ';
-  }
-
-  $query = $con->query($sql) or die ($con->error);
-  $data = [];
-
-  while($row = $query->fetch_assoc()){
-
-    if($row['image'] != '' || $row['image'] != null || !empty($row['image'])){
-      $image = '<span style="cursor: pointer;" class="pop"><img src="'.$row['image_path'].'" alt="residence_image" class="img-circle" width="40"></span>';
-    }else{
-      $image = '<span style="cursor: pointer;" class="pop"><img src="../assets/dist/img/image.png" alt="residence_image" class="img-circle"  width="40"></span>';
+    // Search Logic
+    if(isset($_POST['search']['value']) && $_POST['search']['value'] != ''){
+        $search_val = "%" . $_POST['search']['value'] . "%";
+        $sql .= " AND (user_id LIKE ? OR username LIKE ? OR email_address LIKE ?) ";
+        $count_sql .= " AND (user_id LIKE ? OR username LIKE ? OR email_address LIKE ?) ";
+        $params = [$search_val, $search_val, $search_val];
     }
 
-    if($row['middle_name'] != ''){
-      $middle_name = $row['middle_name'][0].'.' .' ';
-    }else{
-      $middle_name = '';
+    // Order Logic
+    if(isset($_POST['order'])) {
+        $colIndex = $_POST['order'][0]['column'];
+        $colName = $columns[$colIndex] ?? 'user_id';
+        $dir = $_POST['order'][0]['dir'];
+        $sql .= " ORDER BY $colName $dir ";
+    } else {
+        $sql .= " ORDER BY user_id DESC ";
     }
 
-    
-    
-    $subdata = [];
-    $subdata[] = $image;
-    $subdata[] = $row['first_name'] .' '. $middle_name . $row['last_name'];
-    $subdata[] = $row['username'];
-    $subdata[] = $row['password'];
-    $subdata[] = '<i style="cursor: pointer;  color: yellow;  text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fa fa-user-edit text-lg px-3 viewUserAdministrator" id="'.$row['id'].'"></i>
-    <i style="cursor: pointer;  color: red;  text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fa fa-times text-lg px-3 deleteUserAdministrator" id="'.$row['id'].'"></i>';
-    $data[] = $subdata;
-    
-  }
+    // Pagination Logic
+    if(isset($_POST['length']) && $_POST['length'] != -1) {
+        $sql .= " LIMIT " . intval($_POST['start']) . ", " . intval($_POST['length']);
+    }
 
-  
-$json_data = [
-  'draw' => intval($_REQUEST['draw']),
-  'recordsTotal' => intval($totalData),
-  'recordsFiltered' => intval($totalData),
-  'data' => $data,
-  'total' => number_format($totalData),
-];
+    // Execute
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-echo json_encode($json_data);
+    // 4. Format Data
+    $data = [];
+    foreach($result as $row) {
+        $subdata = [];
+        
+        // Col 0: User ID
+        $subdata[] = $row['user_id'];
 
+        // Col 1: Username
+        $subdata[] = htmlspecialchars($row['username']);
+        
+        // Col 2: Email
+        $subdata[] = htmlspecialchars($row['email_address'] ?? 'N/A');
 
-}catch(Exception $e){
-  echo $e->getMessage();
+        // Col 3: Action (The Delete Button)
+        // We added the word "DELETE" to make sure it shows up even if icons fail
+        $btn = '<div class="text-center">
+                    <button class="btn btn-danger btn-sm deleteUserAdministrator" id="'.$row['user_id'].'">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>';
+        
+        $subdata[] = $btn;
+
+        $data[] = $subdata;
+    }
+
+    // Counts
+    $total_stmt = $pdo->query("SELECT COUNT(*) FROM users WHERE user_type = 'admin'");
+    $total_all = $total_stmt->fetchColumn();
+
+    $filter_stmt = $pdo->prepare($count_sql);
+    $filter_stmt->execute($params);
+    $total_filter = $filter_stmt->fetchColumn();
+
+    // Output JSON
+    ob_clean();
+    echo json_encode([
+        "draw" => intval($_POST['draw']),
+        "recordsTotal" => intval($total_all),
+        "recordsFiltered" => intval($total_filter),
+        "data" => $data,
+        "total" => number_format($total_all)
+    ]);
+
+} catch (Exception $e) {
+    ob_clean();
+    echo json_encode(["error" => "Server Error: " . $e->getMessage()]);
 }
-
-
-
-
 ?>

@@ -1,36 +1,52 @@
-
 <?php 
 
-include_once '../connection.php';
+// Ensure this file establishes a PDO connection named $pdo
+include_once '../db_connection.php'; 
 session_start();
 
-try{
-  if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin'){
+try {
+    // Check if user is logged in and is an admin
+    if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin'){
 
-    $user_id = $_SESSION['user_id'];
-    $sql_user = "SELECT * FROM `users` WHERE `id` = ? ";
-    $stmt_user = $con->prepare($sql_user) or die ($con->error);
-    $stmt_user->bind_param('s',$user_id);
-    $stmt_user->execute();
-    $result_user = $stmt_user->get_result();
-    $row_user = $result_user->fetch_assoc();
-    $first_name_user = $row_user['username'] ?? '';
-    $last_name_user = $row_user['password'] ?? '';
-    $user_type = $row_user['user_type'] ?? '';
+        $user_id = $_SESSION['user_id'];
 
-  
-  }else{
-   echo '<script>
-          window.location.href = "../login.php";
-        </script>';
-  }
+        // PDO: Prepare the statement
+        $sql_user = "SELECT * FROM `users` WHERE `user_id` = ?";
+        $stmt_user = $pdo->prepare($sql_user);
+        
+        // PDO: Execute passing parameters in an array
+        $stmt_user->execute([$user_id]);
+        
+        // PDO: Fetch the row as an associative array
+        $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC);
 
-}catch(Exception $e){
-  echo $e->getMessage();
+        // Check if data exists before accessing to avoid warnings
+        if ($row_user) {
+            $first_name_user = $row_user['username'] ?? '';
+            $last_name_user  = $row_user['password'] ?? '';
+            $user_type       = $row_user['user_type'] ?? '';
+        } else {
+            // Handle case where user ID is in session but not in DB (optional safety)
+            $first_name_user = '';
+            $last_name_user = '';
+            $user_type = '';
+        }
+
+    } else {
+        // Redirect if not admin
+        echo '<script>
+                window.location.href = "../login.php";
+              </script>';
+        exit(); // Good practice to stop execution after redirect
+    }
+
+} catch(PDOException $e) {
+    // Catch PDO specific errors
+    echo "Database Error: " . $e->getMessage();
+} catch(Exception $e) {
+    // Catch general errors
+    echo "Error: " . $e->getMessage();
 }
-
-
-
 
 ?>
 
@@ -42,17 +58,13 @@ try{
   <title></title>
 
  
-  <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="../assets/plugins/fontawesome-free/css/all.min.css">
-  <!-- overlayScrollbars -->
   <link rel="stylesheet" href="../assets/plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
-  <!-- Theme style -->
   <link rel="stylesheet" href="../assets/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="../assets/plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
   <link rel="stylesheet" href="../assets/plugins/sweetalert2/css/sweetalert2.min.css">
-  <!-- Tempusdominus Bbootstrap 4 -->
   <link rel="stylesheet" href="../assets/plugins/tempusdominus-bootstrap-4/css/tempusdominus-bootstrap-4.min.css">
   <link rel="stylesheet" href="../assets/plugins/select2/css/select2.min.css">
   <link rel="stylesheet" href="../assets/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
@@ -181,26 +193,17 @@ try{
 <?php include_once 'adminSidebar.php'; ?>
 
 
-  <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper">
-    <!-- Content Header (Page header) -->
     <div class="content-header">
       <div class="container-fluid">
         <div class="row mb-2">
           <div class="col-sm-6">
             
-          </div><!-- /.col -->
-          <div class="col-sm-6">
+          </div><div class="col-sm-6">
             <ol class="breadcrumb float-sm-right">
               
             </ol>
-          </div><!-- /.col -->
-        </div><!-- /.row -->
-      </div><!-- /.container-fluid -->
-    </div>
-    <!-- /.content-header -->
-
-    <!-- Main content -->
+          </div></div></div></div>
     <section class="content">
       <div class="container-fluid">
 
@@ -212,7 +215,7 @@ try{
           <div class="card ">
                 <div class="card-header">
                     <div class="card-title">
-                     <span style="font-weight: 600">SYSTEM LOGS   </span>
+                      <span style="font-weight: 600">SYSTEM LOGS   </span>
              
                     </div>
                 
@@ -239,15 +242,8 @@ try{
       
      
           
-      </div><!--/. container-fluid -->
-    </section>
-    <!-- /.content -->
-  </div>
-  <!-- /.content-wrapper -->
-
- 
-
-  <!-- Main Footer -->
+      </div></section>
+    </div>
   <footer class="main-footer">
     <strong>Copyright &copy; <?php echo date("Y"); ?> - <?php echo date('Y', strtotime('+1 year'));  ?> </strong>
     
@@ -255,16 +251,9 @@ try{
     </div>
   </footer>
 </div>
-<!-- ./wrapper -->
-
-<!-- REQUIRED SCRIPTS -->
-<!-- jQuery -->
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
-<!-- Bootstrap -->
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
-<!-- overlayScrollbars -->
 <script src="../assets/plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js"></script>
-<!-- AdminLTE App -->
 <script src="../assets/dist/js/adminlte.js"></script>
 <script src="../assets/plugins/datatables/jquery.dataTables.min.js"></script>
 <script src="../assets/plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>
@@ -322,6 +311,3 @@ try{
 
 </body>
 </html>
-
-
-              

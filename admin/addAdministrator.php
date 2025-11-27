@@ -1,85 +1,68 @@
-<?php 
+<?php
+// addAdministrator.php
+include_once '../db_connection.php';
+session_start();
 
-include_once '../connection.php';
+if(!isset($_SESSION['user_id'])) { echo "Error: No Session ID"; exit; }
 
+$current_admin_id = $_SESSION['user_id'];
+$input_otp = trim($_POST['otp_input'] ?? ''); // Trim removes accidental spaces
 
+// 1. FIRST CHECK: Does the user exist and what is their current OTP status?
+// We fetch the values to see them with our own eyes.
+$debug_sql = "SELECT otp, otp_expires_at, NOW() as server_time FROM users WHERE user_id = ?";
+$debug_stmt = $pdo->prepare($debug_sql);
+$debug_stmt->execute([$current_admin_id]);
+$row = $debug_stmt->fetch(PDO::FETCH_ASSOC);
 
-
-try{
-
-
-  $first_name = $con->real_escape_string($_POST['first_name']);
-  $middle_name = $con->real_escape_string($_POST['middle_name']);
-  $last_name = $con->real_escape_string($_POST['last_name']);
-  $username = $con->real_escape_string($_POST['username']);
-  $password = $con->real_escape_string($_POST['password']);
-  $contact_number = $con->real_escape_string($_POST['contact_number']);
-  $image = $con->real_escape_string($_FILES['image']['name']);
-
-  date_default_timezone_set('Asia/Manila');
-  $date = new DateTime();
-  $uniqid = hexdec(uniqid()).$date->format("mdYHisv");
-  $id = $uniqid;
-
-  $user_type = 'secretary';
-
-
-  if(isset($image)){
-    if($image != '' || $image != null || !empty($image)){
-      $type = explode('.',$image);
-      $type = $type[count($type) -1];
-      $new_image_name = uniqid(rand()) .'.'. $type;
-      $new_image_path = '../assets/dist/img/' . $new_image_name;
-      move_uploaded_file($_FILES['image']['tmp_name'],$new_image_path);
-    }else{
-      $new_image_name = '';
-      $new_image_path = '';
-    }
-  }
-
-  $sql_check_username = "SELECT username FROM users WHERE username = ?";
-  $stmt_check_username = $con->prepare($sql_check_username) or die ($con->error);
-  $stmt_check_username->bind_param('s',$username);
-  $stmt_check_username->execute();
-  $stmt_check_username->store_result();
-  $count_check = $stmt_check_username->num_rows;
-  if($count_check > 0){
-    exit('error');
-  }
-
-
-  $sql = "INSERT INTO `users` (`id`,`first_name`,`middle_name`,`last_name`,`username`,`password`,`user_type`,`contact_number`,`image`,`image_path`)VALUES(?,?,?,?,?,?,?,?,?,?)";
-  $stmt = $con->prepare($sql) or die ($con->error);
-  $stmt->bind_param('ssssssssss',
-    $id,
-    $first_name,
-    $middle_name,
-    $last_name,
-    $username,
-    $password,
-    $user_type,
-    $contact_number,
-    $new_image_name,
-    $new_image_path
-  );
-  $stmt->execute();
-  $stmt->close();
-
-  $date_activity = $now = date("j-n-Y g:i A");  
-  $admin = strtoupper('ADMIN').':' .' '. 'ADDED ADMINISTRATOR  - '.' ' .$id.' | ' . $first_name .' '. $last_name;
-  $status_activity_log = 'delete';
-  $sql_activity_log = "INSERT INTO activity_log (`message`,`date`,`status`)VALUES(?,?,?)";
-  $stmt_activity_log = $con->prepare($sql_activity_log) or die ($con->error);
-  $stmt_activity_log->bind_param('sss',$admin,$date_activity,$status_activity_log);
-  $stmt_activity_log->execute();
-  $stmt_activity_log->close();
-
-
-}catch(Exception $e){
-  echo $e->getMessage();
+if(!$row){
+    echo "Error: Admin User not found in DB.";
+    exit;
 }
 
+$db_otp = $row['otp'];
+$db_expiry = $row['otp_expires_at'];
+$server_time = $row['server_time'];
 
+// 2. COMPARE MANUALLY
+if ($db_otp !== $input_otp) {
+    // Case A: The numbers don't match
+    echo "Error: Mismatch. Input: '$input_otp' | DB says: '$db_otp'";
+    exit;
+}
 
+if ($db_expiry < $server_time) {
+    // Case B: The numbers match, but time is up
+    echo "Error: Expired. Expiry: $db_expiry | Server Time: $server_time";
+    exit;
+}
 
+// 3. IF WE PASS THOSE CHECKS -> PROCEED TO ADD
+try {
+    // Check Username Unique
+    $check = $pdo->prepare("SELECT user_id FROM users WHERE username = ?");
+    $check->execute([$_POST['username']]);
+    if($check->rowCount() > 0){
+        echo "username_taken";
+        exit;
+    }
+
+    // Insert
+    $sql = "INSERT INTO users (username, password, email_address, user_type) VALUES (?, ?, ?, 'admin')";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        $_POST['username'],
+        $_POST['password'], 
+        $_POST['email']
+    ]);
+    
+    // Clear OTP
+    $clear = $pdo->prepare("UPDATE users SET otp = NULL, otp_expires_at = NULL WHERE user_id = ?");
+    $clear->execute([$current_admin_id]);
+
+    echo "success";
+
+} catch (PDOException $e) {
+    echo "DB Error: " . $e->getMessage();
+}
 ?>
