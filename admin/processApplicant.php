@@ -124,13 +124,42 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
             
             $reason = $_POST['reason'];
 
-            // Update application status to Rejected with remarks
-            // IMPORTANT: Ensure the 'remarks' column exists in 'residence_applications'
-            $stmt = $pdo->prepare("UPDATE residence_applications SET status = 'Rejected', remarks = ? WHERE applicant_id = ?");
-            if($stmt->execute([$reason, $id])) {
+            // START TRANSACTION
+            $pdo->beginTransaction();
+
+            // 1. Fetch the specific data we want to archive
+            $stmt = $pdo->prepare("SELECT applicant_id, first_name, last_name, email_address, contact_number 
+                                   FROM residence_applications WHERE applicant_id = ?");
+            $stmt->execute([$id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($row) {
+                // 2. Insert into the Rejected Logs
+                $archiveSql = "INSERT INTO rejected_applications 
+                              (original_applicant_id, first_name, last_name, email_address, contact_number, rejection_reason) 
+                              VALUES (?, ?, ?, ?, ?, ?)";
+                
+                $archiveStmt = $pdo->prepare($archiveSql);
+                $archiveStmt->execute([
+                    $row['applicant_id'],
+                    $row['first_name'],
+                    $row['last_name'],
+                    $row['email_address'] ?? 'N/A',
+                    $row['contact_number'] ?? 'N/A',
+                    $reason // This is the input from your modal
+                ]);
+
+                // 3. Delete from the main active table
+                $delete = $pdo->prepare("DELETE FROM residence_applications WHERE applicant_id = ?");
+                $delete->execute([$id]);
+
+                // Commit the changes
+                $pdo->commit();
                 echo "success";
             } else {
-                echo "Failed to update rejection status.";
+                // If the applicant wasn't found, cancel everything
+                $pdo->rollBack();
+                echo "Applicant data not found.";
             }
         }
 

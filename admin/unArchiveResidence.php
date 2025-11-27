@@ -33,7 +33,7 @@ if (isset($_POST['resident_id'])) {
             
             // B. Check if this user_id exists in the main users table
             // Note: Adjust 'user_id' to 'id' if your users table primary key is named 'id'
-            $stmtCheckUser = $pdo->prepare("SELECT id FROM users WHERE id = :uid"); 
+            $stmtCheckUser = $pdo->prepare("SELECT user_id FROM users WHERE user_id = :uid"); 
             $stmtCheckUser->execute([':uid' => $uid]);
 
             if ($stmtCheckUser->rowCount() == 0) {

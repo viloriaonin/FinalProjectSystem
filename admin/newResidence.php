@@ -1,38 +1,49 @@
 <?php
-include_once '../db_connection.php'; // Ensure this file has $pdo defined
+include_once '../db_connection.php'; // Ensure this file creates a $pdo variable
 session_start();
 
 try {
     // 1. Check Session & User Type
     if (isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin') {
+        
         $user_id = $_SESSION['user_id'];
 
-        // 2. Fetch Current User Info (PDO)
+        // 2. Fetch Current User (Admin) Info using PDO
+        // We use 'id' assuming that is your primary key in the users table based on previous chats
         $sql_user = "SELECT * FROM `users` WHERE `user_id` = ?"; 
         $stmt_user = $pdo->prepare($sql_user);
         $stmt_user->execute([$user_id]);
-        $row_user = $stmt_user->fetch();
+        $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC);
 
-        if($row_user){
-            $username = $row_user['username'];
-        }
+        if ($row_user) {
+            // Define variables expected by adminSidebar.php
+            $first_name_user  = $row_user['username'];
+           
 
-        // 3. Fetch Barangay Info (PDO) - Kept your existing logic
-        $sql = "SELECT * FROM `barangay_information` LIMIT 1";
-        $stmt = $pdo->query($sql);
-        while ($row = $stmt->fetch()) {
-            // Variables handled here if needed
-        }
+        // // 3. Fetch Barangay Info using PDO
+        // $sql_brgy = "SELECT * FROM `barangay_information` LIMIT 1";
+        // $stmt_brgy = $pdo->prepare($sql_brgy);
+        // $stmt_brgy->execute();
+        // $row_brgy = $stmt_brgy->fetch(PDO::FETCH_ASSOC);
+
+        // if ($row_brgy) {
+        //     $barangay   = $row_brgy['barangay'];
+        //     $zone       = $row_brgy['zone'] ?? '';
+        //     $district   = $row_brgy['district'] ?? '';
+        //     $image      = $row_brgy['image'];
+        //     $image_path = $row_brgy['image_path'] ?? '';
+        // }
 
     } else {
+        // Redirect if not logged in or not admin
         echo '<script> window.location.href = "../login.php"; </script>';
-        exit();
+        exit(); 
     }
+}
 
 } catch (PDOException $e) {
     echo "Database Error: " . $e->getMessage();
-} catch (Exception $e) {
-    echo "Error: " . $e->getMessage();
+    exit();
 }
 ?>
 
@@ -390,7 +401,7 @@ try {
                                  <option value="No">No</option>
                                  <option value="Yes">Yes</option>
                              </select>
-                         </div>
+                          </div>
                     </div>
                  </div>
 
@@ -566,20 +577,34 @@ $(document).ready(function(){
                 processData: false,
                 contentType: false,
                 success: function(response) {
-                    if(response.indexOf('SUCCESS') >= 0) {
-                         Swal.fire({
-                            title: 'Success!',
-                            text: 'Resident added successfully.',
-                            type: 'success',
-                            timer: 2000,
-                            showConfirmButton: false
-                        }).then(() => {
-                            window.location.reload();
-                        });
-                    } else {
-                        Swal.fire('Error', response, 'error');
-                    }
-                },
+    if(response.indexOf('SUCCESS') >= 0) {
+        // Split the response to get credentials
+        var parts = response.split('|');
+        var username = parts[1];
+        var password = parts[2];
+
+        Swal.fire({
+            title: 'Resident Added!',
+            html: `
+                <div style="text-align:left; font-size:1.1em;">
+                    <p><b>Username:</b> ${username}</p>
+                    <p><b>Password:</b> ${password}</p>
+                    <p style="color:red; font-size:0.9em;">Please save these credentials now!</p>
+                </div>
+            `,
+            type: 'success',
+            confirmButtonText: 'I have copied it',
+            allowOutsideClick: false
+        }).then((result) => {
+            if (result.value) {
+                window.location.reload();
+            }
+        });
+
+    } else {
+        Swal.fire('Error', response, 'error');
+    }
+},
                 error: function() {
                     Swal.fire('Error', 'An error occurred during the request.', 'error');
                 }
