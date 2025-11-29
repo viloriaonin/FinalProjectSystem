@@ -62,284 +62,126 @@ try {
   <link rel="stylesheet" href="../assets/plugins/tempusdominus-bootstrap-4/css/tempusdominus-bootstrap-4.min.css">
   <link rel="stylesheet" href="../assets/plugins/select2/css/select2.min.css">
   <link rel="stylesheet" href="../assets/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
+  
+  
   <style>
-    .dataTables_wrapper .dataTables_paginate .page-link {
-      
-        border: none;
-    }
-    .dataTables_wrapper .dataTables_paginate .page-item .page-link{
-        color: #fff ;
-        border-color: transparent;
-        
-        
-      }
-   
-    .dataTables_wrapper .dataTables_paginate .page-item.active .page-link{
-        color: #fff ;
-        border: transparent;
-        background: none;
-        font-weight: bold;
-        background-color: #000;
-      }
-    .page-link:focus{
-   
-      outline:0;
-      -webkit-box-shadow:none;
-      box-shadow:none;
-   
+    /* =========================================
+       1. LIGHT MODE DEFAULTS (Base Styles)
+       ========================================= */
+
+    /* DataTables Info Text */
+    .dataTables_info {
+        font-size: 13px; margin-top: 8px; font-weight: 500;
+        color: #333; /* Dark Grey */
     }
 
-
-
-    .dataTables_length select{
-      border: 1px solid #fff;
-      border-top: none;
-      border-left: none;
-      border-right: none;
-      cursor: pointer;
-      color: #fff;
- 
-    }
-    .dataTables_length span{
-      color: #fff;
-      font-weight: 500; 
+    /* Table Layout */
+    .dataTables_scrollHeadInner, .table { 
+        table-layout: auto; width: 100% !important; 
     }
 
-    .last:after{
-      display:none;
-      width: 70px;
-      background-color: black;
-      color: #fff;
-      text-align: center;
-      border-radius: 6px;
-      padding: 5px 0;
-      position: absolute;
-      font-size: 10px;
-      z-index: 1;
-      margin-left: -20px;
-    }
-      .last:hover:after{
-          display: block;
-      }
-      .last:after{
-          content: "Last Page";
-      } 
-
-      .first:after{
-        display:none;
-        width: 70px;
-        background-color: black;
-        color: #fff;
-        text-align: center;
-        border-radius: 6px;
-        padding: 5px 0;
-        position: absolute;
-        font-size: 10px;
-        z-index: 1;
-        margin-left: -20px;
-    }
-      .first:hover:after{
-          display: block;
-      }
-      .first:after{
-          content: "First Page";
-      } 
-
-      .last:after{
-          content: "Last Page";
-      } 
-
-      .next:after{
-        display:none;
-        width: 70px;
-        background-color: black;
-        color: #fff;
-        text-align: center;
-        border-radius: 6px;
-        padding: 5px 0;
-        position: absolute;
-        font-size: 10px;
-        z-index: 1;
-        margin-left: -20px;
-    }
-      .next:hover:after{
-          display: block;
-      }
-      .next:after{
-          content: "Next Page";
-      } 
-
-      .previous:after{
-        display:none;
-        width: 80px;
-        background-color: black;
-        color: #fff;
-        text-align: center;
-        border-radius: 6px;
-        padding: 5px 5px;
-        position: absolute;
-        font-size: 10px;
-        z-index: 1;
-        margin-left: -20px;
-    }
-      .previous:hover:after{
-          display: block;
-      }
-      .previous:after{
-          content: "Previous Page";
-      } 
-      .dataTables_info{
-        font-size: 13px;
-        margin-top: 8px;
-        font-weight: 500;
-        color: #fff;
-      }
-      .dataTables_scrollHeadInner, .table{ 
-        table-layout: auto;
-       width: 100% !important; 
-      }
-
-      fieldset {
-        border: 3px solid black !important;
+    /* Fieldset Box */
+    fieldset {
+        border: 3px solid #333 !important; /* Softer border for light mode */
         padding: 0 1.4em 1.4em 1.4em !important;
         margin: 0 0 1.5em 0 !important;
-        -webkit-box-shadow:  0px 0px 0px 0px #000;
-                box-shadow:  0px 0px 0px 0px #000;
-      }
+        box-shadow: none;
+    }
+
+    /* Legend Title */
     legend {
-      font-size: 1.2em !important;
-      font-weight: bold !important;
-      color: #fff;
-      text-align: left !important;
-      width:auto;
-      padding:0 10px;
-      border-bottom:none;
-    }
-    .select2-container--default .select2-selection--single{
-      background-color: transparent;
-      height: 38px;
-      
-      
-    }
-    .select2-container--default .select2-selection--single .select2-selection__rendered{
-      color: #fff;
-      
+        font-size: 1.2em !important; font-weight: bold !important;
+        color: #333; /* Dark Grey */
+        text-align: left !important; width: auto; padding: 0 10px; border-bottom: none;
     }
 
-    .switch {
-      position: relative;
-      display: inline-block;
-      width: 75px;
-      height: 28px;
-    } 
+    /* Select2 Dropdown Text */
+    .select2-container--default .select2-selection--single {
+        background-color: transparent; height: 38px;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        color: #333; /* Dark Grey */
+    }
 
-.switch input {
-  display:none;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #ca2222;
-  -webkit-transition: .4s;
-  transition: .4s;
-  
-}
-
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 20px;
-  width: 20px;
-  left: 4px;
-  bottom: 4px;
-  background-color: #000;
-  -webkit-transition: .4s;
-  transition: .4s;
-
-}
-
-input:checked + .slider {
-  background-color: #2ab934;
-}
-
-input:focus + .slider {
-  box-shadow: 0 0 1px #2196F3;
-}
-
-input:checked + .slider:before {
-  -webkit-transform: translateX(46px);
-  -ms-transform: translateX(46px);
-  transform: translateX(46px);
-}
-
-/*------ ADDED CSS ---------*/
-.on
-{
-  display: none;
-  
-}
-.off{
-  color: white;
-  position: absolute;
-  transform: translate(-50%,-50%);
-  top: 50%;
-  left: 62%;
-  font-size: 8px;
-  font-family: Verdana, sans-serif;
-}
-
-.on{
-
-  color: white;
-  position: absolute;
-  transform: translate(-50%,-50%);
-  top: 50%;
-  left: 40%;
-  font-size: 8px;
-  font-family: Verdana, sans-serif;
-}
-
-  input:checked+ .slider .on{
-  display: block;
-  }
-
-input:checked + .slider .off{
-
-  display: none;
-}
-
-.slider.round {
-  border-radius: 34px;
-}
-.slider.round:before {
-  border-radius: 50%;
-}
+    /* DataTables Pagination */
+    .dataTables_wrapper .dataTables_paginate .page-link { border: none; color: #333; }
+    .dataTables_wrapper .dataTables_paginate .page-item .page-link { color: #333; border-color: transparent; }
     
-#allResidenceTable_filter{
-      display: none;
+    /* Active Page Button */
+    .dataTables_wrapper .dataTables_paginate .page-item.active .page-link {
+        color: #fff; border: transparent; background: none; font-weight: bold;
+        background-color: #333; /* Dark background for active button in Light Mode */
     }
-    .scrollbar::-webkit-scrollbar
-{
-    width: 6px;
-    background-color: #000000;
-}
- 
-.scrollbar::-webkit-scrollbar-thumb
-{
-   
-  --webkit-box-shadow: inset 0 0 6px #6c757d; 
-    background-color: #6c757d;
-}
-  </style>
+    .page-link:focus { outline: 0; box-shadow: none; }
+    
+    /* DataTables Length (Rows per page) */
+    .dataTables_length select {
+        border: 1px solid #ccc; cursor: pointer; color: #333; background-color: transparent;
+    }
+    .dataTables_length span { color: #333; font-weight: 500; }
+
+
+    /* =========================================
+       2. DARK MODE OVERRIDES
+       (Only applies when body has 'dark-mode')
+       ========================================= */
+       
+    body.dark-mode .dataTables_info { color: #fff; }
+    
+    body.dark-mode fieldset {
+        border: 3px solid black !important;
+        box-shadow: 0px 0px 0px 0px #000;
+    }
+    
+    body.dark-mode legend { color: #fff; }
+    
+    body.dark-mode .select2-container--default .select2-selection--single .select2-selection__rendered { color: #fff; }
+
+    /* Dark Mode Pagination/Controls */
+    body.dark-mode .dataTables_wrapper .dataTables_paginate .page-item .page-link { color: #fff; }
+    body.dark-mode .dataTables_wrapper .dataTables_paginate .page-item.active .page-link { background-color: #000; }
+    body.dark-mode .dataTables_length select { color: #fff; border: 1px solid #fff; }
+    body.dark-mode .dataTables_length span { color: #fff; }
+
+    /* Scrollbars */
+    .scrollbar::-webkit-scrollbar { width: 6px; background-color: #000000; }
+    .scrollbar::-webkit-scrollbar-thumb { --webkit-box-shadow: inset 0 0 6px #6c757d; background-color: #6c757d; }
+    
+    #allResidenceTable_filter { display: none; }
+
+    /* =========================================
+       3. CUSTOM SWITCHES 
+       ========================================= */
+    .switch { position: relative; display: inline-block; width: 75px; height: 28px; } 
+    .switch input { display:none; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ca2222; transition: .4s; }
+    .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: #000; transition: .4s; }
+    input:checked + .slider { background-color: #2ab934; }
+    input:focus + .slider { box-shadow: 0 0 1px #2196F3; }
+    input:checked + .slider:before { transform: translateX(46px); }
+    .on { display: none; }
+    .off { color: white; position: absolute; transform: translate(-50%,-50%); top: 50%; left: 62%; font-size: 8px; font-family: Verdana, sans-serif; }
+    .on { color: white; position: absolute; transform: translate(-50%,-50%); top: 50%; left: 40%; font-size: 8px; font-family: Verdana, sans-serif; }
+    input:checked+ .slider .on { display: block; }
+    input:checked + .slider .off { display: none; }
+    .slider.round { border-radius: 34px; }
+    .slider.round:before { border-radius: 50%; }
+    
+    #allResidenceTable_filter { display: none; }
+
+</style>
  
  
 </head>
 <body class="hold-transition dark-mode sidebar-mini   ">
+
+<script>
+  if(localStorage.getItem('theme_mode') === 'light'){
+      document.body.classList.remove('dark-mode');
+  } else {
+      document.body.classList.add('dark-mode');
+  }
+</script>
 
 <?php include_once 'adminSidebar.php'; ?>
 
@@ -355,7 +197,7 @@ input:checked + .slider .off{
     <div class="card">
       <div class="card-body">
           <fieldset>
-            <legend>NUMBER OF USERS RESIDENT <span id="total"></span></legend>
+            <legend>NUMBER OF USERS </legend>
               
             <div class="row">
                 <div class="col-sm-4">

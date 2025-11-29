@@ -4,6 +4,67 @@ include_once '../db_connection.php';
 
 session_start();
 
+// --- AJAX HANDLER FOR KPI FILTER (NEW) ---
+if (isset($_POST['action']) && $_POST['action'] == 'fetch_kpi_data') {
+    ob_clean();
+    header('Content-Type: application/json');
+
+    $year = $_POST['year'];
+    $month = $_POST['month']; // 'all' or '01', '02', etc.
+
+    // Helper function to build date condition
+    function buildQuery($pdo, $table, $dateCol, $statusCol, $statusValue, $year, $month) {
+        $sql = "SELECT COUNT(*) FROM $table WHERE 1=1";
+        $params = [];
+
+        // Add Status Condition (if not null)
+        if ($statusCol !== null && $statusValue !== null) {
+            $sql .= " AND $statusCol = :status";
+            $params[':status'] = $statusValue;
+        }
+
+        // Add Year Condition
+        $sql .= " AND YEAR($dateCol) = :year";
+        $params[':year'] = $year;
+
+        // Add Month Condition (Only if not 'all')
+        if ($month !== 'all') {
+            $sql .= " AND MONTH($dateCol) = :month";
+            $params[':month'] = $month;
+        }
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchColumn();
+    }
+
+    try {
+        // 1. Pending Residency
+        $pendingRes = buildQuery($pdo, 'residence_applications', 'created_at', 'status', 'Pending', $year, $month);
+
+        // 2. Pending Certificates
+        $pendingCert = buildQuery($pdo, 'certificate_requests', 'created_at', 'status', 'Pending', $year, $month);
+
+        // 3. Approved Certificates (Total Documents Created - using document_logs)
+        // Note: document_logs uses 'request_date' and has no status (it logs actions)
+        $approvedCert = buildQuery($pdo, 'document_logs', 'request_date', null, null, $year, $month);
+
+        // 4. Approved Residency
+        $approvedRes = buildQuery($pdo, 'residence_applications', 'created_at', 'status', 'Approved', $year, $month);
+
+        echo json_encode([
+            'pending_residency' => number_format($pendingRes),
+            'pending_certificates' => number_format($pendingCert),
+            'approved_certificates' => number_format($approvedCert),
+            'approved_residency' => number_format($approvedRes)
+        ]);
+
+    } catch (Exception $e) {
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 // --- AJAX HANDLER FOR CHART (Added for Analytics) ---
 if (isset($_POST['action']) && $_POST['action'] == 'fetch_chart_data') {
     // Clear buffer to ensure clean JSON output
@@ -61,9 +122,27 @@ try {
         $stmt_user->execute([':id' => $user_id]);
         $row_user = $stmt_user->fetch();
         
-        // 3. DASHBOARD COUNTERS (Using your exact columns)
+        // 3. DASHBOARD COUNTERS (Using your exact columns) 
+
+    // --- NEW KPI QUERIES ---
+
+    // 1. Pending Residency Requests
+    $stmt = $pdo->query("SELECT COUNT(*) FROM residence_applications WHERE status = 'Pending'");
+    $pending_residency = $stmt->fetchColumn();
+
+    // 2. Total Residency Approvals
+    $stmt = $pdo->query("SELECT COUNT(*) FROM residence_applications WHERE status = 'Approved'");
+    $approved_residency = $stmt->fetchColumn();
+
+    // 3. Pending Certificate Requests
+    $stmt = $pdo->query("SELECT COUNT(*) FROM certificate_requests WHERE status = 'Pending'");
+    $pending_certificates = $stmt->fetchColumn();
+
+    // 4. Total Certificate Approvals
+    $stmt = $pdo->query("SELECT COUNT(*) FROM document_logs");
+    $approved_certificates = $stmt->fetchColumn();
         
-        // Total Population
+        // Total Residents
         $stmt = $pdo->query("SELECT COUNT(*) FROM residence_information");
         $count_total_residence = $stmt->fetchColumn();
 
@@ -130,7 +209,7 @@ try {
       <div class="container-fluid">
         <div class="row mb-2">
           <div class="col-sm-6">
-             <h1 class="m-0">Dashboard</h1>
+            
           </div>
         </div>
       </div>
@@ -138,6 +217,107 @@ try {
 
     <section class="content">
       <div class="container-fluid">
+
+          <div class="row mb-3">
+              <div class="col-md-12">
+                  <div class="card">
+                      <div class="card-body py-2">
+                          <div class="form-row align-items-center">
+                              <div class="col-auto">
+                                  <strong><i class="fas fa-filter"></i> Filter KPIs:</strong>
+                              </div>
+                              <div class="col-auto">
+                                  <select id="kpiYear" class="form-control form-control-sm">
+                                      <?php 
+                                      $currentYear = date('Y');
+                                      for($y=$currentYear; $y>=2024; $y--) { 
+                                          echo "<option value='$y'>$y</option>";
+                                      } 
+                                      ?>
+                                  </select>
+                              </div>
+                              <div class="col-auto">
+                                  <select id="kpiMonth" class="form-control form-control-sm">
+                                      <option value="all">Whole Year</option>
+                                      <option value="01">January</option>
+                                      <option value="02">February</option>
+                                      <option value="03">March</option>
+                                      <option value="04">April</option>
+                                      <option value="05">May</option>
+                                      <option value="06">June</option>
+                                      <option value="07">July</option>
+                                      <option value="08">August</option>
+                                      <option value="09">September</option>
+                                      <option value="10">October</option>
+                                      <option value="11">November</option>
+                                      <option value="12">December</option>
+                                  </select>
+                              </div>
+                              <div class="col-auto">
+                                  <button onclick="updateKPIs()" class="btn btn-primary btn-sm">Apply</button>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
+
+          <div class="row">
+          
+            <div class="col-lg-3 col-6">
+              <div class="small-box bg-warning">
+                <div class="inner">
+                  <h3 id="kpi_pending_residency"><?= number_format($pending_residency) ?></h3>
+                  <p>Pending Residency Apps</p>
+                </div>
+                <div class="icon">
+                  <i class="fas fa-user-clock"></i>
+                </div>
+                <a href="residencyrequest.php" class="small-box-footer">View Requests <i class="fas fa-arrow-circle-right"></i></a>
+              </div>
+            </div>
+
+            <div class="col-lg-3 col-6">
+              <div class="small-box bg-orange">
+                <div class="inner">
+                  <h3 class="text-white" id="kpi_pending_certificates"><?= number_format($pending_certificates) ?></h3>
+                  <p class="text-white">Pending Document Requests</p>
+                </div>
+                <div class="icon">
+                  <i class="fas fa-file-contract"></i>
+                </div>
+                <a href="requestCertificate.php" class="small-box-footer" style="color: white !important;">Process Now <i class="fas fa-arrow-circle-right"></i></a>
+              </div>
+            </div>
+
+            <div class="col-lg-3 col-6">
+              <div class="small-box bg-success">
+                <div class="inner">
+                  <h3 id="kpi_approved_certificates"><?= number_format($approved_certificates) ?></h3>
+                  <p>Total Documents Created</p>
+                </div>
+                <div class="icon">
+                  <i class="fas fa-thumbs-up"></i>
+                </div>
+                <div class="small-box-footer">&nbsp;</div>
+              </div>
+            </div>
+
+            <div class="col-lg-3 col-6">
+              <div class="small-box bg-info">
+                <div class="inner">
+                  <h3 id="kpi_approved_residency"><?= number_format($approved_residency) ?></h3>
+                  <p>Total Residency Approved</p>
+                </div>
+                <div class="icon">
+                  <i class="fas fa-folder-open"></i>
+                </div>
+                <div class="small-box-footer">&nbsp;</div>
+              </div>
+            </div>
+
+          </div>
+
             <div class="row">
 
                 <!-- LEFT COLUMN (COUNTERS) -->
@@ -286,10 +466,21 @@ try {
 <script src="../assets/plugins/sweetalert2/js/sweetalert2.min.js"></script>
 
 <script>
+// --- HELPER: GET CURRENT THEME COLORS ---
+function getChartColors() {
+    // Check if body has 'dark-mode' class
+    var isDark = $('body').hasClass('dark-mode');
+    
+    return {
+        // If dark, use White text. If light, use Dark Grey text.
+        text: isDark ? '#fff' : '#333', 
+        // If dark, use light grid lines. If light, use dark grid lines.
+        grid: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+    };
+}
 
 // --- 1. DOCUMENTS ANALYTICS LOGIC ---
 $(function () {
-    // Load chart on page load
     loadChartData();
 });
 
@@ -300,7 +491,7 @@ function loadChartData() {
     var end = $('#end_date').val();
 
     $.ajax({
-        url: 'dashboard.php', // Points to itself
+        url: 'dashboard.php', 
         type: 'POST',
         data: {
             action: 'fetch_chart_data',
@@ -319,8 +510,9 @@ function loadChartData() {
 
 function renderChart(labels, data, colors) {
     var ctx = document.getElementById('documents-chart').getContext('2d');
+    var theme = getChartColors(); // Get correct colors
 
-    // Destroy previous chart if it exists (to prevent overlapping)
+    // Destroy previous chart if it exists
     if (myChart) {
         myChart.destroy();
     }
@@ -343,16 +535,16 @@ function renderChart(labels, data, colors) {
                 yAxes: [{
                     ticks: {
                         beginAtZero: true,
-                        stepSize: 1, // Ensure whole numbers
-                        fontColor: '#fff'
+                        stepSize: 1, 
+                        fontColor: theme.text // DYNAMIC COLOR
                     },
                     gridLines: {
                         display: true,
-                        color: 'rgba(255, 255, 255, 0.1)' 
+                        color: theme.grid // DYNAMIC COLOR
                     }
                 }],
                 xAxes: [{
-                    ticks: { fontColor: '#fff' },
+                    ticks: { fontColor: theme.text }, // DYNAMIC COLOR
                     gridLines: { display: false }
                 }]
             },
@@ -360,29 +552,79 @@ function renderChart(labels, data, colors) {
             title: {
                 display: true,
                 text: 'Generated Documents (' + $('#start_date').val() + ' to ' + $('#end_date').val() + ')',
-                fontColor: '#fff'
+                fontColor: theme.text // DYNAMIC COLOR
             }
         }
     });
 }
 
 // --- 2. GENDER CHART LOGIC ---
-new Chart("genderChart", {
-  type: "doughnut",
-  data: {
-    labels: ['Male', 'Female'],
-    datasets: [{
-      backgroundColor: ["#007bff", "#e83e8c"], 
-      data: [<?= $genderMale ?>, <?= $genderFemale ?>]
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    legend: { display: true, labels: { fontColor: '#fff' } }
-  }
-});
+// We wrap this in a function so we can call it if theme changes (optional)
+function initGenderChart() {
+    var theme = getChartColors(); // Get correct colors
+    
+    // Check if chart instance exists on the canvas and destroy it (if you made it global)
+    // For now, simple initialization:
+    new Chart("genderChart", {
+      type: "doughnut",
+      data: {
+        labels: ['Male', 'Female'],
+        datasets: [{
+          backgroundColor: ["#007bff", "#e83e8c"], 
+          data: [<?= $genderMale ?>, <?= $genderFemale ?>]
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        legend: { 
+            display: true, 
+            labels: { 
+                fontColor: theme.text // DYNAMIC COLOR
+            } 
+        }
+      }
+    });
+}
 
+// Run Gender Chart
+initGenderChart();
+
+
+// --- 3. KPI FILTER LOGIC ---
+function updateKPIs() {
+    var year = $('#kpiYear').val();
+    var month = $('#kpiMonth').val();
+
+    $('#kpi_pending_residency').text('...');
+    $('#kpi_pending_certificates').text('...');
+    $('#kpi_approved_certificates').text('...');
+    $('#kpi_approved_residency').text('...');
+
+    $.ajax({
+        url: 'dashboard.php',
+        type: 'POST',
+        data: {
+            action: 'fetch_kpi_data',
+            year: year,
+            month: month
+        },
+        dataType: 'json',
+        success: function(response) {
+            if(response.error) {
+                console.error(response.error);
+                return;
+            }
+            $('#kpi_pending_residency').text(response.pending_residency);
+            $('#kpi_pending_certificates').text(response.pending_certificates);
+            $('#kpi_approved_certificates').text(response.approved_certificates);
+            $('#kpi_approved_residency').text(response.approved_residency);
+        },
+        error: function(xhr, status, error) {
+            console.error("AJAX Error: " + error);
+        }
+    });
+}
 </script>
 
 </body>

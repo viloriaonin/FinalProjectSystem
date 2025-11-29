@@ -209,7 +209,14 @@ try {
                 </a>
               </li>
             </ul>
-
+          <li class="nav-item">
+            <a href="printSummary.php" class="nav-link">
+              <i class="nav-icon fas fa-print"></i>
+              <p>
+                Print Summary
+              </p>
+            </a>
+          </li>
           <li class="nav-item">
             <a href="settings.php" class="nav-link">
               <i class="nav-icon fas fa-cog"></i>
@@ -299,6 +306,17 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
 });
+
+    // Run this immediately on every page load
+    var savedTheme = localStorage.getItem('theme_mode');
+    if(savedTheme === 'light'){
+        document.body.classList.remove('dark-mode');
+    } else {
+        // Ensure dark mode is on if that's the preference (or default)
+        if (!document.body.classList.contains('dark-mode')) {
+            document.body.classList.add('dark-mode');
+        }
+    }
 </script>
 
 </html>

@@ -150,7 +150,15 @@ try {
                     <div class="form-group">
                      <button type="button" id="updateBtn" class="btn btn-success btn-block">UPDATE</button>
 
-
+                      <div class="col-sm-6">
+                      <div class="form-group">
+                        <label>System Theme</label>
+                        <select id="theme_mode" class="form-control">
+                          <option value="dark">Dark Mode</option>
+                          <option value="light">Light Mode</option>
+                        </select>
+                      </div>
+                    </div>
                     </div>
                   </div>
 
@@ -366,7 +374,37 @@ $(document).ready(function() {
   displayImage(this);
 });
 
-     
+// 1. Check LocalStorage on page load to set the Dropdown correctly
+    var savedTheme = localStorage.getItem('theme_mode');
+    
+    // Default to 'dark' if nothing is saved
+    if(savedTheme === 'light'){
+        $('#theme_mode').val('light');
+        $('body').removeClass('dark-mode');
+    } else {
+        $('#theme_mode').val('dark');
+        $('body').addClass('dark-mode');
+    }
+
+    // 2. When the user changes the dropdown
+    $("#theme_mode").change(function(){
+        var selectedTheme = $(this).val();
+        
+        if(selectedTheme === 'dark'){
+            $('body').addClass('dark-mode');
+            localStorage.setItem('theme_mode', 'dark'); // Save to browser
+        } else {
+            $('body').removeClass('dark-mode');
+            localStorage.setItem('theme_mode', 'light'); // Save to browser
+        }
+        
+        // Optional: Show a toast
+        const Toast = Swal.mixin({
+          toast: true, position: 'top-right', 
+          showConfirmButton: false, timer: 2000
+        });
+        Toast.fire({ type: 'success', title: 'Theme Saved Locally' });
+    });
 
 
 </script>

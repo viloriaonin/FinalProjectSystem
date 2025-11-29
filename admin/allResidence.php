@@ -70,158 +70,51 @@ try {
   <link rel="stylesheet" href="../assets/plugins/tempusdominus-bootstrap-4/css/tempusdominus-bootstrap-4.min.css">
   <link rel="stylesheet" href="../assets/plugins/select2/css/select2.min.css">
   <link rel="stylesheet" href="../assets/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
-  <style>
-    .dataTables_wrapper .dataTables_paginate .page-link {
-        border: none;
+  
+  
+ <style>
+    /* --- LIGHT MODE DEFAULTS --- */
+    .dataTables_wrapper .dataTables_paginate .page-link { border: none; color: #333; }
+    .dataTables_wrapper .dataTables_paginate .page-item .page-link { color: #333; border-color: transparent; }
+    .dataTables_wrapper .dataTables_paginate .page-item.active .page-link {
+        color: #fff; border: transparent; background: none; font-weight: bold; background-color: #333;
     }
-    .dataTables_wrapper .dataTables_paginate .page-item .page-link{
-        color: #fff ;
-        border-color: transparent;
-      }
-   
-    .dataTables_wrapper .dataTables_paginate .page-item.active .page-link{
-        color: #fff ;
-        border: transparent;
-        background: none;
-        font-weight: bold;
-        background-color: #000;
-      }
-    .page-link:focus{
-      outline:0;
-      -webkit-box-shadow:none;
-      box-shadow:none;
-    }
+    .page-link:focus { outline:0; box-shadow:none; }
 
-    .dataTables_length select{
-      border: 1px solid #fff;
-      border-top: none;
-      border-left: none;
-      border-right: none;
-      cursor: pointer;
-      color: #fff;
+    .dataTables_length select {
+        border: 1px solid #ccc; border-top: none; border-left: none; border-right: none;
+        cursor: pointer; color: #333;
     }
-    .dataTables_length span{
-      color: #fff;
-      font-weight: 500; 
-    }
+    .dataTables_length span { color: #333; font-weight: 500; }
+    .dataTables_info { font-size: 13px; margin-top: 8px; font-weight: 500; color: #333; }
 
-    .last:after{
-      display:none;
-      width: 70px;
-      background-color: black;
-      color: #fff;
-      text-align: center;
-      border-radius: 6px;
-      padding: 5px 0;
-      position: absolute;
-      font-size: 10px;
-      z-index: 1;
-      margin-left: -20px;
-    }
-      .last:hover:after{
-          display: block;
-      }
-      .last:after{
-          content: "Last Page";
-      } 
-
-      .first:after{
-        display:none;
-        width: 70px;
-        background-color: black;
-        color: #fff;
-        text-align: center;
-        border-radius: 6px;
-        padding: 5px 0;
-        position: absolute;
-        font-size: 10px;
-        z-index: 1;
-        margin-left: -20px;
-    }
-      .first:hover:after{
-          display: block;
-      }
-      .first:after{
-          content: "First Page";
-      } 
-
-      .last:after{
-          content: "Last Page";
-      } 
-
-      .next:after{
-        display:none;
-        width: 70px;
-        background-color: black;
-        color: #fff;
-        text-align: center;
-        border-radius: 6px;
-        padding: 5px 0;
-        position: absolute;
-        font-size: 10px;
-        z-index: 1;
-        margin-left: -20px;
-    }
-      .next:hover:after{
-          display: block;
-      }
-      .next:after{
-          content: "Next Page";
-      } 
-
-      .previous:after{
-        display:none;
-        width: 80px;
-        background-color: black;
-        color: #fff;
-        text-align: center;
-        border-radius: 6px;
-        padding: 5px 5px;
-        position: absolute;
-        font-size: 10px;
-        z-index: 1;
-        margin-left: -20px;
-    }
-      .previous:hover:after{
-          display: block;
-      }
-      .previous:after{
-          content: "Previous Page";
-      } 
-      .dataTables_info{
-        font-size: 13px;
-        margin-top: 8px;
-        font-weight: 500;
-        color: #fff;
-      }
-      .dataTables_scrollHeadInner, .table{ 
-        table-layout: auto;
-       width: 100% !important; 
-      }
-
-      fieldset {
-        border: 3px solid black !important;
+    fieldset {
+        border: 3px solid #333 !important;
         padding: 0 1.4em 1.4em 1.4em !important;
         margin: 0 0 1.5em 0 !important;
-        -webkit-box-shadow:  0px 0px 0px 0px #000;
-                box-shadow:  0px 0px 0px 0px #000;
-      }
+    }
     legend {
-      font-size: 1.2em !important;
-      font-weight: bold !important;
-      color: #fff;
-      text-align: left !important;
-      width:auto;
-      padding:0 10px;
-      border-bottom:none;
+        font-size: 1.2em !important; font-weight: bold !important; color: #333;
+        text-align: left !important; width:auto; padding:0 10px; border-bottom:none;
     }
-    .select2-container--default .select2-selection--single{
-      background-color: transparent;
-      height: 38px;
-    }
-    .select2-container--default .select2-selection--single .select2-selection__rendered{
-      color: #fff;
-    }
+    .select2-container--default .select2-selection--single .select2-selection__rendered { color: #333; }
+
+    /* --- DARK MODE OVERRIDES --- */
+    body.dark-mode .dataTables_wrapper .dataTables_paginate .page-item .page-link { color: #fff; }
+    body.dark-mode .dataTables_wrapper .dataTables_paginate .page-item.active .page-link { background-color: #000; }
+    body.dark-mode .dataTables_length select { color: #fff; border-color: #fff; }
+    body.dark-mode .dataTables_length span { color: #fff; }
+    body.dark-mode .dataTables_info { color: #fff; }
+    body.dark-mode fieldset { border: 3px solid black !important; box-shadow: 0px 0px 0px 0px #000; }
+    body.dark-mode legend { color: #fff; }
+    body.dark-mode .select2-container--default .select2-selection--single .select2-selection__rendered { color: #fff; }
+
+    /* Scrollbars */
+    .scrollbar::-webkit-scrollbar { width: 6px; background-color: #000000; }
+    .scrollbar::-webkit-scrollbar-thumb { --webkit-box-shadow: inset 0 0 6px #6c757d; background-color: #6c757d; }
+    
+    #allResidenceTable_filter { display: none; }
+    .dataTables_scrollHeadInner, .table { table-layout: auto; width: 100% !important; }
 
     .switch {
       position: relative;
@@ -326,6 +219,14 @@ try {
   </style>
 </head>
 <body class="hold-transition dark-mode sidebar-mini  ">
+
+<script>
+  if(localStorage.getItem('theme_mode') === 'light'){
+      document.body.classList.remove('dark-mode');
+  } else {
+      document.body.classList.add('dark-mode');
+  }
+</script>
 
 <?php include_once 'adminSidebar.php'; ?>
 

@@ -28,29 +28,37 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_type']) || $_SESSION[
   <link rel="stylesheet" href="../assets/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
 
   <style>
-    .dataTables_wrapper .dataTables_paginate .page-link { border: none; }
-    .dataTables_wrapper .dataTables_paginate .page-item .page-link{ color: #fff; border-color: transparent; }
-    .dataTables_wrapper .dataTables_paginate .page-item.active .page-link{
-        color: #fff; border: transparent; background: none; font-weight: bold; background-color: #000;
+    /* --- LIGHT MODE DEFAULTS --- */
+    .dataTables_wrapper .dataTables_paginate .page-link { border: none; color: #333; }
+    .dataTables_wrapper .dataTables_paginate .page-item .page-link { color: #333; border-color: transparent; }
+    .dataTables_wrapper .dataTables_paginate .page-item.active .page-link {
+        color: #fff; border: transparent; background: none; font-weight: bold; background-color: #333;
     }
-    .page-link:focus{ outline:0; box-shadow:none; }
-    .dataTables_length select{
-        border: 1px solid #fff; border-top: none; border-left: none; border-right: none;
-        cursor: pointer; color: #fff; background-color: transparent;
-    }
-    .dataTables_length span{ color: #fff; font-weight: 500; }
+    .page-link:focus { outline:0; box-shadow:none; }
     
-    /* Fieldset Styling */
+    .dataTables_length select {
+        border: 1px solid #ccc; border-top: none; border-left: none; border-right: none;
+        cursor: pointer; color: #333; background-color: transparent;
+    }
+    .dataTables_length span { color: #333; font-weight: 500; }
+    
     fieldset {
-        border: 3px solid black !important;
+        border: 3px solid #333 !important;
         padding: 0 1.4em 1.4em 1.4em !important;
         margin: 0 0 1.5em 0 !important;
-        box-shadow: 0px 0px 0px 0px #000;
     }
     legend {
-        font-size: 1.2em !important; font-weight: bold !important; color: #fff;
+        font-size: 1.2em !important; font-weight: bold !important; color: #333;
         text-align: left !important; width:auto; padding:0 10px; border-bottom:none;
     }
+
+    /* --- DARK MODE OVERRIDES --- */
+    body.dark-mode .dataTables_wrapper .dataTables_paginate .page-item .page-link { color: #fff; }
+    body.dark-mode .dataTables_wrapper .dataTables_paginate .page-item.active .page-link { background-color: #000; }
+    body.dark-mode .dataTables_length select { color: #fff; border-color: #fff; }
+    body.dark-mode .dataTables_length span { color: #fff; }
+    body.dark-mode fieldset { border: 3px solid black !important; box-shadow: 0px 0px 0px 0px #000; }
+    body.dark-mode legend { color: #fff; }
 
     /* Scrollbar */
     .scrollbar::-webkit-scrollbar { width: 6px; background-color: #000000; }
@@ -59,6 +67,14 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_type']) || $_SESSION[
 </head>
 
 <body class="hold-transition dark-mode sidebar-mini">
+
+<script>
+  if(localStorage.getItem('theme_mode') === 'light'){
+      document.body.classList.remove('dark-mode');
+  } else {
+      document.body.classList.add('dark-mode');
+  }
+</script>
 
 <?php include_once 'adminSidebar.php'; ?>
 
@@ -110,9 +126,10 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_type']) || $_SESSION[
                 </thead>
                 <tbody>
   <?php
-  // Query residence_applications table
-  $sql = "SELECT * FROM residence_applications"; 
-  $stmt = $pdo->query($sql);
+  // Query only PENDING applications (Hidden 'Approved' ones remain in DB for analytics)
+  $sql = "SELECT * FROM residence_applications WHERE status = 'Pending'";
+  $stmt = $pdo->prepare($sql);
+  $stmt->execute();
 
   if ($stmt && $stmt->rowCount() > 0) {
       while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {

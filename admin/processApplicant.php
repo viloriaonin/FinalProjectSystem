@@ -104,10 +104,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                     ':imgpath'  => $data['valid_id_path'] ?? '' 
                 ]);
 
-                // 3. Delete from Applications Table
-                $delete = $pdo->prepare("DELETE FROM residence_applications WHERE applicant_id = ?");
-                $delete->execute([$id]);
-
+               // 3. Update Status
+                $update = $pdo->prepare("UPDATE residence_applications SET status = 'Approved' WHERE applicant_id = ?");
+                $update->execute([$id]);
                 // COMMIT THE TRANSACTION
                 $pdo->commit();
 

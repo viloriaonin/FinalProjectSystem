@@ -3,14 +3,19 @@
 include_once '../db_connection.php'; 
 
 // Check if the ID was sent via POST
-if(isset($_POST['residence_id'])){ // JS sends 'residence_id' as the key
+if(isset($_POST['residence_id'])){ 
     $id = $_POST['residence_id'];
 
     try {
-        // Fetch all details for this ID using correct PK: resident_id
+        // 1. Fetch Resident Personal Information
         $stmt = $pdo->prepare("SELECT * FROM residence_information WHERE resident_id = ?");
         $stmt->execute([$id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        // 2. Fetch Certificate Requests History (NEW QUERY)
+        $stmt_requests = $pdo->prepare("SELECT * FROM certificate_requests WHERE resident_id = ? ORDER BY created_at DESC");
+        $stmt_requests->execute([$id]);
+        $request_history = $stmt_requests->fetchAll(PDO::FETCH_ASSOC);
 
         if($row){
             // Check for image
@@ -67,10 +72,12 @@ if(isset($_POST['residence_id'])){ // JS sends 'residence_id' as the key
                                                 <li class="nav-item"><a class="nav-link active" href="#details" data-toggle="tab">Personal Details</a></li>
                                                 <li class="nav-item"><a class="nav-link" href="#family" data-toggle="tab">Family & Address</a></li>
                                                 <li class="nav-item"><a class="nav-link" href="#other" data-toggle="tab">Other Info</a></li>
+                                                <li class="nav-item"><a class="nav-link" href="#history" data-toggle="tab">Request History</a></li>
                                             </ul>
                                         </div>
                                         <div class="card-body">
                                             <div class="tab-content">
+                                                
                                                 <div class="active tab-pane" id="details">
                                                     <div class="row">
                                                         <div class="col-md-4"><strong>Birth Date:</strong> <br> <?= $bdate ?></div>
@@ -108,7 +115,53 @@ if(isset($_POST['residence_id'])){ // JS sends 'residence_id' as the key
                                                         <div class="col-md-4"><strong>Email:</strong> <br> <?= $row['email_address'] ?></div>
                                                     </div>
                                                 </div>
-                                            </div>
+
+                                                <div class="tab-pane" id="history">
+                                                    <div class="table-responsive">
+                                                        <table class="table table-bordered table-striped table-sm">
+                                                            <thead class="bg-light">
+                                                                <tr>
+                                                                    <th>Date Requested</th>
+                                                                    <th>Request Code</th>
+                                                                    <th>Document Type</th>
+                                                                    <th>Purpose</th>
+                                                                    <th>Status</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <?php if (count($request_history) > 0): ?>
+                                                                    <?php foreach($request_history as $hist): ?>
+                                                                        <?php 
+                                                                            // Badge Logic
+                                                                            $status_badge = 'secondary';
+                                                                            if($hist['status'] == 'Approved') $status_badge = 'success';
+                                                                            if($hist['status'] == 'Pending') $status_badge = 'warning';
+                                                                            if($hist['status'] == 'Rejected') $status_badge = 'danger';
+                                                                        ?>
+                                                                        <tr>
+                                                                            <td><?= date('M d, Y', strtotime($hist['created_at'])) ?></td>
+                                                                            <td><code><?= $hist['request_code'] ?></code></td>
+                                                                            <td><?= $hist['type'] ?></td>
+                                                                            <td><?= $hist['purpose'] ?></td>
+                                                                            <td class="text-center">
+                                                                                <span class="badge badge-<?= $status_badge ?>">
+                                                                                    <?= $hist['status'] ?>
+                                                                                </span>
+                                                                            </td>
+                                                                        </tr>
+                                                                    <?php endforeach; ?>
+                                                                <?php else: ?>
+                                                                    <tr>
+                                                                        <td colspan="5" class="text-center text-muted">
+                                                                            <i class="fas fa-folder-open"></i> No certificate requests found.
+                                                                        </td>
+                                                                    </tr>
+                                                                <?php endif; ?>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                                </div>
                                         </div>
                                     </div>
                                 </div>
