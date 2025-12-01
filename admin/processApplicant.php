@@ -1,7 +1,6 @@
 <?php
 // admin/processApplicant.php
 
-// Enable error reporting for debugging
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
@@ -26,13 +25,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
     $action = $_POST['action'];
     $id = $_POST['applicant_id'];
 
-    // Start logging
-    file_put_contents("debug_process.log", date('Y-m-d H:i:s') . " - Action: $action for ID: $id\n", FILE_APPEND);
-
     try {
         if ($action == 'approve') {
             
-            // START TRANSACTION (Crucial for data integrity)
             $pdo->beginTransaction();
 
             // 1. Fetch Applicant Data
@@ -41,39 +36,42 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
             $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($data) {
-                // CALCULATE AGE automatically if missing
+                // Get the existing Resident ID linked to this application
+                $resident_id = $data['resident_id']; 
+                
+                // Calculate Age
                 $age = !empty($data['age']) ? $data['age'] : calculateAge($data['birth_date']);
 
-                // 2. Insert into Residence Information Table
-                // Ensure column names match your actual database structure
-                $sqlInsert = "INSERT INTO residence_information (
-                    first_name, middle_name, last_name, suffix, age,
-                    gender, civil_status, religion, nationality, 
-                    contact_number, email_address,
-                    birth_date, birth_place, 
-                    house_number, purok, 
-                    fathers_name, mothers_name, 
-                    guardian, guardian_contact, 
-                    occupation, bloodtype, 
-                    images, image_path
-                    
-                ) VALUES (
-                    :fname, :mname, :lname, :suffix, :age,
-                    :gender, :civil, :rel, :nat,
-                    :contact, :email,
-                    :bdate, :bplace,
-                    :house, :purok,
-                    :father, :mother,
-                    :guardian, :gcontact,
-                    :occu, :blood,
-                    :images, :imgpath
-                    
-                )";
+                // 2. UPDATE the Existing Resident Information
+                // We use UPDATE instead of INSERT to preserve the user_id link
+                $sqlUpdate = "UPDATE residence_information SET 
+                    first_name = :fname, 
+                    middle_name = :mname, 
+                    last_name = :lname, 
+                    suffix = :suffix, 
+                    age = :age,
+                    gender = :gender, 
+                    civil_status = :civil, 
+                    religion = :rel, 
+                    nationality = :nat, 
+                    contact_number = :contact, 
+                    email_address = :email,
+                    birth_date = :bdate, 
+                    birth_place = :bplace, 
+                    house_number = :house, 
+                    purok = :purok, 
+                    fathers_name = :father, 
+                    mothers_name = :mother, 
+                    guardian = :guardian, 
+                    guardian_contact = :gcontact, 
+                    occupation = :occu, 
+                    bloodtype = :blood,
+                    image_path = :imgpath
+                    WHERE resident_id = :rid";
 
-                $insert = $pdo->prepare($sqlInsert);
+                $updateResident = $pdo->prepare($sqlUpdate);
                 
-               // EXECUTE with corrected column names
-                $insert->execute([
+                $updateResident->execute([
                     ':fname'    => $data['first_name'] ?? '',
                     ':mname'    => $data['middle_name'] ?? '',
                     ':lname'    => $data['last_name'] ?? '',
@@ -89,55 +87,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                     ':bplace'   => $data['birth_place'] ?? 'N/A',
                     ':house'    => $data['house_number'] ?? 'N/A',
                     ':purok'    => $data['purok'] ?? 'N/A',
-                    
-                    // FIXED KEYS BELOW:
-                    ':father'   => $data['father_name'] ?? 'N/A',   // Changed from fathers_name
-                    ':mother'   => $data['mother_name'] ?? 'N/A',   // Changed from mothers_name
-                    ':guardian' => $data['guardian_name'] ?? 'N/A', // Changed from guardian
+                    ':father'   => $data['father_name'] ?? 'N/A',
+                    ':mother'   => $data['mother_name'] ?? 'N/A',
+                    ':guardian' => $data['guardian_name'] ?? 'N/A',
                     ':gcontact' => $data['guardian_contact'] ?? 'N/A',
                     ':occu'     => $data['occupation'] ?? 'None',
-                    ':blood'    => $data['blood_type'] ?? 'Unknown', // Changed from bloodtype
-                    
-                    // FIXED IMAGE MAPPING:
-                    // Assuming 'valid_id_path' is the file you want to save as the resident's image
-                    ':images'   => '', // Leave empty if you don't have a specific image filename separate from path
-                    ':imgpath'  => $data['valid_id_path'] ?? '' 
+                    ':blood'    => $data['blood_type'] ?? 'Unknown',
+                    ':imgpath'  => $data['valid_id_path'] ?? '',
+                    ':rid'      => $resident_id // <--- This targets the correct user
                 ]);
 
-               // 3. Update Status
-                $update = $pdo->prepare("UPDATE residence_applications SET status = 'Approved' WHERE applicant_id = ?");
-                $update->execute([$id]);
-                // COMMIT THE TRANSACTION
-                $pdo->commit();
+               // 3. Update Application Status
+                $updateApp = $pdo->prepare("UPDATE residence_applications SET status = 'Approved' WHERE applicant_id = ?");
+                $updateApp->execute([$id]);
 
+                $pdo->commit();
                 echo "success";
+
             } else {
-                // If fetching failed, rollback just in case
-                if ($pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
+                if ($pdo->inTransaction()) $pdo->rollBack();
                 echo "Applicant data not found.";
             }
 
         } elseif ($action == 'reject') {
             
             $reason = $_POST['reason'];
-
-            // START TRANSACTION
             $pdo->beginTransaction();
 
-            // 1. Fetch the specific data we want to archive
-            $stmt = $pdo->prepare("SELECT applicant_id, first_name, last_name, email_address, contact_number 
-                                   FROM residence_applications WHERE applicant_id = ?");
+            $stmt = $pdo->prepare("SELECT applicant_id, first_name, last_name, email_address, contact_number FROM residence_applications WHERE applicant_id = ?");
             $stmt->execute([$id]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($row) {
-                // 2. Insert into the Rejected Logs
-                $archiveSql = "INSERT INTO rejected_applications 
-                              (original_applicant_id, first_name, last_name, email_address, contact_number, rejection_reason) 
-                              VALUES (?, ?, ?, ?, ?, ?)";
-                
+                // Log Rejection
+                $archiveSql = "INSERT INTO rejected_applications (original_applicant_id, first_name, last_name, email_address, contact_number, rejection_reason) VALUES (?, ?, ?, ?, ?, ?)";
                 $archiveStmt = $pdo->prepare($archiveSql);
                 $archiveStmt->execute([
                     $row['applicant_id'],
@@ -145,33 +128,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                     $row['last_name'],
                     $row['email_address'] ?? 'N/A',
                     $row['contact_number'] ?? 'N/A',
-                    $reason // This is the input from your modal
+                    $reason
                 ]);
 
-                // 3. Delete from the main active table
-                $delete = $pdo->prepare("DELETE FROM residence_applications WHERE applicant_id = ?");
-                $delete->execute([$id]);
+                // Update Status (Instead of Deleting, it is better to keep record)
+                $update = $pdo->prepare("UPDATE residence_applications SET status = 'Rejected' WHERE applicant_id = ?");
+                $update->execute([$id]);
 
-                // Commit the changes
                 $pdo->commit();
                 echo "success";
             } else {
-                // If the applicant wasn't found, cancel everything
                 $pdo->rollBack();
                 echo "Applicant data not found.";
             }
         }
 
     } catch (PDOException $e) {
-        // Rollback if anything failed in the try block
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-
-        // Log the exact error to a file
-        file_put_contents("debug_process.log", date('Y-m-d H:i:s') . " - DB Error: " . $e->getMessage() . "\n", FILE_APPEND);
-        
-        // Return a clean error message to the user
+        if ($pdo->inTransaction()) $pdo->rollBack();
         echo "Database Error: " . $e->getMessage();
     }
 }

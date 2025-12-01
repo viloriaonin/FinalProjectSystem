@@ -7,7 +7,7 @@ try {
     if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin'){
         $user_id = $_SESSION['user_id'];
 
-        // 1. Fetch User Details
+        // 1. Fetch User Details (Assuming user_id is the primary key as per your schema)
         $sql_user = "SELECT * FROM `users` WHERE `user_id` = ?"; 
         $stmt_user = $pdo->prepare($sql_user);
         $stmt_user->execute([$user_id]); 
@@ -15,15 +15,15 @@ try {
 
         if ($row_user) {
             $first_name_user = $row_user['username'];
-            $last_name_user = $row_user['password'];
+            $last_name_user = ''; // Password shouldn't be displayed, kept structure for compatibility
             $user_type = $row_user['user_type'];
-           
         }
 
         // 2. Fetch Barangay Information
-        $sql = "SELECT * FROM `barangay_information`";
+        $sql = "SELECT * FROM `barangay_information` LIMIT 1";
         $stmt = $pdo->query($sql);
-        while($row = $stmt->fetch(PDO::FETCH_ASSOC)){
+        // Using fetch instead of while loop since we only need one row
+        if($row = $stmt->fetch(PDO::FETCH_ASSOC)){
             $barangay = $row['barangay'];
             // ... (other barangay details)
         }
@@ -103,7 +103,7 @@ try {
                             <div class="input-group-prepend">
                               <span class="input-group-text bg-indigo">SEARCH</span>
                             </div>
-                            <input type="text" class="form-control" id="searching" autocomplete="off" placeholder="Name or Purpose...">
+                            <input type="text" class="form-control" id="searching" autocomplete="off" placeholder="Name or Document...">
                             <div class="input-group-append">
                               <span class="input-group-text bg-red" id="reset" type="button" style="cursor:pointer;"><i class="fas fa-undo"></i> RESET</span>
                             </div>
@@ -117,13 +117,14 @@ try {
                           <tr>
                             <th>Resident ID</th>
                             <th>Name</th>
-                            <th>Purpose</th>
+                            
+                            <th>Document</th>
                             
                             <th>
                               <select name="date_request" id="date_request" class="form-control form-control-sm">
                                 <option value="">Date Request</option>
                                 <?php 
-                                // FIX: Use correct table name 'certificate_requests' and map to 'created_at'
+                                // Query based on schema 'certificate_requests' table
                                 $sql_date = "SELECT DATE(created_at) as req_date FROM certificate_requests GROUP BY DATE(created_at)";
                                 $stmt_date = $pdo->query($sql_date);
                                 while($row = $stmt_date->fetch(PDO::FETCH_ASSOC)){
@@ -137,7 +138,7 @@ try {
                               <select name="status" id="status" class="form-control form-control-sm">
                                 <option value="">Status</option>
                                 <?php 
-                                // FIX: Use correct table name 'certificate_requests'
+                                // Query based on schema 'certificate_requests' table
                                 $sql_status = "SELECT status FROM certificate_requests GROUP BY status";
                                 $stmt_status = $pdo->query($sql_status);
                                 while($row = $stmt_status->fetch(PDO::FETCH_ASSOC)){
@@ -216,11 +217,11 @@ try {
              console.log("DataTables Error:", xhr.responseText);
           }
         },
-        // FIX: Added 'columns' to map data to the 6 headers in your HTML
+        // Columns configuration matching the new header structure
         "columns": [
             { "data": 0 }, // Resident ID
             { "data": 1 }, // Name
-            { "data": 2 }, // Purpose
+            { "data": 2 }, // Document (Changed from Purpose) - Ensure backend sends document name here
             { "data": 3 }, // Date Request (created_at)
             { "data": 4 }, // Status
             { "data": 5 }  // Tools
