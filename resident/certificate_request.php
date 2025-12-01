@@ -2,47 +2,71 @@
 include_once '../db_connection.php';
 session_start();
 
+// --- UPDATED CERTIFICATE TYPES BASED ON YOUR REQUEST ---
 $certificate_types = [
     [
-        'id' => 'barangay_clearance',
-        'title' => 'Barangay Clearance',
+        'id' => 'clearance_no_purpose',
+        'title' => 'Barangay Clearance (General)',
+        'note'  => 'For general reference (No specific purpose stated)',
         'requirements' => [
-            'Valid government-issued ID (original and photocopy)',
-            'Proof of residence (utility bill or barangay residency)',
-            'Purpose of request'
+            'Full Name',
+            'Age',
+            'Purok / Address',
+            'Date of Issuance'
         ]
     ],
     [
-        'id' => 'indigency_certificate',
-        'title' => 'Indigency Certificate',
+        'id' => 'clearance_with_purpose',
+        'title' => 'Barangay Clearance (With Purpose)',
+        'note'  => 'For Employment, ID Application, Banking, etc.',
         'requirements' => [
-            'Valid ID',
-            'Proof of income or statement of indigency',
-            'Purpose of request'
+            'Full Name',
+            'Age',
+            'Purok / Address',
+            'Date of Issuance',
+            'Specific Purpose (e.g., Employment, Postal ID)'
         ]
     ],
     [
-        'id' => 'cedula',
-        'title' => 'Cedula / Community Tax Certificate',
+        'id' => 'residency',
+        'title' => 'Certificate of Residency',
+        'note'  => 'Proof of living in the barangay',
         'requirements' => [
-            'Valid ID',
-            'Payment (if applicable)'
+            'Full Name',
+            'Age',
+            'Purok / Address',
+            'Years of Living in Barangay',
+            'Resident Since (Year)',
+            'Date of Issuance'
         ]
     ],
     [
-        'id' => 'business_permit',
-        'title' => 'Business Permit Request',
+        'id' => 'indigency_general',
+        'title' => 'Certificate of Indigency (General)',
+        'note'  => 'General proof of low income status',
         'requirements' => [
-            'Valid ID',
-            'Business name and address',
-            'Proof of business registration (if available)'
+            'Full Name',
+            'Age',
+            'Purok / Address',
+            'Date of Issuance'
+        ]
+    ],
+    [
+        'id' => 'indigency_request',
+        'title' => 'Certificate of Indigency (With Request)',
+        'note'  => 'For Medical, Financial, or Educational Assistance',
+        'requirements' => [
+            'Full Name',
+            'Age',
+            'Purok / Address',
+            'Date of Issuance',
+            'Where it will be used (Institution/Agency)'
         ]
     ]
 ];
 
 $is_verified = false; 
 $app_status = 'None';
-
 
 // Fetch user and barangay info if available
 try {
@@ -55,7 +79,7 @@ try {
         $stmt_user->execute(['uid' => $user_id]);
         $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC);
 
-        // 2. CRITICAL FIX: Get Resident ID & Check Status
+        // 2. Get Resident ID & Check Status
         $sql_res = "SELECT resident_id FROM residence_information WHERE user_id = :uid LIMIT 1";
         $stmt_res = $pdo->prepare($sql_res);
         $stmt_res->execute(['uid' => $user_id]);
@@ -71,10 +95,7 @@ try {
             
             if ($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)) {
                 $app_status = $row_app['status'];
-                
-                // CLEAN THE STATUS
                 $clean_status = trim(strtolower($app_status));
-
                 if ($clean_status == 'approved' || $clean_status == 'verified') {
                     $is_verified = true;
                 }
@@ -170,10 +191,21 @@ try {
         background-color: transparent;
     }
 
+    .custom-accordion .title-group {
+        display: flex;
+        flex-direction: column;
+    }
+
     .custom-accordion .title {
         font-weight: 600;
         font-size: 1rem;
         color: var(--text-main);
+    }
+    
+    .custom-accordion .sub-note {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-top: 2px;
     }
 
     .custom-accordion .toggle {
@@ -284,19 +316,24 @@ try {
             
             <?php if ($is_verified): ?>
                 <h3 class="page-header-title"><i class="fas fa-file-alt mr-2"></i> Certificate Request</h3>
-                <p class="page-note">Select a document type below to view requirements and proceed with your request.</p>
+                <p class="page-note">Select a document type below to view the fields required and proceed with your request.</p>
 
                 <div class="custom-accordion" id="certAccordion">
                     <?php foreach ($certificate_types as $c): ?>
                     
                     <div class="item" data-id="<?php echo htmlspecialchars($c['id']); ?>">
                         <div class="bar" role="button" tabindex="0">
-                            <div class="title"><?php echo htmlspecialchars($c['title']); ?></div>
+                            <div class="title-group">
+                                <div class="title"><?php echo htmlspecialchars($c['title']); ?></div>
+                                <?php if(isset($c['note'])): ?>
+                                    <div class="sub-note"><?php echo htmlspecialchars($c['note']); ?></div>
+                                <?php endif; ?>
+                            </div>
                             <div class="toggle"><i class="fas fa-plus"></i></div>
                         </div>
                         
                         <div class="panel">
-                            <span class="req-title">Requirements Needed:</span>
+                            <span class="req-title">Information to be included:</span>
                             <ul class="req">
                                 <?php foreach ($c['requirements'] as $r): ?>
                                     <li><?php echo htmlspecialchars($r); ?></li>
