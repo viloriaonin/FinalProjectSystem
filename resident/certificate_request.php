@@ -2,84 +2,20 @@
 include_once '../db_connection.php';
 session_start();
 
-// --- UPDATED CERTIFICATE TYPES BASED ON YOUR REQUEST ---
-$certificate_types = [
-    [
-        'id' => 'clearance_no_purpose',
-        'title' => 'Barangay Clearance (General)',
-        'note'  => 'For general reference (No specific purpose stated)',
-        'requirements' => [
-            'Full Name',
-            'Age',
-            'Purok / Address',
-            'Date of Issuance'
-        ]
-    ],
-    [
-        'id' => 'clearance_with_purpose',
-        'title' => 'Barangay Clearance (With Purpose)',
-        'note'  => 'For Employment, ID Application, Banking, etc.',
-        'requirements' => [
-            'Full Name',
-            'Age',
-            'Purok / Address',
-            'Date of Issuance',
-            'Specific Purpose (e.g., Employment, Postal ID)'
-        ]
-    ],
-    [
-        'id' => 'residency',
-        'title' => 'Certificate of Residency',
-        'note'  => 'Proof of living in the barangay',
-        'requirements' => [
-            'Full Name',
-            'Age',
-            'Purok / Address',
-            'Years of Living in Barangay',
-            'Resident Since (Year)',
-            'Date of Issuance'
-        ]
-    ],
-    [
-        'id' => 'indigency_general',
-        'title' => 'Certificate of Indigency (General)',
-        'note'  => 'General proof of low income status',
-        'requirements' => [
-            'Full Name',
-            'Age',
-            'Purok / Address',
-            'Date of Issuance'
-        ]
-    ],
-    [
-        'id' => 'indigency_request',
-        'title' => 'Certificate of Indigency (With Request)',
-        'note'  => 'For Medical, Financial, or Educational Assistance',
-        'requirements' => [
-            'Full Name',
-            'Age',
-            'Purok / Address',
-            'Date of Issuance',
-            'Where it will be used (Institution/Agency)'
-        ]
-    ]
-];
-
 $is_verified = false; 
 $app_status = 'None';
+$certificate_types = [];
 
-// Fetch user and barangay info if available
 try {
+    // 1. FETCH DOCUMENT TYPES FROM DB (Dynamic)
+    $sql_docs = "SELECT document_id, doc_name as title, 'Certificate available for request' as note FROM documents";
+    $stmt_docs = $pdo->query($sql_docs);
+    $certificate_types = $stmt_docs->fetchAll(PDO::FETCH_ASSOC);
+
+    // 2. CHECK RESIDENT STATUS
     if (isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'resident') {
         $user_id = $_SESSION['user_id'];
         
-        // 1. Fetch User Info
-        $sql_user = "SELECT * FROM `users` WHERE `user_id` = :uid";
-        $stmt_user = $pdo->prepare($sql_user);
-        $stmt_user->execute(['uid' => $user_id]);
-        $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC);
-
-        // 2. Get Resident ID & Check Status
         $sql_res = "SELECT resident_id FROM residence_information WHERE user_id = :uid LIMIT 1";
         $stmt_res = $pdo->prepare($sql_res);
         $stmt_res->execute(['uid' => $user_id]);
@@ -88,22 +24,21 @@ try {
         if ($res_row) {
             $resident_id = $res_row['resident_id'];
 
-            // Check Status
+            // Check Application Status
             $sql_app = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
             $stmt_app = $pdo->prepare($sql_app);
             $stmt_app->execute(['rid' => $resident_id]);
             
             if ($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)) {
                 $app_status = $row_app['status'];
-                $clean_status = trim(strtolower($app_status));
-                if ($clean_status == 'approved' || $clean_status == 'verified') {
+                if (trim(strtolower($app_status)) == 'approved') {
                     $is_verified = true;
                 }
             }
         }
     }
 } catch (PDOException $e) {
-    // error_log($e->getMessage());
+    // Handle error
 }
 ?>
 
@@ -113,12 +48,8 @@ try {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Certificate Request</title>
-  
   <link rel="stylesheet" href="../assets/plugins/fontawesome-free/css/all.min.css">
-  <link rel="stylesheet" href="../assets/plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
   <link rel="stylesheet" href="../assets/dist/css/adminlte.min.css">
-  <link rel="stylesheet" href="../assets/plugins/sweetalert2/css/sweetalert2.min.css">
-
   <style>
     /* --- DARK UI THEME START --- */
     :root {
@@ -300,109 +231,38 @@ try {
         border-top: 1px solid var(--border-color);
         color: var(--text-muted) !important;
     }
-  </style>
+ </style>
 </head>
 <body class="hold-transition layout-top-nav">
-
 <div class="wrapper">
-
-<?php include_once __DIR__ . '/../includes/menu_bar.php'; ?>
+  <?php include_once __DIR__ . '/../includes/menu_bar.php'; ?>
 
   <div class="content-wrapper">
-    <div class="content">
-      <div class="container-fluid pt-5 pb-5">
-        
+    <div class="content pt-5">
+      <div class="container">
         <div class="ui-card">
-            
             <?php if ($is_verified): ?>
-                <h3 class="page-header-title"><i class="fas fa-file-alt mr-2"></i> Certificate Request</h3>
-                <p class="page-note">Select a document type below to view the fields required and proceed with your request.</p>
-
-                <div class="custom-accordion" id="certAccordion">
-                    <?php foreach ($certificate_types as $c): ?>
-                    
-                    <div class="item" data-id="<?php echo htmlspecialchars($c['id']); ?>">
-                        <div class="bar" role="button" tabindex="0">
-                            <div class="title-group">
-                                <div class="title"><?php echo htmlspecialchars($c['title']); ?></div>
-                                <?php if(isset($c['note'])): ?>
-                                    <div class="sub-note"><?php echo htmlspecialchars($c['note']); ?></div>
-                                <?php endif; ?>
-                            </div>
-                            <div class="toggle"><i class="fas fa-plus"></i></div>
+                <h3>Available Certificates</h3>
+                <?php foreach ($certificate_types as $c): ?>
+                    <div class="doc-item">
+                        <div>
+                            <h5><?php echo htmlspecialchars($c['title']); ?></h5>
                         </div>
-                        
-                        <div class="panel">
-                            <span class="req-title">Information to be included:</span>
-                            <ul class="req">
-                                <?php foreach ($c['requirements'] as $r): ?>
-                                    <li><?php echo htmlspecialchars($r); ?></li>
-                                <?php endforeach; ?>
-                            </ul>
-
-                            <div class="text-right">
-                                <a class="btn-modern" href="certificate_request_form.php?type=<?php echo urlencode($c['title']); ?>">
-                                    Proceed to Request <i class="fas fa-arrow-right ml-1"></i>
-                                </a>
-                            </div>
-                        </div>
+                        <a href="certificate_request_form.php?doc_id=<?php echo $c['document_id']; ?>&title=<?php echo urlencode($c['title']); ?>" class="btn-request">
+                            Request <i class="fas fa-arrow-right"></i>
+                        </a>
                     </div>
-
-                    <?php endforeach; ?>
-                </div>
-
+                <?php endforeach; ?>
             <?php else: ?>
-                <div class="locked-state">
-                    <i class="fas fa-lock fa-5x locked-icon"></i>
-                    <div class="locked-title">Feature Locked</div>
-                    <p class="locked-desc">
-                        You must have a <strong>Verified Residency Application</strong> to request certificates. <br>
-                        Current Status: <span class="badge badge-warning"><?php echo htmlspecialchars($app_status); ?></span>
-                    </p>
-                    <a href="form_application.php" class="btn btn-modern">
-                        Go to Residency Application <i class="fas fa-arrow-right ml-2"></i>
-                    </a>
+                <div class="text-center p-5">
+                    <h3>Account Not Verified</h3>
+                    <p>Status: <?php echo htmlspecialchars($app_status); ?></p>
                 </div>
             <?php endif; ?>
-
         </div>
-        </div>
+      </div>
     </div>
   </div>
-
 </div>
-
-<script src="../assets/plugins/jquery/jquery.min.js"></script>
-<script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
-<script src="../assets/plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js"></script>
-<script src="../assets/dist/js/adminlte.js"></script>
-<script src="../assets/plugins/sweetalert2/js/sweetalert2.all.min.js"></script>
-
-<script>
-$(document).ready(function() {
-    
-    // Accordion Logic
-    $('#certAccordion .bar').on('click', function() {
-        var item = $(this).parent('.item');
-        var panel = item.find('.panel');
-        var icon = $(this).find('.toggle i');
-
-        // Close other panels
-        $('.custom-accordion .item').not(item).find('.panel').slideUp(300);
-        $('.custom-accordion .item').not(item).find('.toggle i').removeClass('fa-minus').addClass('fa-plus');
-
-        // Toggle current
-        panel.slideToggle(300, function() {
-            // Callback after animation
-            if ($(this).is(':visible')) {
-                icon.removeClass('fa-plus').addClass('fa-minus');
-            } else {
-                icon.removeClass('fa-minus').addClass('fa-plus');
-            }
-        });
-    });
-
-});
-</script>
 </body>
 </html>

@@ -1,88 +1,121 @@
 <?php
-// Prevent any whitespace or warnings from breaking JSON
-ob_start(); 
+ob_start();
 session_start();
-
-// Hide errors from output (they will be caught by try/catch)
-error_reporting(E_ALL);
-ini_set('display_errors', 0);
-
-header('Content-Type: application/json; charset=utf-8');
-
 include_once __DIR__ . '/../db_connection.php';
 
-$response = ['success' => false, 'message' => 'An unexpected error occurred'];
+header('Content-Type: application/json');
+$response = ['success' => false, 'message' => 'Error'];
 
 try {
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        throw new Exception('Invalid request method');
-    }
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') throw new Exception('Invalid Request');
+    if (!isset($_SESSION['user_id'])) throw new Exception('Please login first');
 
-    // 1. Check Session
-    $user_id = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : null;
-    if (!$user_id) {
-        throw new Exception('User not logged in or session expired');
-    }
+    $user_id = $_SESSION['user_id'];
+    $document_id = isset($_POST['document_id']) ? intval($_POST['document_id']) : 0;
 
-    // 2. Input Sanitization
-    $type = isset($_POST['type']) ? trim($_POST['type']) : '';
-    $full_name = isset($_POST['full_name']) ? trim($_POST['full_name']) : '';
-    $contact = isset($_POST['contact']) ? trim($_POST['contact']) : '';
-    $purpose = isset($_POST['purpose']) ? trim($_POST['purpose']) : '';
+    if ($document_id == 0) throw new Exception('Invalid Document ID');
 
-    if (empty($type) || empty($full_name) || empty($contact) || empty($purpose)) {
-        throw new Exception('Please fill in all required fields.');
-    }
+    $pdo->beginTransaction();
 
-    // 3. Get Resident ID
-    $stmt_res = $pdo->prepare("SELECT resident_id FROM residence_information WHERE user_id = :uid LIMIT 1");
-    $stmt_res->execute(['uid' => $user_id]);
-    $res_row = $stmt_res->fetch(PDO::FETCH_ASSOC);
+    // 1. GET RESIDENT PROFILE (As fallback/defaults)
+    $stmtRes = $pdo->prepare("SELECT * FROM residence_information WHERE user_id = ?");
+    $stmtRes->execute([$user_id]);
+    $resident = $stmtRes->fetch(PDO::FETCH_ASSOC);
+    if (!$resident) throw new Exception('Resident profile not found.');
 
-    if (!$res_row) {
-        throw new Exception('Resident profile not found. Please complete your application first.');
-    }
+    // 2. FETCH EXPECTED FIELDS
+    $stmtFields = $pdo->prepare("SELECT field_name, label FROM document_fields WHERE document_id = ?");
+    $stmtFields->execute([$document_id]);
+    $dbFields = $stmtFields->fetchAll(PDO::FETCH_ASSOC); 
 
-    $resident_id = $res_row['resident_id'];
-    $request_code = uniqid('req_', true);
-    $status = 'Pending';
-    $created_at = date('Y-m-d H:i:s');
+    // 3. BUILD DATA
+    $dataToSave = [];
     
-    // 4. Insert Request
-    // IMPORTANT: I removed the 'ip' column to prevent crashes if your DB table is missing it.
-    $sql = "INSERT INTO certificate_requests 
-            (request_code, resident_id, `type`, full_name, contact, purpose, `status`, created_at) 
-            VALUES 
-            (:code, :rid, :type, :name, :contact, :purpose, :status, :created)";
+    // Initialize variables with Profile Data as default
+    $final_full_name = strtoupper($resident['first_name'] . ' ' . $resident['last_name']);
+    $extracted_purpose = ''; 
+
+    // Loop through the fields defined in the database
+    foreach ($dbFields as $field) {
+        $key = $field['field_name'];
+        $label = $field['label'];
+
+        // Validate existence
+        if (!isset($_POST[$key]) || trim($_POST[$key]) === '') {
+            throw new Exception("Missing required field: " . $label);
+        }
+
+        $value = trim($_POST[$key]);
+        $dataToSave[$key] = strtoupper($value); 
+        
+        // --- KEY FIX: OVERRIDE DEFAULT DATA WITH INPUT DATA ---
+        
+        // If the user typed a Name, update the main name variable
+        if (strtolower($key) == 'name' || strtolower($key) == 'full_name') {
+            $final_full_name = strtoupper($value);
+        }
+
+        // If the user typed a Purpose, capture it
+        if (strtolower($key) == 'purpose') {
+            $extracted_purpose = strtoupper($value);
+        }
+    }
+
+    // Add defaults to JSON only if they weren't in the form
+    // This fixes the "null" issue if the form didn't ask for them
+    if (!isset($dataToSave['age'])) {
+        $dataToSave['age'] = $resident['age'] ?? 'N/A';
+    }
+    if (!isset($dataToSave['purok'])) {
+        $dataToSave['purok'] = $resident['purok'] ?? 'N/A';
+    }
+
+    $jsonData = json_encode($dataToSave);
+
+    // 4. INSERT INTO document_submissions
+    $sqlSub = "INSERT INTO document_submissions (document_id, data) VALUES (?, ?)";
+    $stmtSub = $pdo->prepare($sqlSub);
+    $stmtSub->execute([$document_id, $jsonData]);
+    $submission_id = $pdo->lastInsertId();
+
+    // 5. INSERT INTO certificate_requests
+    $stmtDocName = $pdo->prepare("SELECT doc_name FROM documents WHERE document_id = ?");
+    $stmtDocName->execute([$document_id]);
+    $docName = $stmtDocName->fetchColumn();
+
+    $request_code = date("Ymd") . rand(1000, 9999);
     
-    $stmt = $pdo->prepare($sql);
-    $result = $stmt->execute([
-        ':code' => $request_code,
-        ':rid' => $resident_id, 
-        ':type' => $type,
-        ':name' => $full_name,
-        ':contact' => $contact,
-        ':purpose' => $purpose,
-        ':status' => $status,
-        ':created' => $created_at
+    // Use extracted purpose, or default string
+    $final_purpose = !empty($extracted_purpose) ? $extracted_purpose : $docName . " Request";
+    
+    // Handle contact number
+    $contact_info = !empty($resident['contact_number']) ? $resident['contact_number'] : 'N/A';
+
+    $sqlReq = "INSERT INTO certificate_requests 
+               (request_code, resident_id, document_id, submission_id, type, full_name, contact, purpose, status, created_at) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NOW())";
+    
+    $stmtReq = $pdo->prepare($sqlReq);
+    $stmtReq->execute([
+        $request_code, 
+        $resident['resident_id'], 
+        $document_id, 
+        $submission_id, 
+        $docName, 
+        $final_full_name, // <--- Using the INPUT name now, not just the profile name
+        $contact_info, 
+        $final_purpose
     ]);
 
-    if ($result) {
-        $response['success'] = true;
-        $response['message'] = 'Your request has been submitted successfully.';
-        $response['request_id'] = $request_code;
-    } else {
-        throw new Exception('Database failed to save request.');
-    }
+    $pdo->commit();
+    $response['success'] = true;
+    $response['message'] = 'Request submitted successfully!';
 
-} catch (PDOException $e) {
-    $response['message'] = 'Database Error: ' . $e->getMessage();
 } catch (Exception $e) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
     $response['message'] = $e->getMessage();
 }
 
-// Clean buffer and output JSON
 ob_end_clean();
 echo json_encode($response);
-exit;
 ?>

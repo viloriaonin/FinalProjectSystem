@@ -2,42 +2,45 @@
 include_once '../db_connection.php';
 session_start();
 
-// --- DEFINITIONS (Same as previous file) ---
-$certificate_types = [
-    'Barangay Clearance (General)' => [
-        'fields' => ['Age', 'Purok']
-    ],
-    'Barangay Clearance (With Purpose)' => [
-        'fields' => ['Age', 'Purok', 'Specific Purpose']
-    ],
-    'Certificate of Residency' => [
-        'fields' => ['Age', 'Purok', 'Years of Living', 'Resident Since (Year)']
-    ],
-    'Certificate of Indigency (General)' => [
-        'fields' => ['Age', 'Purok']
-    ],
-    'Certificate of Indigency (With Request)' => [
-        'fields' => ['Age', 'Purok', 'Where it will be used']
-    ]
-];
+// 1. VALIDATION: Check if document ID is provided
+if (!isset($_GET['doc_id'])) {
+    die("Error: No document selected. Please go back and select a document.");
+}
 
-$type = isset($_GET['type']) ? urldecode($_GET['type']) : '';
-if ($type === '' || !array_key_exists($type, $certificate_types)) {
-    // Fallback if type not found
-    $current_fields = ['Age', 'Purok', 'Purpose']; 
-} else {
-    $current_fields = $certificate_types[$type]['fields'];
+$doc_id = intval($_GET['doc_id']);
+
+try {
+    // 2. FETCH DOCUMENT DETAILS
+    $stmt = $pdo->prepare("SELECT * FROM documents WHERE document_id = ?");
+    $stmt->execute([$doc_id]);
+    $doc = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$doc) {
+        die("Error: Document not found.");
+    }
+
+    // 3. FETCH DYNAMIC FIELDS
+    $stmtFields = $pdo->prepare("SELECT * FROM document_fields WHERE document_id = ? ORDER BY field_id ASC");
+    $stmtFields->execute([$doc_id]);
+    $fields = $stmtFields->fetchAll(PDO::FETCH_ASSOC);
+
+} catch (PDOException $e) {
+    die("Database Error: " . $e->getMessage());
 }
 ?>
+
 <!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Request: <?php echo htmlspecialchars($type); ?></title>
+    <title>Request: <?= htmlspecialchars($doc['doc_name']); ?></title>
+    
     <link rel="stylesheet" href="../assets/plugins/fontawesome-free/css/all.min.css">
     <link rel="stylesheet" href="../assets/plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
     <link rel="stylesheet" href="../assets/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="../assets/plugins/sweetalert2/css/sweetalert2.min.css">
+
     <style>
     /* --- CUSTOM DARK THEME --- */
     :root {
@@ -50,20 +53,47 @@ if ($type === '' || !array_key_exists($type, $certificate_types)) {
         --theme-blue-hover: #2563eb;
     }
 
-    body.dark-mode .content-wrapper { background-color: var(--theme-bg) !important; color: var(--theme-text); }
-    body.dark-mode .card { background-color: var(--theme-card); border: 1px solid var(--theme-border); color: var(--theme-text); }
+    body.dark-mode { background-color: var(--theme-bg); color: var(--theme-text); }
+    body.dark-mode .content-wrapper { background-color: var(--theme-bg) !important; }
     
-    body.dark-mode input, body.dark-mode textarea {
+    .card-custom {
+        background-color: var(--theme-card); 
+        border: 1px solid var(--theme-border); 
+        color: var(--theme-text);
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    
+    .form-control-custom {
         background-color: var(--theme-input);
         border: 1px solid var(--theme-border);
         color: #ffffff;
+        border-radius: 6px;
+        padding: 10px 15px;
     }
-    body.dark-mode input:focus { border-color: var(--theme-blue); }
-    body.dark-mode .btn-primary { background-color: var(--theme-blue); border: none; }
-    body.dark-mode .btn-primary:hover { background-color: var(--theme-blue-hover); }
+    .form-control-custom:focus {
+        border-color: var(--theme-blue);
+        background-color: #1a1d21;
+        outline: none;
+    }
 
-    .form-label { color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px; display: block; }
-    .container-main { max-width: 800px; margin: 30px auto; }
+    .btn-submit {
+        background-color: var(--theme-blue);
+        border: none;
+        color: white;
+        padding: 10px 30px;
+        border-radius: 6px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+    .btn-submit:hover {
+        background-color: var(--theme-blue-hover);
+        transform: translateY(-1px);
+    }
+
+    .form-label { color: #94a3b8; font-size: 0.9rem; margin-bottom: 8px; display: block; font-weight: 500; }
+    .container-main { max-width: 700px; margin: 40px auto; }
+    .header-border { border-bottom: 1px solid var(--theme-border); padding-bottom: 20px; margin-bottom: 25px; }
     </style>
 </head>
 <body class="hold-transition layout-top-nav dark-mode">
@@ -73,47 +103,74 @@ if ($type === '' || !array_key_exists($type, $certificate_types)) {
     <div class="content-wrapper">
         <div class="content">
             <div class="container-fluid pt-4 container-main">
-                <div class="card">
-                    <div class="card-body p-4">
+                
+                <div class="card card-custom">
+                    <div class="card-body p-4 p-md-5">
 
-                        <h3 class="mb-4" style="border-bottom: 1px solid var(--theme-border); padding-bottom: 15px;">
-                            <i class="fas fa-file-contract mr-2" style="color: var(--theme-blue);"></i>
-                            <?php echo htmlspecialchars($type); ?>
-                        </h3>
+                        <div class="header-border">
+                            <h3 class="m-0">
+                                <i class="fas fa-file-signature mr-2" style="color: var(--theme-blue);"></i>
+                                <?= htmlspecialchars($doc['doc_name']); ?>
+                            </h3>
+                            <p class="text-muted mt-2 mb-0">Please fill out the details below to generate your request.</p>
+                        </div>
                         
-                        <form method="post" id="certRequestForm">
-                            <input type="hidden" name="type" value="<?php echo htmlspecialchars($type); ?>">
+                        <form id="dynamicRequestForm">
+                            <input type="hidden" name="document_id" value="<?= $doc_id ?>">
                             
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Full Name</label>
-                                    <input type="text" name="full_name" class="form-control" placeholder="Full Name" required>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Contact Number / Email</label>
-                                    <input type="text" name="contact" class="form-control" placeholder="Contact Info" required>
-                                </div>
-                            </div>
+                            <?php foreach($fields as $field): ?>
+                                <div class="form-group mb-4">
+                                    <label class="form-label"><?= htmlspecialchars($field['label']) ?></label>
+                                    
+                                    <?php if ($field['field_type'] == 'textarea'): ?>
+                                        <textarea 
+                                            class="form-control form-control-custom" 
+                                            name="<?= htmlspecialchars($field['field_name']) ?>" 
+                                            rows="3" 
+                                            placeholder="Enter <?= htmlspecialchars($field['label']) ?>" required></textarea>
+                                    
+                                    <?php elseif ($field['field_type'] == 'number'): ?>
+                                        <input 
+                                            type="number" 
+                                            class="form-control form-control-custom" 
+                                            name="<?= htmlspecialchars($field['field_name']) ?>" 
+                                            placeholder="Enter <?= htmlspecialchars($field['label']) ?>" required>
+                                    
+                                    <?php elseif ($field['field_type'] == 'date'): ?>
+                                        <input 
+                                            type="date" 
+                                            class="form-control form-control-custom" 
+                                            name="<?= htmlspecialchars($field['field_name']) ?>" required>
+                                    
+                                    <?php elseif ($field['field_type'] == 'select'): ?>
+                                         <input 
+                                            type="text" 
+                                            class="form-control form-control-custom" 
+                                            name="<?= htmlspecialchars($field['field_name']) ?>" 
+                                            placeholder="Enter <?= htmlspecialchars($field['label']) ?>" required>
 
-                            <div class="row">
-                                <?php foreach($current_fields as $field): ?>
-                                    <div class="col-md-12 mb-3">
-                                        <label class="form-label"><?php echo htmlspecialchars($field); ?></label>
-                                        <input type="text" 
-                                               class="form-control extra-data" 
-                                               data-label="<?php echo htmlspecialchars($field); ?>" 
-                                               placeholder="Enter <?php echo htmlspecialchars($field); ?>" 
-                                               required>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
+                                    <?php else: // Default Text ?>
+                                        <input 
+                                            type="text" 
+                                            class="form-control form-control-custom" 
+                                            name="<?= htmlspecialchars($field['field_name']) ?>" 
+                                            placeholder="Enter <?= htmlspecialchars($field['label']) ?>" required>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endforeach; ?>
 
-                            <input type="hidden" name="purpose" id="final_purpose">
+                            <?php if(empty($fields)): ?>
+                                <div class="alert alert-info bg-transparent border-info text-info">
+                                    <i class="fas fa-info-circle mr-2"></i> No specific information is required for this document. Click submit to proceed.
+                                </div>
+                            <?php endif; ?>
                             
-                            <div class="mt-4 text-right">
-                                <a href="certificate_request.php" class="btn btn-secondary mr-2">Cancel</a>
-                                <button type="submit" id="submitBtn" class="btn btn-primary px-4">
-                                    Submit Request <i class="fas fa-paper-plane ml-1"></i>
+                            <div class="mt-5 d-flex justify-content-between align-items-center">
+                                <a href="certificate_request.php" class="text-muted text-decoration-none">
+                                    <i class="fas fa-arrow-left mr-1"></i> Cancel
+                                </a>
+                                <button type="submit" id="submitBtn" class="btn-submit">
+                                    Submit Request <i class="fas fa-paper-plane ml-2"></i>
                                 </button>
                             </div>
                         </form>
@@ -130,55 +187,61 @@ if ($type === '' || !array_key_exists($type, $certificate_types)) {
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="../assets/dist/js/adminlte.js"></script>
 <script src="../assets/plugins/sweetalert2/js/sweetalert2.all.min.js"></script>
-<script>
-$(function(){
-    
-    $('#certRequestForm').on('submit', function(ev){
-        ev.preventDefault();
-        
-        // --- 1. COMBINE DATA INTO PURPOSE FIELD ---
-        // We take all inputs with class 'extra-data' and format them
-        var purposeText = "";
-        $('.extra-data').each(function(){
-            var label = $(this).data('label');
-            var val = $(this).val();
-            purposeText += label + ": " + val + " | ";
-        });
-        
-        // Remove trailing separator and set to hidden input
-        $('#final_purpose').val(purposeText.slice(0, -3));
 
-        // --- 2. SUBMIT VIA AJAX ---
+<script>
+$(document).ready(function() {
+    
+    $('#dynamicRequestForm').on('submit', function(e) {
+        e.preventDefault();
+        
         var form = $(this);
-        var data = form.serialize();
         var btn = $('#submitBtn');
-        var originalText = btn.html();
-        
+        var originalBtnText = btn.html();
+
+        // Disable button to prevent double submit
         btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
-        
-        $.post('submit_certificate_request.php', data, function(resp){
-            if (resp && resp.success) {
-                Swal.fire({ 
-                    icon: 'success', 
-                    title: 'Submitted!', 
-                    text: 'Your request has been sent successfully.',
-                    background: '#1c1f26', 
-                    color: '#fff',
-                    showConfirmButton: false,
-                    timer: 2000
-                }).then(function(){
-                    window.location.href = 'certificate_request.php';
+
+        // Serialize automatically captures all inputs, including dynamic ones
+        var formData = form.serialize();
+
+        $.ajax({
+            url: 'submit_certificate_request.php',
+            type: 'POST',
+            data: formData,
+            dataType: 'json',
+            success: function(response) {
+                if (response.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: response.message,
+                        background: '#1c1f26',
+                        color: '#fff',
+                        confirmButtonColor: '#3b82f6'
+                    }).then(() => {
+                        window.location.href = 'certificate_request.php'; 
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: response.message,
+                        background: '#1c1f26',
+                        color: '#fff'
+                    });
+                    btn.prop('disabled', false).html(originalBtnText);
+                }
+            },
+            error: function() {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'System Error',
+                    text: 'Could not communicate with the server.',
+                    background: '#1c1f26',
+                    color: '#fff'
                 });
-            } else {
-                Swal.fire({ 
-                    icon: 'error', title: 'Error', text: resp.message || 'Submission failed', 
-                    background: '#1c1f26', color: '#fff' 
-                });
-                btn.prop('disabled', false).html(originalText);
+                btn.prop('disabled', false).html(originalBtnText);
             }
-        }, 'json').fail(function(){
-            alert('Server Error');
-            btn.prop('disabled', false).html(originalText);
         });
     });
 

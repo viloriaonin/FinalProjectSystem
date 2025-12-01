@@ -11,14 +11,13 @@ $user_id = $_SESSION['user_id'];
 $request_code = $_GET['code'];
 
 try {
-    // 2. GET RESIDENT DETAILS
-    // FIX: Changed column names to match your SQL database (first_name, last_name, birth_date)
-    $stmt_res = $pdo->prepare("SELECT resident_id, first_name, last_name, birth_date FROM residence_information WHERE user_id = :uid LIMIT 1");
+    // 2. GET RESIDENT DETAILS (Fallback)
+    $stmt_res = $pdo->prepare("SELECT resident_id, first_name, last_name, birth_date, purok FROM residence_information WHERE user_id = :uid LIMIT 1");
     $stmt_res->execute(['uid' => $user_id]);
     $resident = $stmt_res->fetch(PDO::FETCH_ASSOC);
 
     if (!$resident) {
-        die("Resident record not found. Please complete your profile.");
+        die("Resident record not found.");
     }
 
     // 3. FETCH THE SPECIFIC REQUEST
@@ -32,13 +31,38 @@ try {
         die("Request not found or access denied.");
     }
 
-    // 4. CALCULATE AGE
-    $age = 'N/A';
-    // FIX: Changed 'birthdate' to 'birth_date'
-    if (!empty($resident['birth_date'])) {
-        $dob = new DateTime($resident['birth_date']);
-        $now = new DateTime();
-        $age = $now->diff($dob)->y;
+    // 4. FETCH SUBMISSION DATA (JSON Snapshot)
+    // Initialize with Profile Defaults
+    $final_name  = $resident['first_name'] . ' ' . $resident['last_name'];
+    $final_age   = 'N/A';
+    $final_purok = $resident['purok']; // Default from profile
+
+    if (!empty($request['submission_id'])) {
+        $stmtSub = $pdo->prepare("SELECT data FROM document_submissions WHERE submission_id = ?");
+        $stmtSub->execute([$request['submission_id']]);
+        $jsonData = $stmtSub->fetchColumn();
+
+        if ($jsonData) {
+            $data = json_decode($jsonData, true);
+            
+            // Override with specific input data
+            if (!empty($data['name'])) {
+                $final_name = $data['name'];
+            }
+            if (!empty($data['age'])) {
+                $final_age = $data['age'];
+            }
+            if (!empty($data['purok'])) {
+                $final_purok = $data['purok'];
+            }
+        }
+    } else {
+        // Fallback age calculation
+        if (!empty($resident['birth_date'])) {
+            $dob = new DateTime($resident['birth_date']);
+            $now = new DateTime();
+            $final_age = $now->diff($dob)->y;
+        }
     }
 
 } catch (PDOException $e) {
@@ -84,7 +108,7 @@ try {
             font-size: 0.9rem;
         }
         .label { font-weight: bold; color: #333; }
-        .value { text-align: right; color: #000; }
+        .value { text-align: right; color: #000; font-weight: 600; }
         
         .message-box {
             margin-top: 20px;
@@ -141,11 +165,15 @@ try {
         <div class="info-group">
             <div class="row">
                 <span class="label">Name:</span>
-                <span class="value"><?php echo htmlspecialchars($resident['first_name'] . ' ' . $resident['last_name']); ?></span>
+                <span class="value"><?php echo htmlspecialchars(strtoupper($final_name)); ?></span>
             </div>
             <div class="row">
                 <span class="label">Age:</span>
-                <span class="value"><?php echo $age; ?> years old</span>
+                <span class="value"><?php echo htmlspecialchars($final_age); ?> years old</span>
+            </div>
+            <div class="row">
+                <span class="label">Purok:</span>
+                <span class="value"><?php echo htmlspecialchars(strtoupper($final_purok)); ?></span>
             </div>
         </div>
 
