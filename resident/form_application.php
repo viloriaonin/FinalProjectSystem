@@ -67,7 +67,7 @@ try {
         $religion = $_POST['religion'] ?? '';
         $blood = $_POST['blood_type'] ?? '';
         $occ = $_POST['occupation'] ?? '';
-        $address = $_POST['full_address'] ?? '';
+        // $address = $_POST['full_address'] ?? ''; // REMOVED as requested previously
         $house = $_POST['house_number'] ?? '';
         $purok = $_POST['purok'] ?? '';
         $contact = $_POST['contact_number'] ?? '';
@@ -76,27 +76,31 @@ try {
         $pwd = $_POST['pwd'] ?? '';
         $single = $_POST['single_parent'] ?? '';
         $senior = $_POST['senior_citizen'] ?? '';
+        
+        // PARENTS & GUARDIAN VARS
         $father = $_POST['father_name'] ?? '';
+        $f_occ = $_POST['father_occupation'] ?? ''; 
+        $f_age = !empty($_POST['father_age']) ? $_POST['father_age'] : 0; 
+        $f_bday = !empty($_POST['father_birthday']) ? $_POST['father_birthday'] : NULL; // NEW
+        $f_educ = $_POST['father_education'] ?? '';
+        
         $mother = $_POST['mother_name'] ?? '';
+        $m_occ = $_POST['mother_occupation'] ?? ''; 
+        $m_age = !empty($_POST['mother_age']) ? $_POST['mother_age'] : 0; 
+        $m_bday = !empty($_POST['mother_birthday']) ? $_POST['mother_birthday'] : NULL; // NEW
+        $m_educ = $_POST['mother_education'] ?? '';
+        
         $guardian = $_POST['guardian'] ?? '';
         $g_contact = $_POST['guardian_contact'] ?? '';
         
         // Residency Details
         $duration = $_POST['residency_months'] ?? '';
-        $years_living = !empty($_POST['years_of_living']) ? $_POST['years_of_living'] : 0; // NEW
-        $res_since = !empty($_POST['residence_since']) ? $_POST['residence_since'] : NULL; // NEW
+        $years_living = !empty($_POST['years_of_living']) ? $_POST['years_of_living'] : 0; 
+        $res_since = !empty($_POST['residence_since']) ? $_POST['residence_since'] : NULL; 
         
         $gov = $_POST['gov_beneficiary'] ?? '';
         $gov_type = $_POST['beneficiary_type'] ?? '';
         
-        // Handle Integers
-        $f_occ = $_POST['father_occupation'] ?? ''; 
-        $f_age = !empty($_POST['father_age']) ? $_POST['father_age'] : 0; 
-        $f_educ = $_POST['father_education'] ?? '';
-        $m_occ = $_POST['mother_occupation'] ?? ''; 
-        $m_age = !empty($_POST['mother_age']) ? $_POST['mother_age'] : 0; 
-        $m_educ = $_POST['mother_education'] ?? '';
-
         // Dynamic Lists
         $children_json = isset($_POST['children0']) ? json_encode($_POST['children0']) : '[]';
         $siblings_json = isset($_POST['siblings']) ? json_encode($_POST['siblings']) : '[]';
@@ -124,11 +128,17 @@ try {
 
         // UPDATED SQL INSERT
         $sql_insert = "INSERT INTO residence_applications 
-        (resident_id, first_name, middle_name, last_name, suffix, gender, birth_date, birth_place, nationality, civil_status, religion, blood_type, occupation, full_address, house_number, purok, contact_number, email_address, voter_status, pwd_status, single_parent_status, senior_status, father_name, mother_name, guardian_name, guardian_contact, father_occupation, father_age, father_education, mother_occupation, mother_age, mother_education, 
+        (resident_id, first_name, middle_name, last_name, suffix, gender, birth_date, birth_place, nationality, civil_status, religion, blood_type, occupation, house_number, purok, contact_number, email_address, voter_status, pwd_status, single_parent_status, senior_status, 
+        father_name, father_occupation, father_age, fathers_bday, father_education, 
+        mother_name, mother_occupation, mother_age, mothers_bday, mother_education, 
+        guardian_name, guardian_contact, 
         residency_duration, years_of_living, residence_since, 
         gov_beneficiary, beneficiary_type, children_list, siblings_list, valid_id_path, status, admin_remarks)
         VALUES 
-        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+        ?, ?, ?, ?, ?, 
+        ?, ?, ?, ?, ?, 
+        ?, ?, 
         ?, ?, ?, 
         ?, ?, ?, ?, ?, 'Pending', '')
         ON DUPLICATE KEY UPDATE 
@@ -136,11 +146,11 @@ try {
             first_name=VALUES(first_name), middle_name=VALUES(middle_name), last_name=VALUES(last_name), suffix=VALUES(suffix), 
             gender=VALUES(gender), birth_date=VALUES(birth_date), birth_place=VALUES(birth_place), nationality=VALUES(nationality),
             civil_status=VALUES(civil_status), religion=VALUES(religion), blood_type=VALUES(blood_type), occupation=VALUES(occupation),
-            full_address=VALUES(full_address), house_number=VALUES(house_number), purok=VALUES(purok), contact_number=VALUES(contact_number), email_address=VALUES(email_address),
+            house_number=VALUES(house_number), purok=VALUES(purok), contact_number=VALUES(contact_number), email_address=VALUES(email_address),
             voter_status=VALUES(voter_status), pwd_status=VALUES(pwd_status), single_parent_status=VALUES(single_parent_status), senior_status=VALUES(senior_status),
-            father_name=VALUES(father_name), mother_name=VALUES(mother_name), guardian_name=VALUES(guardian_name), guardian_contact=VALUES(guardian_contact),
-            father_occupation=VALUES(father_occupation), father_age=VALUES(father_age), father_education=VALUES(father_education),
-            mother_occupation=VALUES(mother_occupation), mother_age=VALUES(mother_age), mother_education=VALUES(mother_education),
+            father_name=VALUES(father_name), father_occupation=VALUES(father_occupation), father_age=VALUES(father_age), fathers_bday=VALUES(fathers_bday), father_education=VALUES(father_education),
+            mother_name=VALUES(mother_name), mother_occupation=VALUES(mother_occupation), mother_age=VALUES(mother_age), mothers_bday=VALUES(mothers_bday), mother_education=VALUES(mother_education),
+            guardian_name=VALUES(guardian_name), guardian_contact=VALUES(guardian_contact),
             residency_duration=VALUES(residency_duration), years_of_living=VALUES(years_of_living), residence_since=VALUES(residence_since),
             gov_beneficiary=VALUES(gov_beneficiary), beneficiary_type=VALUES(beneficiary_type),
             children_list=VALUES(children_list), siblings_list=VALUES(siblings_list), valid_id_path=VALUES(valid_id_path)";
@@ -149,10 +159,11 @@ try {
         
         $result = $stmt->execute([
             $resident_id, $fname, $mname, $lname, $suffix, $gender, $dob, $pob, $nationality, $civil, $religion, $blood, $occ, 
-            $address, $house, $purok, $contact, $email, $voter, $pwd, $single, $senior, 
-            $father, $mother, $guardian, $g_contact, 
-            $f_occ, $f_age, $f_educ, $m_occ, $m_age, $m_educ, 
-            $duration, $years_living, $res_since, // NEW FIELDS
+            $house, $purok, $contact, $email, $voter, $pwd, $single, $senior, 
+            $father, $f_occ, $f_age, $f_bday, $f_educ, 
+            $mother, $m_occ, $m_age, $m_bday, $m_educ, 
+            $guardian, $g_contact, 
+            $duration, $years_living, $res_since,
             $gov, $gov_type, $children_json, $siblings_json, $valid_id_path
         ]);
 
@@ -339,7 +350,6 @@ function isSel($key, $val, $data){
 
                     <div class="section-title"><i class="fas fa-map-marker-alt"></i> Address & Contact</div>
                     <div class="row">
-                      <div class="col-md-6"><div class="form-group"><label>Full Address</label><div class="input-group"><div class="input-group-prepend"><span class="input-group-text"><i class="fas fa-home"></i></span></div><input type="text" class="form-control" name="full_address" value="<?= getVal('full_address',$app_data) ?>" required></div></div></div>
                       <div class="col-md-3"><div class="form-group"><label>House No.</label><input type="text" class="form-control" name="house_number" value="<?= getVal('house_number',$app_data) ?>"></div></div>
                       <div class="col-md-3"><div class="form-group"><label>Purok</label><input type="text" class="form-control" name="purok" value="<?= getVal('purok',$app_data) ?>"></div></div>
                     </div>
@@ -357,13 +367,107 @@ function isSel($key, $val, $data){
                         <div class="col-md-3"><div class="form-group"><label>Senior Citizen</label><select class="form-control" name="senior_citizen"><option value="">Select</option><option value="Yes" <?= isSel('senior_status','Yes',$app_data) ?>>Yes</option><option value="No" <?= isSel('senior_status','No',$app_data) ?>>No</option></select></div></div>
                     </div>
 
-                    <div class="section-title"><i class="fas fa-user-shield"></i> Guardian / Parents</div>
+                    <div class="section-title"><i class="fas fa-user-friends"></i> Parents Details</div>
+                    
                     <div class="row">
-                        <div class="col-md-4"><div class="form-group"><label>Father's Name</label><input type="text" class="form-control" name="father_name" value="<?= getVal('father_name',$app_data) ?>"></div></div>
-                        <div class="col-md-4"><div class="form-group"><label>Mother's Name</label><input type="text" class="form-control" name="mother_name" value="<?= getVal('mother_name',$app_data) ?>"></div></div>
-                        <div class="col-md-4"><div class="form-group"><label>Guardian Name</label><input type="text" class="form-control" name="guardian" value="<?= getVal('guardian_name',$app_data) ?>"></div></div>
+                        <div class="col-md-8">
+                            <div class="form-group">
+                                <label>Father's Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="father_name" value="<?= getVal('father_name',$app_data) ?>" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Father's Occupation</label>
+                                <input type="text" class="form-control" name="father_occupation" placeholder="Occupation" value="<?= getVal('father_occupation',$app_data) ?>">
+                            </div>
+                        </div>
                     </div>
-                    <div class="row"><div class="col-md-4"><div class="form-group"><label>Guardian Contact</label><input type="text" class="form-control" name="guardian_contact" value="<?= getVal('guardian_contact',$app_data) ?>"></div></div></div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Father's Age</label>
+                                <input type="number" class="form-control" name="father_age" placeholder="Age" value="<?= getVal('father_age',$app_data) ?>">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Father's Birthday</label>
+                                <input type="date" class="form-control" name="father_birthday" value="<?= getVal('fathers_bday',$app_data) ?>">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Father's Highest Education</label>
+                                <select class="form-control" name="father_education">
+                                    <option value="">Select</option>
+                                    <option value="Elementary" <?= isSel('father_education','Elementary',$app_data) ?>>Elementary</option>
+                                    <option value="High School" <?= isSel('father_education','High School',$app_data) ?>>High School</option>
+                                    <option value="College" <?= isSel('father_education','College',$app_data) ?>>College</option>
+                                    <option value="Vocational" <?= isSel('father_education','Vocational',$app_data) ?>>Vocational</option>
+                                    <option value="None" <?= isSel('father_education','None',$app_data) ?>>None</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="form-group">
+                                <label>Mother's Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="mother_name" value="<?= getVal('mother_name',$app_data) ?>" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Mother's Occupation</label>
+                                <input type="text" class="form-control" name="mother_occupation" placeholder="Occupation" value="<?= getVal('mother_occupation',$app_data) ?>">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Mother's Age</label>
+                                <input type="number" class="form-control" name="mother_age" placeholder="Age" value="<?= getVal('mother_age',$app_data) ?>">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Mother's Birthday</label>
+                                <input type="date" class="form-control" name="mother_birthday" value="<?= getVal('mothers_bday',$app_data) ?>">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Mother's Highest Education</label>
+                                <select class="form-control" name="mother_education">
+                                    <option value="">Select</option>
+                                    <option value="Elementary" <?= isSel('mother_education','Elementary',$app_data) ?>>Elementary</option>
+                                    <option value="High School" <?= isSel('mother_education','High School',$app_data) ?>>High School</option>
+                                    <option value="College" <?= isSel('mother_education','College',$app_data) ?>>College</option>
+                                    <option value="Vocational" <?= isSel('mother_education','Vocational',$app_data) ?>>Vocational</option>
+                                    <option value="None" <?= isSel('mother_education','None',$app_data) ?>>None</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="section-title"><i class="fas fa-user-shield"></i> Guardian Info</div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Guardian's Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="guardian" value="<?= getVal('guardian_name',$app_data) ?>" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Guardian's Contact <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="guardian_contact" value="<?= getVal('guardian_contact',$app_data) ?>" required>
+                            </div>
+                        </div>
+                    </div>
 
                   </div>
                   
@@ -426,22 +530,6 @@ function isSel($key, $val, $data){
                     <div class="section-title"><i class="fas fa-users"></i> Siblings</div>
                     <button type="button" id="add_sibling" class="btn btn-sm btn-outline-light mb-3"><i class="fas fa-plus"></i> Add Sibling</button>
                     <div class="table-responsive"><table class="table table-bordered table-dark-custom"><thead><tr><th>Name</th><th>Age</th><th>Birthday</th><th>Education</th><th>Action</th></tr></thead><tbody id="siblings_tbody"></tbody></table></div>
-
-                    <div class="section-title"><i class="fas fa-user-friends"></i> Detailed Parents Info</div>
-                    <div class="row">
-                      <div class="col-md-6"><div class="form-group"><label>Father's Name</label><input type="text" class="form-control" name="parent_father_name" value="<?= getVal('father_name',$app_data) ?>"></div></div>
-                      <div class="col-md-6"><div class="form-group"><label>Mother's Name</label><input type="text" class="form-control" name="parent_mother_name" value="<?= getVal('mother_name',$app_data) ?>"></div></div>
-                    </div>
-                    <div class="row">
-                      <div class="col-md-4"><div class="form-group"><label>Father's Occupation</label><input type="text" class="form-control" name="father_occupation" value="<?= getVal('father_occupation',$app_data) ?>"></div></div>
-                      <div class="col-md-4"><div class="form-group"><label>Father's Age</label><input type="number" class="form-control" name="father_age" value="<?= getVal('father_age',$app_data) ?>"></div></div>
-                      <div class="col-md-4"><div class="form-group"><label>Father's Education</label><select class="form-control" name="father_education"><option value="">Select</option><option value="none" <?= isSel('father_education','none',$app_data) ?>>None</option><option value="primary" <?= isSel('father_education','primary',$app_data) ?>>Primary</option></select></div></div>
-                    </div>
-                    <div class="row">
-                      <div class="col-md-4"><div class="form-group"><label>Mother's Occupation</label><input type="text" class="form-control" name="mother_occupation" value="<?= getVal('mother_occupation',$app_data) ?>"></div></div>
-                      <div class="col-md-4"><div class="form-group"><label>Mother's Age</label><input type="number" class="form-control" name="mother_age" value="<?= getVal('mother_age',$app_data) ?>"></div></div>
-                      <div class="col-md-4"><div class="form-group"><label>Mother's Education</label><select class="form-control" name="mother_education"><option value="">Select</option><option value="none" <?= isSel('mother_education','none',$app_data) ?>>None</option><option value="primary" <?= isSel('mother_education','primary',$app_data) ?>>Primary</option></select></div></div>
-                    </div>
 
                     <div class="section-title"><i class="fas fa-hand-holding-heart"></i> Government Beneficiary</div>
                     <div class="form-group">
@@ -563,6 +651,4 @@ $(function(){
   ?>
 });
 </script>
-
-</body>
-</html>
+  

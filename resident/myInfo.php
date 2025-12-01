@@ -63,7 +63,7 @@ try {
             ':occ'   => $_POST['occupation'],
             ':house' => $_POST['house_number'], 
             ':purok' => $_POST['purok'], 
-            ':addr' => $_POST['full_address'], 
+            // REMOVED: ':addr' => $_POST['full_address'], 
             ':email' => $_POST['email_address'], 
             ':contact' => $_POST['contact_number'], 
             ':father' => $_POST['father_name'], 
@@ -77,9 +77,11 @@ try {
             // Extended Parent Details
             ':f_occ' => $_POST['father_occupation'] ?? '',
             ':f_age' => $_POST['father_age'] ?? 0,
+            ':f_bday' => !empty($_POST['father_birthday']) ? $_POST['father_birthday'] : NULL, // NEW
             ':f_educ' => $_POST['father_education'] ?? '',
             ':m_occ' => $_POST['mother_occupation'] ?? '',
             ':m_age' => $_POST['mother_age'] ?? 0,
+            ':m_bday' => !empty($_POST['mother_birthday']) ? $_POST['mother_birthday'] : NULL, // NEW
             ':m_educ' => $_POST['mother_education'] ?? '',
             // Residency & JSON
             ':duration' => $_POST['residency_months'],
@@ -92,16 +94,19 @@ try {
             ':rid' => $resident_id
         ];
 
+        // UPDATED SQL
         $sql1 = "UPDATE residence_applications SET 
                  first_name=:fname, middle_name=:mname, last_name=:lname, suffix=:suffix, 
                  birth_date=:bdate, birth_place=:bplace, gender=:gender, civil_status=:civil, 
                  religion=:rel, nationality=:nat, blood_type=:blood, occupation=:occ,
-                 house_number=:house, purok=:purok, full_address=:addr, 
+                 house_number=:house, purok=:purok, 
                  email_address=:email, contact_number=:contact, 
                  father_name=:father, mother_name=:mother, guardian_name=:guardian, guardian_contact=:gcontact, 
                  voter_status=:voter, single_parent_status=:single, senior_status=:senior, pwd_status=:pwd,
-                 father_occupation=:f_occ, father_age=:f_age, father_education=:f_educ,
-                 mother_occupation=:m_occ, mother_age=:m_age, mother_education=:m_educ,
+                 
+                 father_occupation=:f_occ, father_age=:f_age, fathers_bday=:f_bday, father_education=:f_educ,
+                 mother_occupation=:m_occ, mother_age=:m_age, mothers_bday=:m_bday, mother_education=:m_educ,
+                 
                  residency_duration=:duration, years_of_living=:years, residence_since=:since, 
                  gov_beneficiary=:gov, beneficiary_type=:gov_type,
                  children_list=:child_list, siblings_list=:sib_list
@@ -290,14 +295,10 @@ function sel($key, $val, $arr) { return (isset($arr[$key]) && $arr[$key] == $val
 
                         <div class="section-title"><i class="fas fa-map-marker-alt"></i> Address & Contact</div>
                         <div class="row">
-                          <div class="col-md-6"><div class="form-group"><label>Full Address</label><input type="text" class="form-control" name="full_address" value="<?= val('full_address',$row_resident) ?>" required></div></div>
                           <div class="col-md-3"><div class="form-group"><label>House No.</label><input type="text" class="form-control" name="house_number" value="<?= val('house_number',$row_resident) ?>"></div></div>
                           <div class="col-md-3"><div class="form-group"><label>Purok</label><input type="text" class="form-control" name="purok" value="<?= val('purok',$row_resident) ?>"></div></div>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6"><div class="form-group"><label>Contact Number</label><div class="input-group"><div class="input-group-prepend"><span class="input-group-text"><i class="fas fa-phone"></i></span></div><input type="text" class="form-control" name="contact_number" value="<?= val('contact_number',$row_resident) ?>" maxlength="11"></div></div></div>
-                            <div class="col-md-6"><div class="form-group"><label>Email Address</label><div class="input-group"><div class="input-group-prepend"><span class="input-group-text"><i class="fas fa-envelope"></i></span></div><input type="email" class="form-control" name="email_address" value="<?= val('email_address',$row_resident) ?>"></div></div></div>
+                          <div class="col-md-3"><div class="form-group"><label>Contact Number</label><input type="text" class="form-control" name="contact_number" value="<?= val('contact_number',$row_resident) ?>" maxlength="11"></div></div>
+                          <div class="col-md-3"><div class="form-group"><label>Email Address</label><input type="email" class="form-control" name="email_address" value="<?= val('email_address',$row_resident) ?>"></div></div>
                         </div>
 
                         <div class="section-title"><i class="fas fa-list"></i> Additional Information</div>
@@ -308,13 +309,107 @@ function sel($key, $val, $arr) { return (isset($arr[$key]) && $arr[$key] == $val
                             <div class="col-md-3"><div class="form-group"><label>Senior Citizen</label><select class="form-control" name="senior_citizen"><option value="Yes" <?= sel('senior_status','Yes',$row_resident) ?>>Yes</option><option value="No" <?= sel('senior_status','No',$row_resident) ?>>No</option></select></div></div>
                         </div>
 
-                        <div class="section-title"><i class="fas fa-user-shield"></i> Guardian / Parents</div>
+                        <div class="section-title"><i class="fas fa-user-friends"></i> Parents Details</div>
+                        
                         <div class="row">
-                            <div class="col-md-4"><div class="form-group"><label>Father's Name</label><input type="text" class="form-control" name="father_name" value="<?= val('father_name',$row_resident) ?>"></div></div>
-                            <div class="col-md-4"><div class="form-group"><label>Mother's Name</label><input type="text" class="form-control" name="mother_name" value="<?= val('mother_name',$row_resident) ?>"></div></div>
-                            <div class="col-md-4"><div class="form-group"><label>Guardian Name</label><input type="text" class="form-control" name="guardian" value="<?= val('guardian_name',$row_resident) ?>"></div></div>
+                            <div class="col-md-8">
+                                <div class="form-group">
+                                    <label>Father's Name <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" name="father_name" value="<?= val('father_name',$row_resident) ?>" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label>Father's Occupation</label>
+                                    <input type="text" class="form-control" name="father_occupation" placeholder="Occupation" value="<?= val('father_occupation',$row_resident) ?>">
+                                </div>
+                            </div>
                         </div>
-                        <div class="row"><div class="col-md-4"><div class="form-group"><label>Guardian Contact</label><input type="text" class="form-control" name="guardian_contact" value="<?= val('guardian_contact',$row_resident) ?>"></div></div></div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label>Father's Age</label>
+                                    <input type="number" class="form-control" name="father_age" placeholder="Age" value="<?= val('father_age',$row_resident) ?>">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label>Father's Birthday</label>
+                                    <input type="date" class="form-control" name="father_birthday" value="<?= val('fathers_bday',$row_resident) ?>">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label>Father's Highest Education</label>
+                                    <select class="form-control" name="father_education">
+                                        <option value="">Select</option>
+                                        <option value="Elementary" <?= sel('father_education','Elementary',$row_resident) ?>>Elementary</option>
+                                        <option value="High School" <?= sel('father_education','High School',$row_resident) ?>>High School</option>
+                                        <option value="College" <?= sel('father_education','College',$row_resident) ?>>College</option>
+                                        <option value="Vocational" <?= sel('father_education','Vocational',$row_resident) ?>>Vocational</option>
+                                        <option value="None" <?= sel('father_education','None',$row_resident) ?>>None</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="form-group">
+                                    <label>Mother's Name <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" name="mother_name" value="<?= val('mother_name',$row_resident) ?>" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label>Mother's Occupation</label>
+                                    <input type="text" class="form-control" name="mother_occupation" placeholder="Occupation" value="<?= val('mother_occupation',$row_resident) ?>">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label>Mother's Age</label>
+                                    <input type="number" class="form-control" name="mother_age" placeholder="Age" value="<?= val('mother_age',$row_resident) ?>">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label>Mother's Birthday</label>
+                                    <input type="date" class="form-control" name="mother_birthday" value="<?= val('mothers_bday',$row_resident) ?>">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label>Mother's Highest Education</label>
+                                    <select class="form-control" name="mother_education">
+                                        <option value="">Select</option>
+                                        <option value="Elementary" <?= sel('mother_education','Elementary',$row_resident) ?>>Elementary</option>
+                                        <option value="High School" <?= sel('mother_education','High School',$row_resident) ?>>High School</option>
+                                        <option value="College" <?= sel('mother_education','College',$row_resident) ?>>College</option>
+                                        <option value="Vocational" <?= sel('mother_education','Vocational',$row_resident) ?>>Vocational</option>
+                                        <option value="None" <?= sel('mother_education','None',$row_resident) ?>>None</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="section-title"><i class="fas fa-user-shield"></i> Guardian Info</div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Guardian's Name <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" name="guardian" value="<?= val('guardian_name',$row_resident) ?>" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Guardian's Contact <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" name="guardian_contact" value="<?= val('guardian_contact',$row_resident) ?>" required>
+                                </div>
+                            </div>
+                        </div>
 
                       </div>
                       
@@ -361,18 +456,6 @@ function sel($key, $val, $arr) { return (isset($arr[$key]) && $arr[$key] == $val
                         <div class="section-title"><i class="fas fa-users"></i> Siblings</div>
                         <button type="button" id="add_sibling" class="btn btn-sm btn-outline-light mb-3"><i class="fas fa-plus"></i> Add Sibling</button>
                         <div class="table-responsive"><table class="table table-bordered table-dark-custom"><thead><tr><th>Name</th><th>Age</th><th>Birthday</th><th>Education</th><th>Action</th></tr></thead><tbody id="siblings_tbody"></tbody></table></div>
-
-                        <div class="section-title"><i class="fas fa-user-friends"></i> Detailed Parents Info</div>
-                        <div class="row">
-                          <div class="col-md-4"><div class="form-group"><label>Father's Occupation</label><input type="text" class="form-control" name="father_occupation" value="<?= val('father_occupation',$row_resident) ?>"></div></div>
-                          <div class="col-md-4"><div class="form-group"><label>Father's Age</label><input type="number" class="form-control" name="father_age" value="<?= val('father_age',$row_resident) ?>"></div></div>
-                          <div class="col-md-4"><div class="form-group"><label>Father's Education</label><select class="form-control" name="father_education"><option value="none" <?= sel('father_education','none',$row_resident) ?>>None</option><option value="primary" <?= sel('father_education','primary',$row_resident) ?>>Primary</option></select></div></div>
-                        </div>
-                        <div class="row">
-                          <div class="col-md-4"><div class="form-group"><label>Mother's Occupation</label><input type="text" class="form-control" name="mother_occupation" value="<?= val('mother_occupation',$row_resident) ?>"></div></div>
-                          <div class="col-md-4"><div class="form-group"><label>Mother's Age</label><input type="number" class="form-control" name="mother_age" value="<?= val('mother_age',$row_resident) ?>"></div></div>
-                          <div class="col-md-4"><div class="form-group"><label>Mother's Education</label><select class="form-control" name="mother_education"><option value="none" <?= sel('mother_education','none',$row_resident) ?>>None</option><option value="primary" <?= sel('mother_education','primary',$row_resident) ?>>Primary</option></select></div></div>
-                        </div>
 
                         <div class="section-title"><i class="fas fa-hand-holding-heart"></i> Government Beneficiary</div>
                         <div class="form-group">

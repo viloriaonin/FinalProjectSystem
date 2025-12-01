@@ -2,44 +2,147 @@
 include_once 'db_connection.php';
 session_start();
 
-try{
-    // 1. Check if User is Logged In
-    if(isset($_SESSION['user_id']) && isset($_SESSION['user_type'])){
-        $user_id = $_SESSION['user_id'];
-        // UPDATED TO PDO
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE user_id = :uid");
-        $stmt->execute(['uid' => $user_id]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+// --- CONFIGURATION: SMS API CREDENTIALS ---
+$sms_url    = 'https://sms.iprogtech.com/api/v1/otp/send_otp';
+$sms_user   = 'Willian Thret Acorda'; 
+$sms_token  = '2cd365b1761722d7de88bc70fd9915d53b4f929'; 
+$sms_sender = 'BrgySystem'; 
+
+// --- 1. HANDLE AJAX REQUESTS ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    
+    header('Content-Type: application/json'); 
+
+    // A. CHECK USERNAME (New Step to link the two interfaces)
+    if ($_POST['action'] === 'check_username') {
+        $username = trim($_POST['username']);
         
-        if($row) {
-            $account_type = $row['user_type'];
-            if ($account_type == 'admin') {
-                echo '<script>window.location.href="admin/dashboard.php";</script>';
-            } elseif ($account_type == 'secretary') {
-                echo '<script>window.location.href="secretary/dashboard.php";</script>';
+        try {
+            $stmt = $pdo->prepare("SELECT contact_number FROM users WHERE username = :u");
+            $stmt->execute(['u' => $username]);
+            
+            if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $contact = $row['contact_number'];
+                
+                // Check if contact is valid in DB
+                if(empty($contact) || strlen($contact) != 11) {
+                    echo json_encode(['status' => 'error', 'message' => 'Linked phone number is invalid. Contact Admin.']);
+                } else {
+                    echo json_encode(['status' => 'found', 'contact' => $contact]);
+                }
             } else {
-                echo '<script>window.location.href="resident/dashboard.php";</script>';
+                echo json_encode(['status' => 'error', 'message' => 'Username not found.']);
             }
+        } catch(PDOException $e) {
+            echo json_encode(['status' => 'error', 'message' => 'Database Error.']);
         }
+        exit;
     }
 
-    // 2. Fetch Barangay Information (PDO)
-    $sql = "SELECT * FROM `barangay_information` LIMIT 1";
-    $stmt_b = $pdo->query($sql);
-    
-    // Initialize variables
-    $barangay = 'Barangay Portal';
-    $image = 'default_logo.png';
-    
+    // B. SEND OTP
+    if ($_POST['action'] === 'send_otp') {
+        $contact = trim($_POST['contact']);
+        
+        // Basic Validation
+        if(empty($contact) || strlen($contact) != 11 || substr($contact, 0, 2) != "09") {
+            echo json_encode(['status' => 'error', 'message' => 'Invalid PH mobile number format.']);
+            exit;
+        }
+
+        // Generate OTP
+        $otp = rand(100000, 999999);
+        $_SESSION['otp'] = $otp;
+        $_SESSION['otp_contact'] = $contact; 
+        $_SESSION['otp_verified'] = false; 
+
+        $data = [
+            'user' => $sms_user,
+            'api_token' => $sms_token,
+            'sender' => $sms_sender,
+            'phone_number' => $contact,
+            'message' => "Your Password Reset Code is: $otp"
+        ];
+
+        // Send via cURL
+        $ch = curl_init($sms_url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); 
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        if ($response === false) {
+             echo json_encode(['status' => 'error', 'message' => 'Failed to send SMS.']);
+             exit;
+        }
+
+        echo json_encode(['status' => 'sent', 'message' => 'OTP Sent.', 'otp_debug' => $otp]); 
+        exit;
+    }
+
+    // C. VERIFY OTP
+    if ($_POST['action'] === 'verify_otp') {
+        $user_otp = trim($_POST['otp']);
+        
+        if (!isset($_SESSION['otp'])) {
+            echo json_encode(['status' => 'expired', 'message' => 'OTP Expired.']);
+            exit;
+        }
+
+        if ($user_otp == $_SESSION['otp']) {
+            $_SESSION['otp_verified'] = true;
+            echo json_encode(['status' => 'verified']);
+        } else {
+            echo json_encode(['status' => 'invalid', 'message' => 'Incorrect Code.']);
+        }
+        exit;
+    }
+
+    // D. RESET PASSWORD
+    if ($_POST['action'] === 'reset_password') {
+        
+        if (!isset($_SESSION['otp_verified']) || $_SESSION['otp_verified'] !== true) {
+            echo json_encode(['status' => 'error', 'message' => 'Unauthorized request.']);
+            exit;
+        }
+
+        $new_pass = $_POST['new_password'];
+        $confirm_pass = $_POST['confirm_password'];
+        $contact = $_SESSION['otp_contact'];
+
+        if($new_pass !== $confirm_pass){
+            echo json_encode(['status' => 'error', 'message' => 'Passwords do not match.']);
+            exit;
+        }
+
+        try {
+            // Update password based on the verified contact number
+            $stmt = $pdo->prepare("UPDATE users SET password = :pass WHERE contact_number = :contact");
+            if($stmt->execute(['pass' => $new_pass, 'contact' => $contact])){
+                unset($_SESSION['otp'], $_SESSION['otp_contact'], $_SESSION['otp_verified']);
+                echo json_encode(['status' => 'success']);
+            } else {
+                echo json_encode(['status' => 'error', 'message' => 'Failed to update password.']);
+            }
+        } catch (PDOException $e) {
+            echo json_encode(['status' => 'error', 'message' => 'Database error.']);
+        }
+        exit;
+    }
+}
+
+// --- FETCH BARANGAY INFO ---
+$barangay = 'Barangay Portal';
+$image = 'default_logo.png';
+try {
+    $stmt_b = $pdo->query("SELECT * FROM `barangay_information` LIMIT 1");
     if($row = $stmt_b->fetch(PDO::FETCH_ASSOC)){
-        // Use correct column names from oninz.sql
         $image = $row['images'] ?? 'default_logo.png'; 
         $barangay = $row['barangay'] ?? 'Barangay Portal';
     }
-
-} catch(PDOException $e){
-    echo "Database Error: " . $e->getMessage();
-}
+} catch(PDOException $e){}
 ?>
 
 <!DOCTYPE html>
@@ -47,209 +150,166 @@ try{
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Forgot Password</title>
+  <title>Forgot Password - <?= htmlspecialchars($barangay) ?></title>
   
   <link rel="stylesheet" href="assets/plugins/fontawesome-free/css/all.min.css">
   <link rel="stylesheet" href="assets/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="assets/plugins/sweetalert2/css/sweetalert2.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 
   <style>
-    /* --- DARK THEME VARIABLES --- */
-    :root {
-        --bg-dark: #0d1117;
-        --card-bg: #161b22;
-        --input-bg: #0d1117;
-        --text-main: #c9d1d9;
-        --text-muted: #8b949e;
-        --accent-color: #3b82f6; /* Blue Accent */
-        --border-color: #30363d;
+    body { 
+        font-family: 'Poppins', sans-serif; 
+        background-color: #f4f6f9; 
     }
-
-    body {
-        background-color: var(--bg-dark);
-        color: var(--text-main);
-        font-family: 'Poppins', sans-serif;
-    }
-
-    .wrapper {
-        display: flex;
-        flex-direction: column;
-        min-height: 100vh;
-    }
-
     .content-wrapper {
-        background-color: var(--bg-dark) !important;
-        flex: 1;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        margin-left: 0 !important; /* Override AdminLTE margin */
-    }
-
-    /* Navbar Styles (From your request) */
-    .rightBar:hover {
-        color: var(--accent-color) !important;
-    }
-
-    /* Card Styling matching image_4ab2b3.png */
-    .login-card {
-        background-color: var(--card-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-        padding: 40px;
-        width: 100%;
-        max-width: 450px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        text-align: center;
-    }
-
-    .brand-logo {
-        width: 80px;
-        height: 80px;
-        object-fit: cover;
-        border-radius: 50%;
-        border: 3px solid var(--accent-color);
-        margin-bottom: 20px;
-    }
-
-    h1 {
-        font-size: 1.5rem;
-        font-weight: 600;
-        color: #ffffff;
-        margin-bottom: 30px;
-    }
-
-    /* Input Groups */
-    .input-group {
-        background-color: var(--input-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        margin-bottom: 20px;
-        overflow: hidden;
-    }
-
-    .input-group:focus-within {
-        border-color: var(--accent-color);
-    }
-
-    .input-group-text {
         background-color: transparent;
-        border: none;
-        color: var(--text-muted);
+        margin-top: 20px; 
+        min-height: calc(100vh - 140px) !important;
+        margin-left: 0 !important;
     }
-
+    .rightBar:hover{ border-bottom: 3px solid red; }
+    
+    .register-card {
+        border-top: 5px solid #000000; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        border-radius: 5px;
+        background: #fff;
+    }
+    
     .form-control {
-        background-color: transparent;
-        border: none;
-        color: var(--text-main);
-        height: 50px;
+        border-radius: 0;
+        border: 1px solid #ced4da;
+        height: 45px;
     }
     .form-control:focus {
-        background-color: transparent;
-        color: var(--text-main);
+        border-color: #000;
         box-shadow: none;
     }
-
-    /* Button */
-    .btn-recover {
-        background-color: var(--accent-color);
-        color: white;
-        border: none;
-        width: 100%;
-        padding: 12px;
-        border-radius: 8px;
+    
+    .btn-black {
+        background-color: #000;
+        color: #fff;
+        border-radius: 0;
         font-weight: 600;
-        margin-top: 10px;
-        transition: all 0.3s;
+        padding: 10px;
     }
-
-    .btn-recover:hover {
-        background-color: #2563eb;
-        transform: translateY(-1px);
+    .btn-black:hover {
+        background-color: #333;
+        color: #fff;
     }
-
-    .back-link {
-        display: block;
-        margin-top: 20px;
-        color: var(--text-muted);
-        font-size: 0.9rem;
-        text-decoration: none;
+    .btn-black:disabled {
+        background-color: #555;
+        cursor: not-allowed;
     }
-    .back-link:hover { color: var(--text-main); }
-
-    /* Fix Modal Z-Index */
-    body .modal { z-index: 200000 !important; }
-    body .modal-backdrop { z-index: 199999 !important; }
-    .swal2-container { z-index: 210000 !important; }
+    .link-black { color: #000; font-weight: 600; }
+    .link-black:hover { text-decoration: underline; }
   </style>
 </head>
 <body class="hold-transition layout-top-nav">
 
 <div class="wrapper">
 
-  <nav class="main-header navbar navbar-expand-md" style="background-color: #000000ff; border:none;">
+  <nav class="main-header navbar navbar-expand-md" style="background-color: #000000; border:0;">
     <div class="container">
-      <a href="#" class="navbar-brand">
+      <a href="index.php" class="navbar-brand">
         <?php if(!empty($image)): ?>
-            <img src="assets/dist/img/<?= $image ?>" alt="logo" class="brand-image img-circle">
+            <img src="assets/dist/img/<?= $image ?>" alt="logo" class="brand-image img-circle" style="opacity: .8">
         <?php endif; ?>
         <span class="brand-text text-white" style="font-weight: 700">BARANGAY PORTAL</span>
       </a>
-
-      <button class="navbar-toggler order-1" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"><i class="fas fa-bars text-white"></i></span>
-      </button>
-
-      <div class="collapse navbar-collapse order-3" id="navbarCollapse">
-        <ul class="navbar-nav ml-auto">
-            <li class="nav-item">
-                <a href="index.php" class="nav-link text-white rightBar">HOME</a>
-            </li>
-            <li class="nav-item">
-                <a href="ourofficial.php" class="nav-link text-white rightBar">Our Officials</a>
-            </li>
-            <li class="nav-item">
-                <a href="login.php" class="nav-link text-white rightBar" style="border-bottom: 3px solid red;">
-                    <i class="fas fa-user-alt mr-1"></i> LOGIN
-                </a>
-            </li>
-        </ul>
-      </div>
+      <ul class="order-1 order-md-3 navbar-nav navbar-no-expand ml-auto">
+          <li class="nav-item"><a href="index.php" class="nav-link text-white rightBar">HOME</a></li>
+          <li class="nav-item"><a href="login.php" class="nav-link text-white rightBar"><i class="fas fa-user-alt mr-1"></i> LOGIN</a></li>
+      </ul>
     </div>
   </nav>
+
   <div class="content-wrapper">
-    
-    <div class="login-card">
-        <?php if(!empty($image)): ?>
-            <img src="assets/dist/img/<?= $image;?>" alt="logo" class="brand-logo">
-        <?php else: ?>
-            <img src="assets/dist/img/default-logo.png" alt="logo" class="brand-logo">
-        <?php endif; ?>
+    <div class="content pt-5">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-md-6 col-lg-5">
+                    
+                    <div class="card register-card">
+                        <div class="card-body p-4">
+                            
+                            <div id="step-1-username">
+                                <h3 class="text-center font-weight-bold mb-4">Forgot Password</h3>
+                                <p class="text-muted text-center mb-4">Enter your username or resident ID to find your account.</p>
 
-        <h1>Forgot Password</h1>
+                                <form id="usernameForm" autocomplete="off">
+                                    <p class="text-muted small mb-1 font-weight-bold">ACCOUNT VERIFICATION</p>
+                                    <div class="form-group mb-4">
+                                        <div class="input-group">
+                                            <input type="text" id="username_input" name="username_input" class="form-control" placeholder="Username or Resident ID" required>
+                                            <div class="input-group-append">
+                                                <div class="input-group-text bg-white border-left-0">
+                                                    <span class="fas fa-user"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-black btn-block" id="btnCheckUser">RECOVER ACCOUNT</button>
+                                </form>
+                            </div>
 
-        <form id="recoverForm" method="post">
-            <div class="input-group">
-                <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-user"></i></span>
-                </div>
-                <input type="text" id="username" name="username" class="form-control" placeholder="Username or Resident ID" required>
-                <div class="input-group-append">
-                    <span class="input-group-text"><i class="fas fa-keyboard"></i></span>
+                            <div id="step-2-reset" style="display:none;">
+                                <h3 class="text-center font-weight-bold mb-4">Account Recovery</h3>
+                                <p class="text-muted text-center mb-4">Enter your registered mobile number to reset password.</p>
+
+                                <form id="resetForm" autocomplete="off">
+                                    
+                                    <p class="text-muted small mb-1 font-weight-bold">1. VERIFICATION</p>
+                                    <div class="form-group mb-3">
+                                        <div class="input-group">
+                                            <input type="text" readonly class="form-control" id="contact_number" name="contact_number" placeholder="Contact Number">
+                                            <div class="input-group-append">
+                                                <button type="button" class="btn btn-outline-dark" id="btnGetOtp">Get OTP</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div id="otpSection" style="display:none;" class="bg-light p-3 mb-3 border">
+                                        <label class="small text-muted">Enter Verification Code</label>
+                                        <div class="input-group mb-2">
+                                            <input type="text" maxlength="6" class="form-control" id="otp_code" name="otp_code" placeholder="6-digit code">
+                                            <div class="input-group-append">
+                                                <button type="button" class="btn btn-black" id="btnVerifyOtp">Verify</button>
+                                            </div>
+                                        </div>
+                                        <button type="button" class="btn btn-link btn-sm text-dark p-0" id="btnResendOtp" style="display:none;">Resend OTP <span id="resendCountdown"></span></button>
+                                    </div>
+
+                                    <hr>
+
+                                    <p class="text-muted small mb-1 font-weight-bold">2. RESET PASSWORD</p>
+                                    <div class="form-group mb-3">
+                                        <input type="password" id="new_password" name="new_password" class="form-control" placeholder="New Password" disabled>
+                                    </div>
+                                    <div class="form-group mb-4">
+                                        <input type="password" id="confirm_password" name="confirm_password" class="form-control" placeholder="Confirm Password" disabled>
+                                    </div>
+
+                                    <button id="btnReset" type="submit" class="btn btn-black btn-block" disabled>
+                                        UPDATE PASSWORD
+                                    </button>
+                                </form>
+                            </div>
+                            
+                            <div class="mt-3 text-center">
+                                <a href="login.php" class="link-black small">
+                                    <i class="fas fa-arrow-left mr-1"></i> Back to Login
+                                </a>
+                            </div>
+
+                        </div>
+                    </div>
+
                 </div>
             </div>
-
-            <button id="recoverBtn" type="submit" class="btn-recover">
-                Recover Account
-            </button>
-        </form>
-
-        <a href="login.php" class="back-link">
-            <i class="fas fa-arrow-left mr-1"></i> Back to Login
-        </a>
+        </div>
     </div>
-
   </div>
 </div>
 
@@ -257,137 +317,186 @@ try{
 <script src="assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="assets/dist/js/adminlte.js"></script>
 <script src="assets/plugins/sweetalert2/js/sweetalert2.all.min.js"></script>
-<script src="assets/plugins/jquery-validation/jquery.validate.min.js"></script>
-<div id="show_number"></div>
 
 <script>
-  $(document).ready(function(){
+$(document).ready(function(){
+    var apiUrl = 'forgot.php'; 
 
-      $("#recoverForm").submit(function(e){
-        e.preventDefault();
-        var username = $("#username").val();
-        $("#show_number").html('');
-        
-        if(username != ''){
-          $.ajax({
-            url: 'recoverAccount.php',
-            type: 'POST',
-            data:{username:username},
-            cache: false,
-            beforeSend: function(){
-                var $btn = $('#recoverBtn');
-                $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
-            },
-            success:function(data){
-              $("#show_number").html(data);
-              var $modal = $("#recoverModal");
-              $modal.appendTo('body');
-              
-              if(typeof initializeRecoverModal === 'function'){
-                initializeRecoverModal();
-              }
-              
-              $modal.modal('show');
-
-              // Restore button
-              $('#recoverBtn').prop('disabled', false).html('Recover Account');
-            },
-            error: function(xhr){
-                $('#recoverBtn').prop('disabled', false).html('Recover Account');
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Server Error',
-                    text: 'Could not connect to server.',
-                    background: '#161b22',
-                    color: '#ffffff'
-                });
-            }
-          })
-        }else{
-          Swal.fire({
-            icon: 'warning',
-            title: 'Required',
-            text: 'Please enter your Username or ID',
-            background: '#161b22',
-            color: '#ffffff'
-          })
+    // Helper: Numbers Only Input
+    $.fn.inputFilter = function(inputFilter) {
+        return this.on("input keydown keyup mousedown mouseup select contextmenu drop", function() {
+        if (inputFilter(this.value)) {
+            this.oldValue = this.value;
+            this.oldSelectionStart = this.selectionStart;
+            this.oldSelectionEnd = this.selectionEnd;
+        } else if (this.hasOwnProperty("oldValue")) {
+            this.value = this.oldValue;
+            this.setSelectionRange(this.oldSelectionStart, this.oldSelectionEnd);
+        } else {
+            this.value = "";
         }
-      });
-  });
-</script>
+        });
+    };
+    $("#otp_code").inputFilter(function(value) { return /^\d*$/.test(value); });
 
-<script>
-// Logic for the injected modal (must be global)
-function initializeRecoverModal(){
-  $(function () {
-    $.validator.setDefaults({
-        submitHandler: function (form) {
-        // Combine OTP inputs
-        try {
-          var otpVal = $('.otp-input').map(function(){ return $(this).val()||''; }).get().join('');
-          $('#otp_code').val(otpVal);
-        } catch(e){}
+    // --- PHASE 1: CHECK USERNAME ---
+    $('#usernameForm').on('submit', function(e){
+        e.preventDefault();
+        var username = $('#username_input').val().trim();
+        
+        if(username === '') {
+            Swal.fire({icon:'warning', title:'Required', text:'Please enter your Username.', confirmButtonColor: '#000'});
+            return;
+        }
 
         $.ajax({
-          url: 'validateOTP.php',
-          type: 'POST',
-          data: $('#recoverPasswordForm').serialize(),
-          dataType: 'json',
-          success:function(response){
-            if(response.success){
-              Swal.fire({
-                  icon: 'success',
-                  title: 'Success',
-                  text: 'Password Updated Successfully!',
-                  background: '#161b22',
-                  color: '#ffffff',
-                  timer: 2000,
-                  showConfirmButton: false
-              }).then(()=>{ window.location.href="login.php"; })
-            } else {
-              Swal.fire({
-                  icon: 'error',
-                  title: 'Error',
-                  text: response.message,
-                  background: '#161b22',
-                  color: '#ffffff'
-              });
+            url: apiUrl,
+            type: 'POST',
+            dataType: 'json',
+            data: { action: 'check_username', username: username },
+            beforeSend: function(){
+                $('#btnCheckUser').prop('disabled', true).text('Checking...');
+            },
+            success: function(resp){
+                $('#btnCheckUser').prop('disabled', false).text('RECOVER ACCOUNT');
+                
+                if(resp.status === 'found'){
+                    // Transition UI
+                    $('#step-1-username').slideUp();
+                    $('#step-2-reset').slideDown();
+                    
+                    // Auto-fill the contact number found in DB
+                    $('#contact_number').val(resp.contact);
+                } else {
+                    Swal.fire({icon:'error', title:'Not Found', text: resp.message, confirmButtonColor: '#000'});
+                }
+            },
+            error: function(){
+                $('#btnCheckUser').prop('disabled', false).text('RECOVER ACCOUNT');
+                Swal.fire({icon:'error', title:'Error', text:'Server error checking username.', confirmButtonColor: '#000'});
             }
-          },
-          error: function(){
-             Swal.fire({
-                 icon: 'error',
-                 title: 'Error', 
-                 text: 'Something went wrong.',
-                 background: '#161b22',
-                 color: '#ffffff'
-             });
-          }
         });
-      }
     });
 
-    $('#recoverPasswordForm').validate({
-      rules: {
-        new_password: { required: true, minlength: 8 },
-        otp_code: { required: true, minlength: 6 },
-        new_confirm_password: { required: true, minlength: 8, equalTo: "[name='new_password']" }
-      },
-      messages: {
-        new_password: { required: "New Password is Required", minlength: "Min 8 chars" },
-        new_confirm_password: { required: "Confirm Password is Required", equalTo: "Passwords do not match" }
-      },
-      errorElement: 'span',
-      errorPlacement: function (error, element) { error.addClass('invalid-feedback'); element.closest('.form-group').append(error); },
-      highlight: function (element) { $(element).addClass('is-invalid'); },
-      unhighlight: function (element) { $(element).removeClass('is-invalid'); }
+
+    // --- PHASE 2: OTP & RESET LOGIC ---
+
+    // Timer Logic
+    var resendCooldown = 60; 
+    var resendTimer = null;
+    function startResendCountdown() {
+        var remaining = resendCooldown;
+        $('#btnResendOtp').prop('disabled', true).show();
+        $('#resendCountdown').show().text('(' + remaining + 's)');
+        if(resendTimer) clearInterval(resendTimer);
+        resendTimer = setInterval(function(){
+            remaining--;
+            $('#resendCountdown').text('(' + remaining + 's)');
+            if (remaining <= 0) {
+                clearInterval(resendTimer);
+                $('#btnResendOtp').prop('disabled', false);
+                $('#resendCountdown').hide().text('');
+            }
+        }, 1000);
+    }
+
+    // 1. Send OTP
+    $('#btnGetOtp, #btnResendOtp').on('click', function(){
+        var contact = $('#contact_number').val().trim();
+        
+        Swal.fire({title: 'Sending OTP...', allowOutsideClick: false, didOpen: () => { Swal.showLoading() }});
+
+        $.ajax({
+            url: apiUrl,
+            type: 'POST',
+            dataType: 'json',
+            data: { action: 'send_otp', contact: contact },
+            success: function(resp){
+                Swal.close();
+                if (resp.status === 'sent') {
+                    Swal.fire({icon:'success', title:'OTP Sent', text:'Code sent to ' + contact, confirmButtonColor: '#000'});
+                    $('#otpSection').slideDown();
+                    $('#btnGetOtp').prop('disabled', true); // Disable since number is fixed now
+                    startResendCountdown();
+                } else {
+                    Swal.fire({icon:'error', title:'Error', text: resp.message, confirmButtonColor: '#000'});
+                }
+            },
+            error: function(){
+                Swal.close();
+                Swal.fire({icon:'error', title:'Error', text: 'Connection Failed', confirmButtonColor: '#000'});
+            }
+        });
     });
 
-    $("#otp_code").on("input", function() {
-        this.value = this.value.replace(/[^0-9]/g, '');
+    // 2. Verify OTP
+    $('#btnVerifyOtp').on('click', function(){
+        var otp = $('#otp_code').val().trim();
+        if (otp.length !== 6) { 
+            Swal.fire({icon:'warning', title:'Invalid Code', text:'Enter 6 digits.', confirmButtonColor: '#000'}); return; 
+        }
+        
+        $.ajax({
+            url: apiUrl,
+            type: 'POST',
+            dataType: 'json',
+            data: { action: 'verify_otp', otp: otp },
+            success: function(resp){
+                if (resp.status === 'verified') {
+                    Swal.fire({icon:'success', title:'Verified!', text:'Please enter new password.', confirmButtonColor: '#000', timer: 1500, showConfirmButton: false});
+                    
+                    $('#otpSection').slideUp();
+                    $('#btnGetOtp').text('Verified').removeClass('btn-outline-dark').addClass('btn-success');
+                    
+                    // Unlock Reset Form
+                    $('#new_password').prop('disabled', false);
+                    $('#confirm_password').prop('disabled', false);
+                    $('#btnReset').prop('disabled', false);
+                } else {
+                    Swal.fire({icon:'error', title:'Invalid Code', text: resp.message, confirmButtonColor: '#000'});
+                }
+            }
+        });
     });
-  });
-}
+
+    // 3. Reset Password
+    $('#resetForm').on('submit', function(e){
+        e.preventDefault();
+        if ($('#btnReset').prop('disabled')) return;
+
+        var pass = $('#new_password').val();
+        var confirm = $('#confirm_password').val();
+
+        if(pass.length < 5) {
+            Swal.fire({icon:'warning', title:'Weak Password', text:'Minimum 5 characters.', confirmButtonColor: '#000'}); return;
+        }
+        if(pass !== confirm) {
+            Swal.fire({icon:'warning', title:'Mismatch', text:'Passwords do not match.', confirmButtonColor: '#000'}); return;
+        }
+
+        $.ajax({
+            url: apiUrl,
+            type: 'POST',
+            dataType: 'json',
+            data: { action: 'reset_password', new_password: pass, confirm_password: confirm },
+            success: function(resp){
+                if (resp.status === 'success') {
+                    Swal.fire({
+                        icon:'success', 
+                        title:'Success', 
+                        text:'Password Updated! Please Login.', 
+                        confirmButtonColor: '#000'
+                    }).then(function(){
+                        window.location.href = 'login.php';
+                    });
+                } else {
+                    Swal.fire({icon:'error', title:'Error', text: resp.message, confirmButtonColor: '#000'});
+                }
+            }
+        });
+    });
+
+});
 </script>
 
 </body>

@@ -2,92 +2,163 @@
 session_start();
 include_once 'connection.php'; 
 
-// --- 1. SECURITY & REDIRECT CHECK ---
-if (isset($_SESSION['user_id']) && isset($_SESSION['user_type'])) {
-    $user_id = $_SESSION['user_id'];
-    $sql = "SELECT * FROM users WHERE id = ?";
-    $stmt = $con->prepare($sql);
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $result_user = $stmt->get_result();
-    if ($row = $result_user->fetch_assoc()) {
-        $account_type = $row['user_type'];
-        if ($account_type == 'admin') {
-            echo '<script>window.location.href="admin/dashboard.php";</script>';
-            exit;
-        } else {
-            echo '<script>window.location.href="resident/dashboard.php";</script>';
+// --- CONFIGURATION: SMS API CREDENTIALS ---
+$sms_url    = 'https://sms.iprogtech.com/api/v1/otp/send_otp';
+$sms_user   = 'Willian Thret Acorda'; 
+// Token with typo fixed (Ensure this is the correct token without the leading 'c')
+$sms_token  = 'c2cd365b1761722d7de88bc70fd9915d53b4f929'; 
+$sms_sender = 'BrgySystem'; 
+
+// --- 1. HANDLE AJAX REQUESTS (OTP & REGISTRATION) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    
+    header('Content-Type: application/json'); 
+
+    // A. SEND OTP
+    if ($_POST['action'] === 'send_otp') {
+        $contact = trim($_POST['contact']);
+        
+        // Basic validation
+        if(empty($contact) || strlen($contact) != 11 || substr($contact, 0, 2) != "09") {
+            echo json_encode(['status' => 'error', 'message' => 'Invalid PH mobile number format. Format: 09xxxxxxxxx']);
             exit;
         }
+
+        // Generate OTP
+        $otp = rand(100000, 999999);
+        
+        // Save to Session
+        $_SESSION['otp'] = $otp;
+        $_SESSION['otp_contact'] = $contact;
+        $_SESSION['otp_time'] = time();
+        $_SESSION['otp_verified'] = false; 
+
+        // Sending the number exactly as entered
+        $api_number = $contact; 
+        $message = "Your Verification Code is: $otp";
+
+        // Send via cURL
+        $data = [
+            'user' => $sms_user,
+            'api_token' => $sms_token,
+            'sender' => $sms_sender,
+            'phone_number' => $api_number,
+            'message' => $message
+        ];
+
+        $ch = curl_init($sms_url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        
+        // Disable SSL Verify for Localhost/WAMP
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); 
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+
+        $response = curl_exec($ch);
+        $curl_error = curl_error($ch); 
+        curl_close($ch);
+
+        if ($response === false) {
+             echo json_encode(['status' => 'error', 'message' => 'Connection Failed: ' . $curl_error]);
+             exit;
+        }
+
+        echo json_encode([
+            'status' => 'sent', 
+            'message' => 'OTP Sent successfully.', 
+            'api_response' => $response,
+            'otp_debug' => $otp 
+        ]); 
+        exit;
     }
-    $stmt->close();
+
+    // B. VERIFY OTP
+    if ($_POST['action'] === 'verify_otp') {
+        $user_otp = trim($_POST['otp']);
+        
+        if (!isset($_SESSION['otp'])) {
+            echo json_encode(['status' => 'expired', 'message' => 'OTP Expired.']);
+            exit;
+        }
+
+        if ($user_otp == $_SESSION['otp']) {
+            $_SESSION['otp_verified'] = true;
+            echo json_encode(['status' => 'verified']);
+        } else {
+            echo json_encode(['status' => 'invalid', 'message' => 'Incorrect Code.']);
+        }
+        exit;
+    }
+
+    // C. REGISTER USER
+    if ($_POST['action'] === 'register_user') {
+        $username = trim($_POST['add_username']);
+        $password = $_POST['add_password'] ?? '';
+        $confirm_password = $_POST['add_confirm_password'] ?? '';
+        $contact_number = trim($_POST['add_contact_number'] ?? '');
+
+        if (!isset($_SESSION['otp_verified']) || $_SESSION['otp_verified'] !== true) {
+            echo json_encode(['status' => 'otpNotVerified', 'message' => 'Please verify OTP first.']);
+            exit;
+        }
+
+        if ($password !== $confirm_password) {
+            echo json_encode(['status' => 'errorPassword', 'message' => 'Passwords do not match.']);
+            exit;
+        }
+
+        $stmt = $con->prepare("SELECT user_id FROM users WHERE username = ?");
+        $stmt->bind_param("s", $username);
+        $stmt->execute();
+        $stmt->store_result();
+        if ($stmt->num_rows > 0) {
+            $stmt->close();
+            echo json_encode(['status' => 'errorUsername', 'message' => 'Username already taken.']);
+            exit;
+        }
+        $stmt->close();
+
+        $user_type = 'resident';
+        $stmt = $con->prepare("INSERT INTO users (username, password, user_type, contact_number) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("ssss", $username, $password, $user_type, $contact_number);
+        
+        if ($stmt->execute()) {
+            // NOTE: We do NOT set $_SESSION['user_id'] here anymore.
+            // This prevents auto-login, allowing the user to stay on the register page.
+            
+            unset($_SESSION['otp'], $_SESSION['otp_time'], $_SESSION['otp_contact'], $_SESSION['otp_verified']);
+            
+            echo json_encode(['status' => 'success']);
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'Database error.']);
+        }
+        $stmt->close();
+        $con->close();
+        exit;
+    }
 }
 
-// --- 2. FETCH BARANGAY INFORMATION ---
+// --- 2. CHECK LOGIN STATE ---
+// This redirects logged-in users away. 
+// Since we disabled auto-login above, a newly registered user won't trigger this.
+if (isset($_SESSION['user_id']) && isset($_SESSION['user_type'])) {
+    $redirect = ($_SESSION['user_type'] == 'admin') ? 'admin/dashboard.php' : 'resident/dashboard.php';
+    echo "<script>window.location.href='$redirect';</script>";
+    exit;
+}
+
+// --- 3. FETCH BARANGAY INFO ---
+$barangay = "Barangay Portal";
+$image = "default.png";
+
 $sql = "SELECT * FROM `barangay_information` LIMIT 1";
 $query = $con->prepare($sql);
 $query->execute();
 $result = $query->get_result();
-$barangay = $municipality = $province = $image = $image_path = $id = '';
 if ($row = $result->fetch_assoc()) {
     $barangay = $row['barangay'];
-    $municipality = $row['municipality'];
-    $province = $row['province'];
-    $image = $row['images'] ?? $row['image']; 
-    $image_path = $row['image_path'];
-    $id = $row['barangay_id'] ?? $row['id'];
-}
-
-// --- 3. AJAX REGISTRATION HANDLER ---
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'register_user') {
-    $username = trim($_POST['add_username']);
-    $password = $_POST['add_password'] ?? '';
-    $confirm_password = $_POST['add_confirm_password'] ?? '';
-    $contact_number = trim($_POST['add_contact_number'] ?? '');
-
-    if (!isset($_SESSION['otp_verified']) || $_SESSION['otp_verified'] !== true) {
-        echo json_encode(['status' => 'otpNotVerified']);
-        exit;
-    }
-
-    if (!isset($_SESSION['otp_time']) || (time() - intval($_SESSION['otp_time']) > 300)) {
-        unset($_SESSION['otp'], $_SESSION['otp_time'], $_SESSION['otp_contact'], $_SESSION['otp_verified']);
-        echo json_encode(['status' => 'expiredOtp']);
-        exit;
-    }
-
-    if ($password !== $confirm_password) {
-        echo json_encode(['status' => 'errorPassword']);
-        exit;
-    }
-
-    $stmt = $con->prepare("SELECT id FROM users WHERE username = ?");
-    $stmt->bind_param("s", $username);
-    $stmt->execute();
-    $stmt->store_result();
-    if ($stmt->num_rows > 0) {
-        $stmt->close();
-        echo json_encode(['status' => 'errorUsername']);
-        exit;
-    }
-    $stmt->close();
-
-    $password_hash = password_hash($password, PASSWORD_BCRYPT);
-    $user_type = 'resident';
-    $stmt = $con->prepare("INSERT INTO users (username, password, user_type, contact_number) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param("ssss", $username, $password_hash, $user_type, $contact_number);
-    if ($stmt->execute()) {
-        $user_id = $con->insert_id;
-        $_SESSION['user_id'] = $user_id;
-        $_SESSION['user_type'] = $user_type;
-        unset($_SESSION['otp'], $_SESSION['otp_time'], $_SESSION['otp_contact'], $_SESSION['otp_verified']);
-        echo json_encode(['status' => 'success']);
-    } else {
-        echo json_encode(['status' => 'error']);
-    }
-    $stmt->close();
-    $con->close();
-    exit;
+    $image = $row['images'] ?? 'default.png'; 
 }
 ?>
 
@@ -106,26 +177,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
   <style>
     body { 
         font-family: 'Poppins', sans-serif; 
-        background-color: #f4f6f9; /* Simple light grey background */
+        background-color: #f4f6f9; 
     }
-
-    /* Simple Content Wrapper */
     .content-wrapper {
         background-color: transparent;
-        margin-top: 20px; /* Space for Navbar */
+        margin-top: 20px; 
         min-height: calc(100vh - 140px) !important;
     }
-
     .rightBar:hover{ border-bottom: 3px solid red; }
-
-    /* Simple Clean Form Card */
     .register-card {
-        border-top: 5px solid #000000; /* Matching Index Style */
+        border-top: 5px solid #000000; 
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         border-radius: 5px;
         background: #fff;
     }
-
     .form-control {
         border-radius: 0;
         border: 1px solid #ced4da;
@@ -134,12 +199,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         border-color: #000;
         box-shadow: none;
     }
-    .input-group-text {
-        background-color: #fff;
-        border-radius: 0;
-    }
-
-    /* Black Buttons */
     .btn-black {
         background-color: #000;
         color: #fff;
@@ -153,7 +212,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     .btn-black:disabled {
         background-color: #555;
     }
-
     .link-black { color: #000; font-weight: 600; }
     .link-black:hover { text-decoration: underline; }
   </style>
@@ -197,8 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 <h3 class="text-center font-weight-bold mb-4">Registration Form</h3>
                                 
                                 <form id="registerResidentForm" method="POST" autocomplete="off">
-                                    <input type="hidden" name="action" value="register_user">
-
+                                    
                                     <p class="text-muted small mb-1 font-weight-bold">VERIFICATION</p>
                                     <div class="form-group mb-2">
                                         <div class="input-group">
@@ -258,9 +315,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
 <script>
 $(document).ready(function(){
-  var registerUrl = '<?= basename(__FILE__) ?>';
+  var apiUrl = 'register.php';
 
-  // Input filter
+  // Input filter (Only numbers)
   $.fn.inputFilter = function(inputFilter) {
     return this.on("input keydown keyup mousedown mouseup select contextmenu drop", function() {
       if (inputFilter(this.value)) {
@@ -275,9 +332,9 @@ $(document).ready(function(){
       }
     });
   };
-  $("#add_contact_number").inputFilter(function(value) { return /^\d*$/.test(value); });
+  $("#add_contact_number, #otp_code").inputFilter(function(value) { return /^\d*$/.test(value); });
 
-  // OTP Logic
+  // OTP Timer Logic
   var resendCooldown = 60; 
   var resendTimer = null;
 
@@ -285,6 +342,9 @@ $(document).ready(function(){
     var remaining = resendCooldown;
     $('#btnResendOtp').prop('disabled', true).show();
     $('#resendCountdown').show().text('(' + remaining + 's)');
+    
+    if(resendTimer) clearInterval(resendTimer);
+    
     resendTimer = setInterval(function(){
       remaining--;
       $('#resendCountdown').text('(' + remaining + 's)');
@@ -296,76 +356,71 @@ $(document).ready(function(){
     }, 1000);
   }
 
-  $('#btnGetOtp').on('click', function(){
+  // 1. Send OTP
+  $('#btnGetOtp, #btnResendOtp').on('click', function(){
     var contact = $('#add_contact_number').val().trim();
-    if (contact.length !== 11) {
-      Swal.fire({icon:'warning', title:'Invalid number', text:'Please enter an 11-digit contact number.', confirmButtonColor: '#000'});
+    
+    // Basic JS validation (Ensures 11 digits starting with 09)
+    if (contact.length !== 11 || !contact.startsWith('09')) {
+      Swal.fire({icon:'warning', title:'Invalid Number', text:'Please enter a valid 11-digit PH mobile number (09xxxxxxxxx).', confirmButtonColor: '#000'});
       return;
     }
+
+    Swal.fire({title: 'Sending OTP...', allowOutsideClick: false, didOpen: () => { Swal.showLoading() }});
+
     $.ajax({
-      url: 'send_registration_otp.php',
+      url: apiUrl,
       type: 'POST',
       dataType: 'json',
-      data: { contact: contact },
+      data: { action: 'send_otp', contact: contact },
       success: function(resp){
+        Swal.close();
         if (resp.status === 'sent') {
-          Swal.fire({icon:'success', title:'OTP Sent', text:'Please check your phone.', confirmButtonColor: '#000'});
+          Swal.fire({icon:'success', title:'OTP Sent', text:'Please check your phone for the code.', confirmButtonColor: '#000'});
+          
           $('#otpSection').slideDown();
-          $('#btnResendOtp').show().prop('disabled', true);
+          $('#add_contact_number').prop('readonly', true);
+          $('#btnGetOtp').prop('disabled', true);
           startResendCountdown();
         } else {
-          Swal.fire({icon:'error', title:'OTP Failed', text: resp.message || 'Failed.', confirmButtonColor: '#000'});
+          Swal.fire({icon:'error', title:'Error', text: resp.message || 'Failed to send OTP.', confirmButtonColor: '#000'});
         }
+      },
+      error: function() {
+        Swal.close();
+        Swal.fire({icon:'error', title:'Network Error', text: 'Could not connect to server.', confirmButtonColor: '#000'});
       }
     });
   });
 
-  $('#btnResendOtp').on('click', function(){
-    var contact = $('#add_contact_number').val().trim();
-    $.ajax({
-      url: 'send_otp.php',
-      type: 'POST',
-      dataType: 'json',
-      data: { contact: contact, resend: 1 },
-      success: function(resp){
-        if (resp.status === 'sent') {
-          Swal.fire({icon:'success', title:'OTP Resent', text:'Please check your phone.', confirmButtonColor: '#000'});
-          $('#btnVerifyOtp').prop('disabled', false);
-          startResendCountdown();
-        } else {
-          Swal.fire({icon:'error', title:'Resend Failed', text: resp.message, confirmButtonColor: '#000'});
-        }
-      }
-    });
-  });
-
+  // 2. Verify OTP
   $('#btnVerifyOtp').on('click', function(){
     var otp = $('#otp_code').val().trim();
-    if (otp.length !== 6) { Swal.fire({icon:'warning', title:'Invalid OTP', text:'Enter 6 digits.', confirmButtonColor: '#000'}); return; }
+    if (otp.length !== 6) { 
+        Swal.fire({icon:'warning', title:'Invalid Code', text:'Enter the 6-digit code.', confirmButtonColor: '#000'}); 
+        return; 
+    }
     
     $.ajax({
-      url: 'verify_otp.php',
+      url: apiUrl,
       type: 'POST',
       dataType: 'json',
-      data: { otp: otp },
+      data: { action: 'verify_otp', otp: otp },
       success: function(resp){
         if (resp.status === 'verified') {
-          Swal.fire({icon:'success', title:'Verified', text:'You may now register.', confirmButtonColor: '#000'});
-          $('#btnRegister').prop('disabled', false);
-          $('#otp_code').prop('disabled', true);
-          $('#btnVerifyOtp').prop('disabled', true).text('Verified');
-          $('#btnResendOtp, #resendCountdown').hide();
-        } else if (resp.status === 'expired') {
-          Swal.fire({icon:'error', title:'Expired', text:'OTP Expired.', confirmButtonColor: '#000'});
+          Swal.fire({icon:'success', title:'Verified!', text:'You may now complete your registration.', confirmButtonColor: '#000', timer: 1500, showConfirmButton: false});
+          
+          $('#btnRegister').prop('disabled', false).removeClass('btn-black').addClass('btn-success');
+          $('#otpSection').slideUp();
+          $('#btnGetOtp').text('Verified').removeClass('btn-outline-dark').addClass('btn-success');
         } else {
-          Swal.fire({icon:'error', title:'Invalid', text:'Incorrect Code.', confirmButtonColor: '#000'});
+          Swal.fire({icon:'error', title:'Invalid Code', text: resp.message, confirmButtonColor: '#000'});
         }
       }
     });
   });
 
-// asdasdasda
-
+  // 3. Register User
   $('#registerResidentForm').on('submit', function(e){
     e.preventDefault();
     if ($('#btnRegister').prop('disabled')) return;
@@ -374,29 +429,36 @@ $(document).ready(function(){
     var pw = $('#add_password').val();
     var cpw = $('#add_confirm_password').val();
     
-    if (username.length < 5) { Swal.fire({icon:'warning', title:'Username too short', confirmButtonColor: '#000'}); return; }
-    if (pw.length < 5) { Swal.fire({icon:'warning', title:'Password too short', confirmButtonColor: '#000'}); return; }
+    if (username.length < 5) { Swal.fire({icon:'warning', title:'Username too short', text:'Minimum 5 characters.', confirmButtonColor: '#000'}); return; }
+    if (pw.length < 5) { Swal.fire({icon:'warning', title:'Password too short', text:'Minimum 5 characters.', confirmButtonColor: '#000'}); return; }
     if (pw !== cpw) { Swal.fire({icon:'warning', title:'Mismatch', text:'Passwords do not match.', confirmButtonColor: '#000'}); return; }
 
     var formData = new FormData(this);
+    formData.append('action', 'register_user');
+
     $.ajax({
-      url: registerUrl,
+      url: apiUrl,
       type: 'POST',
       data: formData,
-      processData: false, contentType: false,
+      processData: false, 
+      contentType: false,
       dataType: 'json',
       success: function(resp){
         if (resp.status === 'success') {
-          Swal.fire({icon:'success', title:'Registered', text:'Registration successful.', confirmButtonColor: '#000'}).then(function(){
-            window.location.href='login.php';
+          Swal.fire({
+            icon:'success', 
+            title:'Registration Successful', 
+            text:'You can now login or register another.', 
+            confirmButtonColor: '#000'
+          }).then(function(){
+            window.location.reload(); // <--- FIXED: Reloads the current page
           });
-        } else if(resp.status === 'otpNotVerified'){
-            Swal.fire({icon:'error', title:'Error', text:'Verify OTP first.', confirmButtonColor: '#000'});
-        } else if(resp.status === 'errorUsername'){
-            Swal.fire({icon:'error', title:'Error', text:'Username taken.', confirmButtonColor: '#000'});
         } else {
-            Swal.fire({icon:'error', title:'Error', text:'Registration failed.', confirmButtonColor: '#000'});
+            Swal.fire({icon:'error', title:'Error', text: resp.message || 'Registration failed.', confirmButtonColor: '#000'});
         }
+      },
+      error: function() {
+        Swal.fire({icon:'error', title:'System Error', text: 'Something went wrong.', confirmButtonColor: '#000'});
       }
     });
   });
