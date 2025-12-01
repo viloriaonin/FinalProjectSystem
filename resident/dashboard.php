@@ -310,7 +310,7 @@ try{
 
     <div class="content-wrapper">
         <div class="content">
-        <div class="container-fluid" style="padding: 10px;"> 
+        <div class="container-fluid" style="padding: 10px 400px 10px 0px;"> 
             
             <div class="welcome-card">
                 <div class="d-flex align-items-center mb-2">
