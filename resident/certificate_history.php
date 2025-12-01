@@ -29,7 +29,7 @@ try {
         }
     }
 
-    // 3. CRITICAL FIX: GET RESIDENT ID FIRST
+    // 3. GET RESIDENT ID FIRST
     $stmt_res = $pdo->prepare("SELECT resident_id FROM residence_information WHERE user_id = :uid LIMIT 1");
     $stmt_res->execute(['uid' => $user_id]);
     $res_row = $stmt_res->fetch(PDO::FETCH_ASSOC);
@@ -190,41 +190,74 @@ try {
 
 <script>
 $(function(){ 
+    // Initialize DataTables if table exists
     if($('#historyTable').length && <?php echo count($my); ?> > 0){
         $('#historyTable').DataTable({ "order": [[3, 'desc']], "lengthChange": false });
     }
 
-    // Cancel Logic
+    // --- CANCEL CONFIRMATION LOGIC ---
     $('body').on('click', '.cancel-btn', function() {
       var id = $(this).data('id');
-      Swal.fire({
-          title: 'Cancel Request?', 
-          text: "Are you sure you want to cancel this?",
-          icon: 'warning', 
-          showCancelButton: true,
-          confirmButtonText: 'Yes, Cancel', 
-          confirmButtonColor: '#ef4444',
-          background: '#1C1F26',
-          customClass: { title: 'text-white', content: 'text-white' }
-      }).then((res) => {
-          if (res.isConfirmed) {
-              $.post('cancel_request.php', {request_id: id}, function(data){
-                  if(data.status == 'success') {
+      var btn = $(this); // Reference to the button for visual feedback
+
+      // Function to execute the AJAX call after confirmation
+      function executeCancel() {
+          btn.prop('disabled', true).text('Cancelling...'); // Disable button
+          
+          $.post('cancel_request.php', {request_id: id}, function(data){
+              if(data.status == 'success') {
+                  if(typeof Swal !== 'undefined'){
                       Swal.fire({
-                          title: 'Success', 
+                          title: 'Cancelled!', 
                           text: data.message, 
                           icon: 'success',
                           background: '#1C1F26',
-                          customClass: { title: 'text-white', content: 'text-white' }
+                          color: '#ffffff',
+                          showConfirmButton: false,
+                          timer: 1500
                       }).then(() => location.reload());
-                  } else { 
-                      Swal.fire('Error', data.message, 'error'); 
+                  } else {
+                      alert(data.message);
+                      location.reload();
                   }
-              }, 'json').fail(function() {
-                  Swal.fire('Error', 'Server connection failed', 'error');
-              });
+              } else { 
+                  if(typeof Swal !== 'undefined'){
+                      Swal.fire({ icon: 'error', title: 'Error', text: data.message, background: '#1C1F26', color: '#ffffff' });
+                  } else {
+                      alert(data.message);
+                  }
+                  btn.prop('disabled', false).text('Cancel'); // Re-enable button
+              }
+          }, 'json').fail(function() {
+              alert('Server connection failed');
+              btn.prop('disabled', false).text('Cancel');
+          });
+      }
+
+      // 1. Try SweetAlert Confirmation
+      if(typeof Swal !== 'undefined'){
+          Swal.fire({
+              title: 'Cancel Request?', 
+              text: "Are you sure you want to cancel this request?",
+              icon: 'warning', 
+              showCancelButton: true,
+              confirmButtonText: 'Yes, Cancel It', 
+              cancelButtonText: 'No, Keep It',
+              confirmButtonColor: '#ef4444',
+              cancelButtonColor: '#6c757d',
+              background: '#1C1F26',
+              color: '#ffffff'
+          }).then((res) => {
+              if (res.isConfirmed) {
+                  executeCancel();
+              }
+          });
+      } else {
+          // 2. Fallback to Standard Browser Confirm
+          if(confirm("Are you sure you want to cancel this request?")){
+              executeCancel();
           }
-      });
+      }
     });
 });
 </script>

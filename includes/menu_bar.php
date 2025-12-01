@@ -17,7 +17,7 @@ if(!isset($menu_base)){
   if (!$found) { $menu_base = '../'; }
 }
 
-// 2. CHECK RESIDENCY VERIFICATION STATUS
+// 2. CHECK RESIDENCY VERIFICATION STATUS & FETCH NAME
 $verified_label = "Not Verified";
 $verified_color = "#EF4444"; // Red
 $verified_icon  = "fa-times-circle";
@@ -28,8 +28,9 @@ if(isset($_SESSION['user_id'])){
     
     if(isset($pdo)){
         try {
-            // STEP A: Get Resident ID from User ID first
-            $sql_res = "SELECT resident_id FROM residence_information WHERE user_id = :uid LIMIT 1";
+            // STEP A: Get Resident ID AND Name from User ID
+            // We fetch 'first_name' here so it is available on all pages
+            $sql_res = "SELECT resident_id, first_name FROM residence_information WHERE user_id = :uid LIMIT 1";
             $stmt_res = $pdo->prepare($sql_res);
             $stmt_res->execute([':uid' => $chk_uid]);
             $row_res = $stmt_res->fetch(PDO::FETCH_ASSOC);
@@ -37,6 +38,11 @@ if(isset($_SESSION['user_id'])){
             if ($row_res) {
                 $resident_id = $row_res['resident_id'];
                 $display_res_id = $resident_id; 
+
+                // FIX: If the page didn't set the name, we set it here from the DB result
+                if(!isset($first_name_user) && !empty($row_res['first_name'])){
+                    $first_name_user = $row_res['first_name'];
+                }
 
                 // STEP B: Check Application Status using Resident ID
                 $chk_sql = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
@@ -232,17 +238,21 @@ if(isset($_SESSION['user_id'])){
         margin: 20px 15px 10px;
     }
 
+    /* --- FIXED MENU ITEMS --- */
     .menu-item {
         display: flex;
         align-items: center;
-        padding: 12px 20px;
+        width: 100%;
+        height: 50px; /* FIXED HEIGHT */
+        padding: 0 20px; /* Side padding only */
         color: var(--text-muted);
         text-decoration: none !important;
         font-weight: 500;
         font-size: 0.95rem;
         border-radius: 8px;
         margin-bottom: 5px;
-        transition: all 0.2s ease;
+        transition: background-color 0.2s ease, color 0.2s ease;
+        box-sizing: border-box; 
     }
 
     .menu-item i {
@@ -253,10 +263,17 @@ if(isset($_SESSION['user_id'])){
         transition: color 0.2s;
     }
 
-    .menu-item:hover { background-color: rgba(255, 255, 255, 0.03); color: var(--text-main); }
+    .menu-item:hover { 
+        background-color: rgba(255, 255, 255, 0.03); 
+        color: var(--text-main); 
+    }
     .menu-item:hover i { color: var(--text-main); }
 
-    .menu-item.active { background-color: var(--accent-hover); color: var(--accent-color); font-weight: 600; }
+    .menu-item.active { 
+        background-color: var(--accent-hover); 
+        color: var(--accent-color); 
+        font-weight: 600; /* Bold active state */
+    }
     .menu-item.active i { color: var(--accent-color); }
 
     .menu-item.logout {
@@ -264,7 +281,8 @@ if(isset($_SESSION['user_id'])){
         color: #ef4444;
         border-top: 1px solid var(--border-color);
         border-radius: 0;
-        padding: 20px;
+        height: 60px;
+        padding: 0 20px;
     }
     .menu-item.logout:hover { background-color: rgba(239, 68, 68, 0.1); color: #ef4444; }
 
@@ -422,7 +440,7 @@ document.addEventListener('DOMContentLoaded', function(){
         });
     }
 
-    // --- UPDATED LOGOUT CONFIRMATION WITH DARK THEME ---
+    // --- LOGOUT CONFIRMATION ---
     logoutBtns.forEach(btn => {
         btn.addEventListener('click', function(e){
             e.preventDefault();
@@ -447,7 +465,6 @@ document.addEventListener('DOMContentLoaded', function(){
                     }
                 });
             } else {
-                // Fallback if SweetAlert not loaded
                 if(confirm('Are you sure you want to Sign Out?')){
                     window.location.href = href;
                 }

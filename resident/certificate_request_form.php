@@ -2,303 +2,203 @@
 include_once '../db_connection.php';
 session_start();
 
-// Certificate Request UI integrated with resident layout
-$certificate_types = [
-    [
-        'id' => 'barangay_clearance',
-        'title' => 'Barangay Clearance',
-        'requirements' => [
-            'Valid government-issued ID (original and photocopy)',
-            'Proof of residence (utility bill or barangay residency)',
-            'Purpose of request'
-        ]
-    ],
-    [
-        'id' => 'indigency_certificate',
-        'title' => 'Indigency Certificate',
-        'requirements' => [
-            'Valid ID',
-            'Proof of income or statement of indigency',
-            'Purpose of request'
-        ]
-    ],
-    [
-        'id' => 'cedula',
-        'title' => 'Cedula / Community Tax Certificate',
-        'requirements' => [
-            'Valid ID',
-            'Payment (if applicable)'
-        ]
-    ],
-    [
-        'id' => 'business_permit',
-        'title' => 'Business Permit Request',
-        'requirements' => [
-            'Valid ID',
-            'Business name and address',
-            'Proof of business registration (if available)'
-        ]
-    ]
-];
-
-$is_verified = false; // Default to locked
-$app_status = 'None';
-$selected_type = isset($_GET['type']) ? htmlspecialchars($_GET['type']) : '';
-
-// Fetch user and barangay info if available
-try {
-    if (isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'resident') {
-        $user_id = $_SESSION['user_id'];
-        
-        // 1. Fetch User Info
-        $sql_user = "SELECT * FROM `users` WHERE `user_id` = :uid";
-        $stmt_user = $pdo->prepare($sql_user);
-        $stmt_user->execute(['uid' => $user_id]);
-        $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC);
-
-        // 2. CRITICAL FIX: GET RESIDENT ID FIRST
-        // We must translate user_id -> resident_id to find the correct application
-        $sql_res = "SELECT resident_id FROM residence_information WHERE user_id = :uid LIMIT 1";
-        $stmt_res = $pdo->prepare($sql_res);
-        $stmt_res->execute(['uid' => $user_id]);
-        $res_row = $stmt_res->fetch(PDO::FETCH_ASSOC);
-
-        if ($res_row) {
-            $resident_id = $res_row['resident_id'];
-
-            // 3. CHECK RESIDENCY APPLICATION STATUS using resident_id
-            $sql_app = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
-            $stmt_app = $pdo->prepare($sql_app);
-            $stmt_app->execute(['rid' => $resident_id]);
-            
-            if ($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)) {
-                $app_status = $row_app['status'];
-                
-                // CLEAN THE STATUS (Remove spaces, make lowercase)
-                $clean_status = trim(strtolower($app_status));
-
-                // Check against cleaned values
-                if ($clean_status == 'approved' || $clean_status == 'verified') {
-                    $is_verified = true;
-                }
-            }
-        }
-    }
-} catch (PDOException $e) {
-    // error_log($e->getMessage());
+// Minimal form page for a single certificate request type
+$type = isset($_GET['type']) ? trim($_GET['type']) : '';
+if ($type === '') {
+    header('Location: certificate_request.php');
+    exit;
 }
 ?>
-
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Request Form - <?php echo $selected_type; ?></title>
-  
-  <link rel="stylesheet" href="../assets/plugins/fontawesome-free/css/all.min.css">
-  <link rel="stylesheet" href="../assets/plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
-  <link rel="stylesheet" href="../assets/dist/css/adminlte.min.css">
-  <link rel="stylesheet" href="../assets/plugins/sweetalert2/css/sweetalert2.min.css">
-
-  <style>
-    /* --- DARK UI THEME START --- */
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Request: <?php echo htmlspecialchars($type); ?></title>
+    <link rel="stylesheet" href="../assets/plugins/fontawesome-free/css/all.min.css">
+    <link rel="stylesheet" href="../assets/plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
+    <link rel="stylesheet" href="../assets/dist/css/adminlte.min.css">
+    <style>
+    /* --- CUSTOM THEME VARIABLES BASED ON YOUR IMAGE --- */
     :root {
-        --bg-dark: #0F1115;
-        --card-bg: #1C1F26;
-        --text-main: #ffffff;
-        --text-muted: #6c757d;
-        --accent-color: #3b82f6;
-        --border-color: #2d333b;
-        --border-radius: 12px;
+        --theme-bg: #121417;         /* Very dark background (almost black) */
+        --theme-card: #1c1f26;       /* Dark Blue-Grey Card Surface */
+        --theme-input: #15171a;      /* Darker input background */
+        --theme-border: #2d333b;     /* Subtle borders */
+        --theme-text: #e2e8f0;       /* Bright white/grey text */
+        --theme-blue: #3b82f6;       /* The bright blue from your button */
+        --theme-blue-hover: #2563eb; /* Darker blue for hover */
     }
 
-    body {
-        background-color: var(--bg-dark);
-        color: var(--text-main);
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    /* Standard Layout adjustments */
+    .content-wrapper { background-color: #f4f6f9; } /* Default light fallback */
+    .container-main { max-width:900px; margin:24px auto; }
+    .form-wrap { max-width:720px; margin:10px auto; }
+    .form-row { display:flex; gap:8px; }
+    input, textarea { width:100%; padding:10px; border-radius:6px; border:1px solid #ccc; }
+    .actions { margin-top:20px; text-align: right; }
+    .btn { padding:10px 20px; border-radius:6px; border:none; cursor:pointer; font-weight: 500; }
+
+    /* --- DARK MODE OVERRIDES (MATCHING IMAGE) --- */
+    body.dark-mode .content-wrapper {
+        background-color: var(--theme-bg) !important;
+        color: var(--theme-text);
+    }
+    
+    body.dark-mode .card {
+        background-color: var(--theme-card);
+        color: var(--theme-text);
+        border: 1px solid var(--theme-border);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        border-radius: 8px;
     }
 
-    .content-wrapper {
-        background-color: var(--bg-dark) !important;
-        background-image: none !important;
-    }
-
-    /* Card Container */
-    .ui-card {
-        background-color: var(--card-bg);
-        border: 1px solid var(--border-color);
-        border-radius: var(--border-radius);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        padding: 30px;
-        max-width: 600px; /* Smaller width for form */
-        margin: 0 auto;
-    }
-
-    /* Header */
-    .page-header-title {
+    body.dark-mode h3 {
+        color: #ffffff;
         font-weight: 700;
-        color: var(--text-main);
-        margin-bottom: 20px;
-        border-bottom: 1px solid var(--border-color);
+        border-bottom: 1px solid var(--theme-border);
         padding-bottom: 15px;
     }
 
-    .form-group label {
-        color: #d1d5db;
-        font-weight: 500;
+    /* Input Styles to match the dark theme */
+    body.dark-mode input, 
+    body.dark-mode textarea {
+        background-color: var(--theme-input);
+        border: 1px solid var(--theme-border);
+        color: #ffffff;
+        outline: none;
+        transition: border-color 0.2s;
     }
-    
-    .form-control {
-        background-color: #0F1115;
-        border: 1px solid var(--border-color);
-        color: #fff;
+
+    body.dark-mode input:focus, 
+    body.dark-mode textarea:focus {
+        border-color: var(--theme-blue);
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
     }
-    .form-control:focus {
-        background-color: #0F1115;
-        color: #fff;
-        border-color: var(--accent-color);
+
+    body.dark-mode input::placeholder,
+    body.dark-mode textarea::placeholder {
+        color: #64748b; /* Slate-500 for placeholders */
     }
-    
-    /* Locked State */
-    .locked-state { text-align: center; padding: 40px 20px; }
-    .locked-icon { color: #ef4444; margin-bottom: 20px; }
-    
-    .btn-submit {
-        background-color: var(--accent-color);
+
+    /* Button Styles */
+    body.dark-mode .btn-primary {
+        background-color: var(--theme-blue);
         color: white;
-        width: 100%;
-        padding: 10px;
-        font-weight: bold;
-        border: none;
-        border-radius: 4px;
     }
-    .btn-submit:hover {
-        background-color: #2563eb;
+    body.dark-mode .btn-primary:hover {
+        background-color: var(--theme-blue-hover);
     }
-
-    /* Footer override */
-    .main-footer {
-        background-color: var(--card-bg) !important;
-        border-top: 1px solid var(--border-color);
-        color: var(--text-muted) !important;
+    
+    body.dark-mode .btn-secondary {
+        background-color: #334155; /* Slate-700 */
+        color: #e2e8f0;
     }
-  </style>
+    body.dark-mode .btn-secondary:hover {
+        background-color: #475569;
+    }
+    </style>
 </head>
-<body class="hold-transition layout-top-nav">
-
-<div class="wrapper">
+<body class="hold-transition layout-top-nav dark-mode">
 
 <?php include_once __DIR__ . '/../includes/menu_bar.php'; ?>
 
-  <div class="content-wrapper">
-    <div class="content">
-      <div class="container-fluid pt-5 pb-5">
-        
-        <div class="ui-card">
-            
-            <?php if ($is_verified): ?>
-                <h3 class="page-header-title">
-                    <i class="fas fa-edit mr-2"></i> Request: <span class="text-primary"><?php echo $selected_type; ?></span>
-                </h3>
+    <div class="content-wrapper">
+        <div class="content">
+            <div class="container-fluid pt-4 container-main">
+                <div class="card ui-frame">
+                    <div class="card-body">
 
-                <form id="certificateRequestForm">
-                    <input type="hidden" name="type" value="<?php echo $selected_type; ?>">
+                        <h3 class="mb-4">
+                            <i class="fas fa-file-alt mr-2" style="color: var(--theme-blue);"></i>
+                            Request: <?php echo htmlspecialchars($type); ?>
+                        </h3>
+                        
+                        <div class="form-wrap">
+                        <form method="post" id="certRequestForm">
+                                <input type="hidden" name="type" value="<?php echo htmlspecialchars($type); ?>">
+                                
+                                <div class="form-group mb-3">
+                                    <label class="mb-2" style="color:#94a3b8; font-size:0.9rem;">Full Name</label>
+                                    <input type="text" name="full_name" placeholder="Enter your full name" required>
+                                </div>
+                                
+                                <div class="form-group mb-3">
+                                    <label class="mb-2" style="color:#94a3b8; font-size:0.9rem;">Contact Information</label>
+                                    <input type="text" name="contact" placeholder="Mobile Number or Email" required>
+                                </div>
+                                
+                                <div class="form-group mb-3">
+                                    <label class="mb-2" style="color:#94a3b8; font-size:0.9rem;">Purpose</label>
+                                    <textarea name="purpose" rows="3" placeholder="State the purpose of this request (optional)"></textarea>
+                                </div>
+                                
+                                <div class="actions">
+                                    <a href="certificate_request.php" class="btn btn-secondary mr-2">Cancel</a>
+                                    <button type="submit" id="submitBtn" class="btn btn-primary">
+                                        Submit Request <i class="fas fa-arrow-right ml-1"></i>
+                                    </button>
+                                </div>
+                        </form>
+                        </div>
 
-                    <div class="form-group">
-                        <label>Full Name</label>
-                        <input type="text" name="full_name" class="form-control" placeholder="Enter your full name" required 
-                               value="<?php echo isset($row_user['fullname']) ? htmlspecialchars($row_user['fullname']) : ''; ?>">
                     </div>
-
-                    <div class="form-group">
-                        <label>Contact Number</label>
-                        <input type="text" name="contact" class="form-control" placeholder="Enter contact number" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Purpose of Request</label>
-                        <textarea name="purpose" class="form-control" rows="3" placeholder="E.g., For employment, Scholarship, etc." required></textarea>
-                    </div>
-
-                    <button type="submit" class="btn-submit">Submit Request</button>
-                    <a href="certificate_request.php" class="btn btn-secondary btn-block mt-2">Back</a>
-                </form>
-
-            <?php else: ?>
-                <div class="locked-state">
-                    <i class="fas fa-lock fa-5x locked-icon"></i>
-                    <div class="h3 font-weight-bold mb-2">Feature Locked</div>
-                    <p class="text-muted mb-4">
-                        You must have a <strong>Verified Residency Application</strong> to proceed.<br>
-                        Current Status: <span class="badge badge-warning"><?php echo htmlspecialchars($app_status); ?></span>
-                    </p>
-                    <a href="form_application.php" class="btn btn-primary">Go to Residency Application</a>
                 </div>
-            <?php endif; ?>
-
+            </div>
         </div>
-      </div>
     </div>
-  </div>
 
 </div>
 
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="../assets/plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js"></script>
+<script src="../assets/dist/js/adminlte.js"></script>
 <script src="../assets/plugins/sweetalert2/js/sweetalert2.all.min.js"></script>
-
 <script>
-$(document).ready(function() {
-    $('#certificateRequestForm').on('submit', function(e) {
-        e.preventDefault();
-        
-        var formData = $(this).serialize();
+$(function(){
+    // Ensure navbar blends with the dark theme
+    $('.navbar').addClass('navbar-dark bg-dark').removeClass('navbar-light bg-white');
 
-        Swal.fire({
-            title: 'Submit Request?',
-            text: "Please confirm your details are correct.",
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonColor: '#3b82f6',
-            cancelButtonColor: '#d33',
-            confirmButtonText: 'Yes, Submit',
-            background: '#1C1F26',
-            color: '#fff'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                $.ajax({
-                    url: 'submit_certificate_request.php', // Ensure this file exists and handles the logic
-                    type: 'POST',
-                    data: formData,
-                    dataType: 'json',
-                    success: function(response) {
-                        if (response.success) {
-                            Swal.fire({
-                                title: 'Success!',
-                                text: response.message,
-                                icon: 'success',
-                                background: '#1C1F26',
-                                color: '#fff'
-                            }).then(() => {
-                                window.location.href = 'certificate_history.php';
-                            });
-                        } else {
-                            Swal.fire({
-                                title: 'Error',
-                                text: response.message,
-                                icon: 'error',
-                                background: '#1C1F26',
-                                color: '#fff'
-                            });
-                        }
-                    },
-                    error: function() {
-                        Swal.fire('Error', 'Something went wrong with the server.', 'error');
-                    }
+    // Handle certificate request form submission
+    $('#certRequestForm').on('submit', function(ev){
+        ev.preventDefault();
+        var form = $(this);
+        var data = form.serialize();
+        var btn = $('#submitBtn');
+        var originalText = btn.html();
+        
+        btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Sending...');
+        
+        $.post('submit_certificate_request.php', data, function(resp){
+            if (resp && resp.success) {
+                Swal.fire({ 
+                    icon: 'success', 
+                    title: 'Request submitted', 
+                    text: resp.message || 'Your request has been submitted.',
+                    background: '#1c1f26', // Match alert to theme
+                    color: '#fff'
+                }).then(function(){
+                    window.location.href = 'certificate_request.php';
+                });
+            } else {
+                Swal.fire({ 
+                    icon: 'error', 
+                    title: 'Error', 
+                    text: (resp && resp.message) ? resp.message : 'Failed to submit request',
+                    background: '#1c1f26',
+                    color: '#fff'
                 });
             }
-        });
+        }, 'json').fail(function(){
+            Swal.fire({ 
+                icon: 'error', 
+                title: 'Error', 
+                text: 'Network or server error',
+                background: '#1c1f26',
+                color: '#fff'
+            });
+        }).always(function(){ btn.prop('disabled', false).html(originalText); });
     });
 });
 </script>
