@@ -11,9 +11,9 @@ $user_id = $_SESSION['user_id'];
 $request_code = $_GET['code'];
 
 try {
-    // 2. GET RESIDENT DETAILS (Name & Birthdate for Age)
-    // We assume your residence_information table has firstname, lastname, and birthdate
-    $stmt_res = $pdo->prepare("SELECT resident_id, firstname, lastname, birthdate FROM residence_information WHERE user_id = :uid LIMIT 1");
+    // 2. GET RESIDENT DETAILS
+    // FIX: Changed column names to match your SQL database (first_name, last_name, birth_date)
+    $stmt_res = $pdo->prepare("SELECT resident_id, first_name, last_name, birth_date FROM residence_information WHERE user_id = :uid LIMIT 1");
     $stmt_res->execute(['uid' => $user_id]);
     $resident = $stmt_res->fetch(PDO::FETCH_ASSOC);
 
@@ -22,7 +22,6 @@ try {
     }
 
     // 3. FETCH THE SPECIFIC REQUEST
-    // We match both request_code AND resident_id to ensure the user owns this request
     $sql = "SELECT * FROM certificate_requests 
             WHERE request_code = :code AND resident_id = :rid LIMIT 1";
     $stmt = $pdo->prepare($sql);
@@ -35,8 +34,9 @@ try {
 
     // 4. CALCULATE AGE
     $age = 'N/A';
-    if (!empty($resident['birthdate'])) {
-        $dob = new DateTime($resident['birthdate']);
+    // FIX: Changed 'birthdate' to 'birth_date'
+    if (!empty($resident['birth_date'])) {
+        $dob = new DateTime($resident['birth_date']);
         $now = new DateTime();
         $age = $now->diff($dob)->y;
     }
@@ -141,7 +141,7 @@ try {
         <div class="info-group">
             <div class="row">
                 <span class="label">Name:</span>
-                <span class="value"><?php echo htmlspecialchars($resident['firstname'] . ' ' . $resident['lastname']); ?></span>
+                <span class="value"><?php echo htmlspecialchars($resident['first_name'] . ' ' . $resident['last_name']); ?></span>
             </div>
             <div class="row">
                 <span class="label">Age:</span>

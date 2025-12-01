@@ -356,8 +356,8 @@ try{
                         
                         <div class="col-md-3 text-center">
                             <?php
-                                // Note: In a real scenario, this should also fetch from residence_information if available
-                                $img_src = (!empty($row_user['image_path'])) ? $row_user['image_path'] : '../assets/dist/img/default-user.jpg';
+                                // FIX: Added is_array($row_user) check
+                                $img_src = (is_array($row_user) && !empty($row_user['image_path'])) ? $row_user['image_path'] : '../assets/dist/img/default-user.jpg';
                             ?>
                             <img src="<?= $img_src ?>" alt="Profile" class="profile-avatar">
                             
@@ -392,11 +392,15 @@ try{
                             <div class="info-grid-row">
                                 <div class="info-group">
                                     <span class="info-label">Username</span>
-                                    <span class="info-value"><?= htmlspecialchars($row_user['username']) ?></span>
+                                    <span class="info-value">
+                                        <?= htmlspecialchars((is_array($row_user) && isset($row_user['username'])) ? $row_user['username'] : 'Unknown') ?>
+                                    </span>
                                 </div>
                                 <div class="info-group">
                                     <span class="info-label">Contact Number</span>
-                                    <span class="info-value"><?= htmlspecialchars($row_user['contact_number']) ?></span>
+                                    <span class="info-value">
+                                        <?= htmlspecialchars((is_array($row_user) && isset($row_user['contact_number'])) ? $row_user['contact_number'] : 'N/A') ?>
+                                    </span>
                                 </div>
                                 <div class="info-group">
                                     <span class="info-label">Account Status</span>

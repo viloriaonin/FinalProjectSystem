@@ -58,10 +58,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 $requests = [];
 
 try {
-    $sql = "SELECT r.*, u.first_name, u.last_name 
+    // FIX: Joined residence_information instead of users
+    // This allows us to see the Name of the resident who requested the cert
+    $sql = "SELECT r.*, res.first_name, res.last_name, res.user_id 
             FROM certificate_requests r 
-            LEFT JOIN users u 
-                ON r.user_id = u.id
+            LEFT JOIN residence_information res ON r.resident_id = res.resident_id
             ORDER BY 
                 CASE WHEN r.status = 'Pending' THEN 0 ELSE 1 END,
                 r.created_at DESC";
@@ -177,10 +178,8 @@ try {
                         <?php foreach ($requests as $row): ?>
                             <?php 
                                 $status = $row['status'];
-                                // Normalize status for display
                                 $displayStatus = ucfirst(strtolower($status));
                                 
-                                // Status color logic
                                 $badgeClass = 'bg-pending';
                                 if (strtolower($status) == 'approved') $badgeClass = 'bg-approved';
                                 if (strtolower($status) == 'rejected') $badgeClass = 'bg-rejected';
@@ -190,7 +189,7 @@ try {
                                 <td><span style="font-family:monospace; color:var(--accent-color);">#<?= $row['request_code'] ?></span></td>
                                 <td>
                                     <strong><?= htmlspecialchars($row['first_name'] . ' ' . $row['last_name']) ?></strong>
-                                    <span class="user-sub">ID: <?= $row['user_id'] ?></span>
+                                    <span class="user-sub">Res ID: <?= $row['resident_id'] ?></span>
                                 </td>
                                 <td>
                                     <div style="font-weight:600;"><?= htmlspecialchars($row['type']) ?></div>
@@ -236,13 +235,12 @@ try {
 function confirmAction(id, action) {
     
     if(action === 'approve') {
-        // --- ACCEPT FLOW ---
         Swal.fire({
             title: 'Accept Request?',
             text: "This will mark the request as Approved.",
-            type: 'warning', // or icon: 'warning' for newer SweetAlert2
+            type: 'warning', 
             showCancelButton: true,
-            confirmButtonColor: '#28a745', // Green
+            confirmButtonColor: '#28a745', 
             cancelButtonColor: '#d33',
             confirmButtonText: 'Yes, Accept it!',
             background: '#1C1F26',
@@ -254,14 +252,13 @@ function confirmAction(id, action) {
         });
 
     } else if (action === 'reject') {
-        // --- REJECT FLOW (With Input) ---
         Swal.fire({
             title: 'Reject Request',
             text: "Please enter the reason for rejection:",
             input: 'textarea',
             inputPlaceholder: 'e.g. Invalid ID, Payment pending...',
             showCancelButton: true,
-            confirmButtonColor: '#dc3545', // Red
+            confirmButtonColor: '#dc3545',
             confirmButtonText: 'Reject',
             background: '#1C1F26',
             customClass: { title: 'text-white', content: 'text-white', input: 'text-black' },

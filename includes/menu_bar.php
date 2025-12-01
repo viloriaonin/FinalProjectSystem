@@ -26,7 +26,6 @@ $display_res_id = "Pending"; // Default display if no profile exists
 if(isset($_SESSION['user_id'])){
     $chk_uid = $_SESSION['user_id'];
     
-    // Check if $pdo exists (it should be included by the parent page)
     if(isset($pdo)){
         try {
             // STEP A: Get Resident ID from User ID first
@@ -37,7 +36,7 @@ if(isset($_SESSION['user_id'])){
 
             if ($row_res) {
                 $resident_id = $row_res['resident_id'];
-                $display_res_id = $resident_id; // Store for display
+                $display_res_id = $resident_id; 
 
                 // STEP B: Check Application Status using Resident ID
                 $chk_sql = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
@@ -45,7 +44,6 @@ if(isset($_SESSION['user_id'])){
                 $stmt_chk->execute([':rid' => $resident_id]);
                 
                 if($chk_row = $stmt_chk->fetch(PDO::FETCH_ASSOC)){
-                    // Normalize status to lowercase for easier checking
                     $status_raw = trim(strtolower($chk_row['status']));
                     
                     if($status_raw == 'approved' || $status_raw == 'verified'){
@@ -60,7 +58,7 @@ if(isset($_SESSION['user_id'])){
                 }
             }
         } catch (PDOException $e) {
-            // Silent error prevents breaking the menu if DB fails
+            // Silent error
         }
     }
 }
