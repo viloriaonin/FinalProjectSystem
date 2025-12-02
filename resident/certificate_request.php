@@ -242,27 +242,105 @@ try {
       <div class="container">
         <div class="ui-card">
             <?php if ($is_verified): ?>
-                <h3>Available Certificates</h3>
-                <?php foreach ($certificate_types as $c): ?>
-                    <div class="doc-item">
-                        <div>
-                            <h5><?php echo htmlspecialchars($c['title']); ?></h5>
+            <h3 class="page-header-title">📜 Available Certificates</h3>
+            <p class="page-note">Select a certificate to view details and start a request.</p>
+            
+            <div class="custom-accordion">
+            <?php foreach ($certificate_types as $c): ?>
+                <div class="item">
+                    <div class="bar" onclick="showRequestModal(<?php echo $c['document_id']; ?>, '<?php echo htmlspecialchars($c['title']); ?>')">
+                        <div class="title-group">
+                            <span class="title"><?php echo htmlspecialchars($c['title']); ?></span>
+                            <span class="sub-note"><?php echo htmlspecialchars($c['note'] ?? 'Certificate available for request'); ?></span>
                         </div>
-                        <a href="certificate_request_form.php?doc_id=<?php echo $c['document_id']; ?>&title=<?php echo urlencode($c['title']); ?>" class="btn-request">
-                            Request <i class="fas fa-arrow-right"></i>
-                        </a>
+                        <div class="toggle"><i class="fas fa-arrow-right"></i></div>
                     </div>
-                <?php endforeach; ?>
-            <?php else: ?>
-                <div class="text-center p-5">
-                    <h3>Account Not Verified</h3>
-                    <p>Status: <?php echo htmlspecialchars($app_status); ?></p>
-                </div>
-            <?php endif; ?>
+                    </div>
+            <?php endforeach; ?>
+            </div>
+
+        <?php else: ?>
+            <div class="locked-state ui-card">
+                <i class="fas fa-lock fa-5x locked-icon"></i>
+                <h3 class="locked-title">Account Not Verified</h3>
+                <p class="locked-desc">
+                    Your residency application must be **APPROVED** before you can request certificates.
+                    <br>
+                    Current Status: <strong><?php echo htmlspecialchars($app_status); ?></strong>
+                </p>
+            </div>
+        <?php endif; ?>
         </div>
       </div>
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="requestChoiceModal" tabindex="-1" role="dialog" aria-labelledby="requestChoiceModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content" style="background-color: var(--card-bg); color: var(--text-main); border: 1px solid var(--border-color);">
+      <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+        <h5 class="modal-title" id="requestChoiceModalLabel">Who is this request for?</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="color: var(--text-main);">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body text-center">
+        <p>You are requesting the certificate: <strong id="modal-certificate-title"></strong></p>
+        
+        <a href="#" id="btn-for-myself" class="btn-modern m-2" style="background-color: #10b981;">
+            <i class="fas fa-user"></i> For Myself
+        </a>
+        
+        <a href="#" id="btn-for-others" class="btn-modern m-2" style="background-color: var(--accent-color);">
+            <i class="fas fa-users"></i> For Others
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="../assets/plugins/jquery/jquery.min.js"></script>
+<script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="../assets/dist/js/adminlte.min.js"></script>
+
+<script>
+    function showRequestModal(docId, title) {
+        // Set the certificate title in the modal
+        $('#modal-certificate-title').text(title);
+        
+        // Define the base URL for the form page
+        const baseUrl = 'certificate_request_form.php';
+        
+        // **URL Parameter Strategy:**
+        // 1. **doc_id** and **title** are always passed.
+        // 2. **request_for** is the new parameter: 'myself' or 'others'.
+        
+        const myselfUrl = `${baseUrl}?doc_id=${docId}&title=${encodeURIComponent(title)}&request_for=myself`;
+        const othersUrl = `${baseUrl}?doc_id=${docId}&title=${encodeURIComponent(title)}&request_for=others`;
+        
+        // Set the dynamic links for the buttons
+        $('#btn-for-myself').attr('href', myselfUrl);
+        $('#btn-for-others').attr('href', othersUrl);
+        
+        // Show the modal
+        $('#requestChoiceModal').modal('show');
+    }
+    
+    // Optional: Accordion functionality for showing requirements
+    // const acc = document.getElementsByClassName("bar");
+    // let i;
+    // for (i = 0; i < acc.length; i++) {
+    //   acc[i].addEventListener("click", function() {
+    //     this.classList.toggle("active");
+    //     const panel = this.nextElementSibling;
+    //     if (panel.style.display === "block") {
+    //       panel.style.display = "none";
+    //     } else {
+    //       panel.style.display = "block";
+    //     }
+    //   });
+    // }
+</script>
+
 </body>
 </html>

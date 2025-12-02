@@ -2,12 +2,15 @@
 include_once '../db_connection.php';
 session_start();
 
-// 1. VALIDATION: Check if document ID is provided
-if (!isset($_GET['doc_id'])) {
-    die("Error: No document selected. Please go back and select a document.");
+// --- 1. VALIDATION AND PARAMETER SETUP ---
+if (!isset($_GET['doc_id']) || !isset($_GET['request_for'])) {
+    die("Error: Invalid request parameters.");
 }
 
 $doc_id = intval($_GET['doc_id']);
+$request_for = strtolower($_GET['request_for']); // 'myself' or 'others'
+
+$resident_info = null; // Variable to hold auto-fill data
 
 try {
     // 2. FETCH DOCUMENT DETAILS
@@ -19,10 +22,48 @@ try {
         die("Error: Document not found.");
     }
 
-    // 3. FETCH DYNAMIC FIELDS
+    // 3. FETCH RESIDENT INFORMATION (Always fetch to allow auto-fill for both cases)
+    if (isset($_SESSION['user_id'])) {
+        $user_id = $_SESSION['user_id'];
+        
+        $sql_resident = "
+            SELECT 
+                r.first_name, r.middle_name, r.last_name, r.suffix,
+                r.age, r.purok, r.house_number, 
+                CONCAT('H/No. ', r.house_number, ', Purok ', r.purok, ', Pinagkawitan, Lipa City') AS full_address, 
+                u.contact_number, u.email_address
+            FROM residence_information r
+            JOIN users u ON r.user_id = u.user_id
+            WHERE u.user_id = :uid LIMIT 1
+        ";
+        $stmt_resident = $pdo->prepare($sql_resident);
+        $stmt_resident->execute(['uid' => $user_id]);
+        $resident_info = $stmt_resident->fetch(PDO::FETCH_ASSOC);
+
+        if ($resident_info) {
+            $resident_info['contact_no'] = $resident_info['contact_number']; 
+            $resident_info['email'] = $resident_info['email_address'];
+            $resident_info['full_name'] = trim($resident_info['first_name'] . ' ' . $resident_info['middle_name'] . ' ' . $resident_info['last_name'] . ' ' . $resident_info['suffix']);
+        }
+    }
+
+    // 4. FETCH DYNAMIC FIELDS
     $stmtFields = $pdo->prepare("SELECT * FROM document_fields WHERE document_id = ? ORDER BY field_id ASC");
     $stmtFields->execute([$doc_id]);
     $fields = $stmtFields->fetchAll(PDO::FETCH_ASSOC);
+
+    // --- NEW: Define Dropdown Options ---
+    $select_options = [];
+    
+    // Check if this is Indigency Certificate (With Request) - ID 5
+    if ($doc_id == 5) { 
+        $select_options['indigency_reason'] = [
+            'Scholarship',
+            'Medical',
+            'Financial'
+        ];
+    }
+    // ------------------------------------
 
 } catch (PDOException $e) {
     die("Database Error: " . $e->getMessage());
@@ -100,88 +141,193 @@ try {
 
 <?php include_once __DIR__ . '/../includes/menu_bar.php'; ?>
 
-    <div class="content-wrapper">
-        <div class="content">
-            <div class="container-fluid pt-4 container-main">
-                
-                <div class="card card-custom">
-                    <div class="card-body p-4 p-md-5">
+    <div class="wrapper">
+        <div class="content-wrapper">
+            <div class="content">
+                <div class="container-fluid pt-4 container-main">
+                    
+                    <div class="card card-custom">
+                        <div class="card-body p-4 p-md-5">
 
-                        <div class="header-border">
-                            <h3 class="m-0">
-                                <i class="fas fa-file-signature mr-2" style="color: var(--theme-blue);"></i>
-                                <?= htmlspecialchars($doc['doc_name']); ?>
-                            </h3>
-                            <p class="text-muted mt-2 mb-0">Please fill out the details below to generate your request.</p>
-                        </div>
-                        
-                        <form id="dynamicRequestForm">
-                            <input type="hidden" name="document_id" value="<?= $doc_id ?>">
-                            
-                            <?php foreach($fields as $field): ?>
-                                <div class="form-group mb-4">
-                                    <label class="form-label"><?= htmlspecialchars($field['label']) ?></label>
-                                    
-                                    <?php if ($field['field_type'] == 'textarea'): ?>
-                                        <textarea 
-                                            class="form-control form-control-custom" 
-                                            name="<?= htmlspecialchars($field['field_name']) ?>" 
-                                            rows="3" 
-                                            placeholder="Enter <?= htmlspecialchars($field['label']) ?>" required></textarea>
-                                    
-                                    <?php elseif ($field['field_type'] == 'number'): ?>
-                                        <input 
-                                            type="number" 
-                                            class="form-control form-control-custom" 
-                                            name="<?= htmlspecialchars($field['field_name']) ?>" 
-                                            placeholder="Enter <?= htmlspecialchars($field['label']) ?>" required>
-                                    
-                                    <?php elseif ($field['field_type'] == 'date'): ?>
-                                        <input 
-                                            type="date" 
-                                            class="form-control form-control-custom" 
-                                            name="<?= htmlspecialchars($field['field_name']) ?>" required>
-                                    
-                                    <?php elseif ($field['field_type'] == 'select'): ?>
-                                         <input 
-                                            type="text" 
-                                            class="form-control form-control-custom" 
-                                            name="<?= htmlspecialchars($field['field_name']) ?>" 
-                                            placeholder="Enter <?= htmlspecialchars($field['label']) ?>" required>
-
-                                    <?php else: // Default Text ?>
-                                        <input 
-                                            type="text" 
-                                            class="form-control form-control-custom" 
-                                            name="<?= htmlspecialchars($field['field_name']) ?>" 
-                                            placeholder="Enter <?= htmlspecialchars($field['label']) ?>" required>
-                                    <?php endif; ?>
-                                </div>
-                            <?php endforeach; ?>
-
-                            <?php if(empty($fields)): ?>
-                                <div class="alert alert-info bg-transparent border-info text-info">
-                                    <i class="fas fa-info-circle mr-2"></i> No specific information is required for this document. Click submit to proceed.
-                                </div>
-                            <?php endif; ?>
-                            
-                            <div class="mt-5 d-flex justify-content-between align-items-center">
-                                <a href="certificate_request.php" class="text-muted text-decoration-none">
-                                    <i class="fas fa-arrow-left mr-1"></i> Cancel
-                                </a>
-                                <button type="submit" id="submitBtn" class="btn-submit">
-                                    Submit Request <i class="fas fa-paper-plane ml-2"></i>
-                                </button>
+                            <div class="header-border">
+                                <h3 class="m-0">
+                                    <i class="fas fa-file-signature mr-2" style="color: var(--theme-blue);"></i>
+                                    <?= htmlspecialchars($doc['doc_name']); ?>
+                                </h3>
+                                <p class="text-muted mt-2 mb-0">
+                                    Request for: 
+                                    <strong><?= $request_for === 'myself' ? 'The Resident (Yourself)' : 'Other Person'; ?></strong>
+                                </p>
                             </div>
-                        </form>
+                            
+                            <form id="dynamicRequestForm">
+                                <input type="hidden" name="document_id" value="<?= $doc_id ?>">
+                                <input type="hidden" name="request_for" value="<?= htmlspecialchars($request_for) ?>">
 
+                                <?php if ($request_for === 'others'): ?>
+                                <h5 class="text-info mb-3"><i class="fas fa-users mr-2"></i> Requestee Details</h5>
+                                <div class="form-group mb-4">
+                                    <label class="form-label">Full Name of Person Requesting For</label>
+                                    <input 
+                                        type="text" 
+                                        class="form-control form-control-custom" 
+                                        name="requestee_full_name" 
+                                        placeholder="Enter Full Name of Requestee" 
+                                        required
+                                        value="<?= $resident_info ? htmlspecialchars($resident_info['full_name']) : '' ?>"
+                                    >
+                                </div>
+                                <div class="form-group mb-4">
+                                    <label class="form-label">Relationship to the Requestee</label>
+                                    <select 
+                                        class="form-control form-control-custom" 
+                                        name="requestee_relationship" 
+                                        id="requestee_relationship" 
+                                        required>
+                                        <option value="" disabled selected>Select relationship</option>
+                                        <option value="Sibling">Sibling</option>
+                                        <option value="Child">Child</option>
+                                        <option value="Parent">Parent</option>
+                                        <option value="Spouse">Spouse</option>
+                                        <option value="Other">Other (Please specify)</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-group mb-4" id="other_relationship_field" style="display:none;">
+                                    <label class="form-label">Specify Relationship</label>
+                                    <input 
+                                        type="text" 
+                                        class="form-control form-control-custom" 
+                                        name="requestee_relationship_other" 
+                                        placeholder="e.g., Cousin, Guardian, etc."
+                                        >
+                                </div>
+                                <?php else: ?>
+                                    <input type="hidden" name="requestee_full_name" value="<?= htmlspecialchars($resident_info['full_name'] ?? 'N/A') ?>">
+                                    <input type="hidden" name="requestee_relationship" value="Self">
+                                <?php endif; ?>
+                                <h5 class="text-info mt-5 mb-3 header-border pt-3"><i class="fas fa-list-alt mr-2"></i> Document Specific Fields</h5>
+                                
+                                <?php foreach($fields as $field): ?>
+                                    <div class="form-group mb-4">
+                                        <label class="form-label"><?= htmlspecialchars($field['label']) ?></label>
+                                        
+                                        <?php 
+                                            // Auto-fill Logic for Name, Age, Purok
+                                            $field_value = '';
+                                            $is_readonly = '';
+                                            $field_name = htmlspecialchars($field['field_name']);
+
+                                            if ($request_for === 'myself' && $resident_info) {
+                                                if ($field_name === 'name') {
+                                                    $field_value = htmlspecialchars($resident_info['full_name'] ?? '');
+                                                } elseif ($field_name === 'age') {
+                                                    $field_value = htmlspecialchars($resident_info['age'] ?? '');
+                                                } elseif ($field_name === 'purok') {
+                                                    $field_value = htmlspecialchars($resident_info['purok'] ?? '');
+                                                }
+                                                
+                                                if (!empty($field_value)) {
+                                                    $is_readonly = 'readonly';
+                                                }
+                                            }
+                                        ?>
+                                        
+                                        <?php if ($field['field_type'] == 'select'): ?>
+                                             <?php 
+                                                 // Get options defined in PHP array at top
+                                                 $options = $select_options[$field_name] ?? [];
+                                             ?>
+                                             
+                                             <?php if (!empty($options)): ?>
+                                             <select 
+                                                class="form-control form-control-custom" 
+                                                name="<?= $field_name ?>"
+                                                required
+                                                <?= $is_readonly ?>
+                                                >
+                                                <option value="" disabled selected>Select option</option>
+                                                <?php foreach ($options as $option): ?>
+                                                <option value="<?= htmlspecialchars($option) ?>"
+                                                    <?= ($field_value == $option) ? 'selected' : '' ?>>
+                                                    <?= htmlspecialchars($option) ?>
+                                                </option>
+                                                <?php endforeach; ?>
+                                             </select>
+                                             <?php else: ?>
+                                             <input 
+                                                type="text" 
+                                                class="form-control form-control-custom" 
+                                                name="<?= $field_name ?>" 
+                                                placeholder="Enter <?= htmlspecialchars($field['label']) ?>" 
+                                                value="<?= $field_value ?>"
+                                                <?= $is_readonly ?>
+                                                required>
+                                             <?php endif; ?>
+
+                                        <?php elseif ($field['field_type'] == 'textarea'): ?>
+                                            <textarea 
+                                                class="form-control form-control-custom" 
+                                                name="<?= $field_name ?>" 
+                                                rows="3" 
+                                                placeholder="Enter <?= htmlspecialchars($field['label']) ?>" 
+                                                <?= $is_readonly ?>
+                                                required><?= $field_value ?></textarea>
+                                        
+                                        <?php elseif ($field['field_type'] == 'number'): ?>
+                                            <input 
+                                                type="number" 
+                                                class="form-control form-control-custom" 
+                                                name="<?= $field_name ?>" 
+                                                placeholder="Enter <?= htmlspecialchars($field['label']) ?>" 
+                                                value="<?= $field_value ?>"
+                                                <?= $is_readonly ?>
+                                                required>
+                                        
+                                        <?php elseif ($field['field_type'] == 'date'): ?>
+                                            <input 
+                                                type="date" 
+                                                class="form-control form-control-custom" 
+                                                name="<?= $field_name ?>" 
+                                                value="<?= $field_value ?>"
+                                                <?= $is_readonly ?>
+                                                required>
+                                        
+                                        <?php else: ?>
+                                            <input 
+                                                type="text" 
+                                                class="form-control form-control-custom" 
+                                                name="<?= $field_name ?>" 
+                                                placeholder="Enter <?= htmlspecialchars($field['label']) ?>" 
+                                                value="<?= $field_value ?>"
+                                                <?= $is_readonly ?>
+                                                required>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>
+
+                                <?php if(empty($fields)): ?>
+                                    <div class="alert alert-info bg-transparent border-info text-info">
+                                        <i class="fas fa-info-circle mr-2"></i> No specific information is required for this document. Click submit to proceed.
+                                    </div>
+                                <?php endif; ?>
+                                
+                                <div class="mt-5 d-flex justify-content-between align-items-center">
+                                    <a href="certificate_request.php" class="text-muted text-decoration-none">
+                                        <i class="fas fa-arrow-left mr-1"></i> Cancel
+                                    </a>
+                                    <button type="submit" id="submitBtn" class="btn-submit">
+                                        Submit Request <i class="fas fa-paper-plane ml-2"></i>
+                                    </button>
+                                </div>
+                            </form>
+
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
-</div>
 
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
@@ -191,6 +337,22 @@ try {
 <script>
 $(document).ready(function() {
     
+    // --- Handle Relationship Dropdown visibility for 'Others' ---
+    $('#requestee_relationship').on('change', function() {
+        const selectedValue = $(this).val();
+        const otherField = $('#other_relationship_field');
+        const otherInput = otherField.find('input');
+
+        if (selectedValue === 'Other') {
+            otherField.slideDown();
+            otherInput.prop('required', true); 
+        } else {
+            otherField.slideUp();
+            otherInput.prop('required', false).val(''); 
+        }
+    });
+
+    // --- AJAX Form Submission Logic ---
     $('#dynamicRequestForm').on('submit', function(e) {
         e.preventDefault();
         
@@ -198,10 +360,8 @@ $(document).ready(function() {
         var btn = $('#submitBtn');
         var originalBtnText = btn.html();
 
-        // Disable button to prevent double submit
         btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
 
-        // Serialize automatically captures all inputs, including dynamic ones
         var formData = form.serialize();
 
         $.ajax({

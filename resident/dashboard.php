@@ -7,42 +7,69 @@ try{
 
         $user_id = $_SESSION['user_id'];
         
-        // 1. Fetch User Account Info
+        // --- 1. Fetch User Account Info (for login data) ---
         $sql_user = "SELECT * FROM `users` WHERE `user_id` = :uid ";
         $stmt_user = $pdo->prepare($sql_user);
         $stmt_user->execute(['uid' => $user_id]);
         $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC); 
         
+        // Initialize display name variables
+        $resident_full_name = 'Resident';
+        $resident_id = 'N/A';
+        $user_type = 'resident';
+        
         // Check if user exists to avoid errors
         if ($row_user) {
-            $first_name_user = $row_user['username'];
+            // Username is still needed for the Account Details display
+            $username = $row_user['username'];
             $user_type = $row_user['user_type'];
         } else {
-            // Handle edge case where user is logged in but row deleted
-            $first_name_user = 'Resident';
-            $user_type = 'resident';
+            $username = 'Unknown';
         }
 
-        // 2. Fetch Barangay Info
-        $sql = "SELECT * FROM `barangay_information`";
-        $stmt_brgy = $pdo->query($sql);
-        $barangay = ''; 
-        $image_logo = ''; 
-     
 
-        // 3. CRITICAL FIX: Fetch Application Status Correctly
-        // Must fetch resident_id first, then check status
-        $app_status = 'None';
-        
-        $sql_res = "SELECT resident_id FROM residence_information WHERE user_id = :uid LIMIT 1";
+        // --- 2. CRITICAL FIX: Fetch Full Name and Resident ID ---
+        $sql_res = "SELECT 
+                        resident_id, first_name, middle_name, last_name, suffix, image_path
+                    FROM residence_information 
+                    WHERE user_id = :uid LIMIT 1";
         $stmt_res = $pdo->prepare($sql_res);
         $stmt_res->execute(['uid' => $user_id]);
         $res_row = $stmt_res->fetch(PDO::FETCH_ASSOC);
 
         if ($res_row) {
             $resident_id = $res_row['resident_id'];
+            $name_parts = [];
+            if (!empty($res_row['first_name'])) $name_parts[] = $res_row['first_name'];
+            if (!empty($res_row['middle_name'])) $name_parts[] = $res_row['middle_name'];
+            if (!empty($res_row['last_name'])) $name_parts[] = $res_row['last_name'];
+            if (!empty($res_row['suffix'])) $name_parts[] = $res_row['suffix'];
+            
+            // Set the full name for display (e.g., in the Welcome message)
+            $resident_full_name = implode(' ', $name_parts);
+            
+            // Overwrite default image path if available in residence_information
+            if (!empty($res_row['image_path'])) {
+                 $row_user['image_path'] = $res_row['image_path'];
+            }
+        }
+        
+        
+        // --- 3. Fetch Barangay Info (Original Step 2, moved) ---
+        $sql = "SELECT * FROM `barangay_information`";
+        $stmt_brgy = $pdo->query($sql);
+        $barangay = ''; 
+        $image_logo = ''; 
+        // Note: You might want to fetch $image_logo here if it's in the barangay_information table
 
-            // Now check status using resident_id
+        // --- 4. Fetch Application Status (Original Step 3, now uses $resident_id) ---
+       $app_status = 'None';
+        $resident_exists = false; // NEW FLAG
+
+        if ($resident_id != 'N/A') {
+            $resident_exists = true; // Resident ID found in residence_information
+
+            // Check status using resident_id
             $sql_app = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
             $stmt_app = $pdo->prepare($sql_app);
             $stmt_app->execute(['rid' => $resident_id]);
@@ -56,14 +83,27 @@ try{
         $badge_class = 'badge-danger';
         $status_text = 'Not Verified';
 
-        if($app_status == 'Approved' || $app_status == 'Verified'){
+        // A resident is verified if:
+        // 1. Their application status is 'Approved' (for self-registered users) OR
+        // 2. They have a record in residence_information but no application (Admin created/verified)
+        
+        if (trim(strtolower($app_status)) == 'approved' || trim(strtolower($app_status)) == 'verified') {
             $is_verified = true;
             $badge_class = 'badge-success';
             $status_text = 'Verified';
-        } elseif ($app_status == 'Pending') {
+            
+        } elseif ($resident_exists && $app_status == 'None') {
+            // New condition for Admin-created residents (Resident exists but has no application)
+            $is_verified = true;
+            $badge_class = 'badge-success';
+            $status_text = 'Verified (Admin)';
+            $app_status = 'N/A'; // Change display status to reflect no application was necessary
+
+        } elseif (trim(strtolower($app_status)) == 'pending') {
             $badge_class = 'badge-warning';
             $status_text = 'Pending';
         }
+        // If $resident_id is 'N/A', verification remains 'Not Verified' (or handles registration prompt)
 
     }else{
         echo '<script>window.location.href = "../login.php";</script>';
@@ -320,7 +360,7 @@ try{
                         <i class="fas fa-landmark fa-3x mr-3" style="color: #58a6ff;"></i>
                     <?php endif; ?>
                     <div>
-                        <h1>Welcome, <span><?= htmlspecialchars($first_name_user) ?></span></h1>
+                        <<h1>Welcome, <span><?= htmlspecialchars($resident_full_name) ?></span></h1>
                     </div>
                 </div>
                 <p>What would you like to do today?</p>
@@ -362,9 +402,9 @@ try{
                             <img src="<?= $img_src ?>" alt="Profile" class="profile-avatar">
                             
                             <h2 class="profile-name">
-                                <?= htmlspecialchars($first_name_user) ?>
-                            </h2>
-                            <div class="profile-role">Resident ID: <span style="font-family: monospace;"><?= isset($resident_id) ? $resident_id : 'N/A' ?></span></div>
+                                    <?= htmlspecialchars($resident_full_name) ?>
+                                </h2>
+                                <div class="profile-role">Resident ID: <span style="font-family: monospace;"><?= isset($resident_id) ? $resident_id : 'N/A' ?></span></div>
 
                             <div class="profile-status-badge <?= $badge_class ?> mt-2">
                                 <?php if($is_verified): ?>

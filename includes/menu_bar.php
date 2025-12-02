@@ -4,68 +4,91 @@
 
 // 1. Asset Path Logic
 if(!isset($menu_base)){
-  $candidates = array('', '../', '../../', '../../../', '../../../../');
-  $found = false;
-  foreach($candidates as $c){
-    $test = __DIR__ . '/' . $c . 'assets/dist/img/default-user.jpg';
-    if (file_exists($test)){
-      $menu_base = $c;
-      $found = true;
-      break;
+    $candidates = array('', '../', '../../', '../../../', '../../../../');
+    $found = false;
+    foreach($candidates as $c){
+        $test = __DIR__ . '/' . $c . 'assets/dist/img/default-user.jpg';
+        if (file_exists($test)){
+            $menu_base = $c;
+            $found = true;
+            break;
+        }
     }
-  }
-  if (!$found) { $menu_base = '../'; }
+    if (!$found) { $menu_base = '../'; }
 }
 
 // 2. CHECK RESIDENCY VERIFICATION STATUS & FETCH NAME
 $verified_label = "Not Verified";
 $verified_color = "#EF4444"; // Red
 $verified_icon  = "fa-times-circle";
-$display_res_id = "Pending"; // Default display if no profile exists
+$display_res_id = "N/A"; // Default display if no profile exists
+$first_name_user = isset($first_name_user) ? $first_name_user : 'User'; // Default name
+$resident_exists = false; // Flag to check if resident is in the system
+$app_status_raw = 'none'; // Initialize status to 'none' (lowercase)
 
-if(isset($_SESSION['user_id'])){
+if(isset($_SESSION['user_id']) && isset($pdo)){
     $chk_uid = $_SESSION['user_id'];
     
-    if(isset($pdo)){
-        try {
-            // STEP A: Get Resident ID AND Name from User ID
-            // We fetch 'first_name' here so it is available on all pages
-            $sql_res = "SELECT resident_id, first_name FROM residence_information WHERE user_id = :uid LIMIT 1";
-            $stmt_res = $pdo->prepare($sql_res);
-            $stmt_res->execute([':uid' => $chk_uid]);
-            $row_res = $stmt_res->fetch(PDO::FETCH_ASSOC);
+    try {
+        // --- STEP A: Get Resident ID, Full Name, and Image from User ID ---
+        $sql_res = "SELECT resident_id, first_name, middle_name, last_name, suffix, image_path FROM residence_information WHERE user_id = :uid LIMIT 1";
+        $stmt_res = $pdo->prepare($sql_res);
+        $stmt_res->execute([':uid' => $chk_uid]);
+        $row_res = $stmt_res->fetch(PDO::FETCH_ASSOC);
 
-            if ($row_res) {
-                $resident_id = $row_res['resident_id'];
-                $display_res_id = $resident_id; 
+        if ($row_res) {
+            $resident_id = $row_res['resident_id'];
+            $display_res_id = $resident_id; 
+            $resident_exists = true; // Resident is found in the main table
 
-                // FIX: If the page didn't set the name, we set it here from the DB result
-                if(!isset($first_name_user) && !empty($row_res['first_name'])){
-                    $first_name_user = $row_res['first_name'];
-                }
+            // Calculate the full name for the display
+            $name_parts = [];
+            if (!empty($row_res['first_name'])) $name_parts[] = $row_res['first_name'];
+            if (!empty($row_res['middle_name'])) $name_parts[] = $row_res['middle_name'];
+            if (!empty($row_res['last_name'])) $name_parts[] = $row_res['last_name'];
+            if (!empty($row_res['suffix'])) $name_parts[] = $row_res['suffix'];
+            
+            // Set the full name for the sidebar display
+            $first_name_user = implode(' ', $name_parts);
 
-                // STEP B: Check Application Status using Resident ID
-                $chk_sql = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
-                $stmt_chk = $pdo->prepare($chk_sql);
-                $stmt_chk->execute([':rid' => $resident_id]);
-                
-                if($chk_row = $stmt_chk->fetch(PDO::FETCH_ASSOC)){
-                    $status_raw = trim(strtolower($chk_row['status']));
-                    
-                    if($status_raw == 'approved' || $status_raw == 'verified'){
-                        $verified_label = "Verified";
-                        $verified_color = "#10B981"; // Green
-                        $verified_icon  = "fa-check-circle";
-                    } elseif($status_raw == 'pending'){
-                         $verified_label = "Pending";
-                         $verified_color = "#F59E0B"; // Orange
-                         $verified_icon  = "fa-clock";
-                    }
-                }
+            // Set the user image path if available
+            if (!empty($row_res['image_path'])) {
+                 $user_image = $row_res['image_path'];
             }
-        } catch (PDOException $e) {
-            // Silent error
+
+            // --- STEP B: Check Application Status using Resident ID ---
+            $chk_sql = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
+            $stmt_chk = $pdo->prepare($chk_sql);
+            $stmt_chk->execute([':rid' => $resident_id]);
+            
+            if($chk_row = $stmt_chk->fetch(PDO::FETCH_ASSOC)){
+                // Application found, update status
+                $app_status_raw = trim(strtolower($chk_row['status']));
+            }
+
+            // --- STEP C: Implement DUAL-CHECK Verification Logic ---
+            if($app_status_raw == 'approved' || $app_status_raw == 'verified'){
+                // Condition 1: Approved application (Green)
+                $verified_label = "Verified";
+                $verified_color = "#10B981"; 
+                $verified_icon  = "fa-check-circle";
+
+            } elseif ($resident_exists && $app_status_raw == 'none') {
+                // Condition 2: Admin Verified (Resident exists, but no application record) (Green)
+                $verified_label = "Verified";
+                $verified_color = "#10B981"; 
+                $verified_icon  = "fa-check-circle";
+                
+            } elseif($app_status_raw == 'pending'){
+                // Pending Application (Orange)
+                $verified_label = "Pending";
+                $verified_color = "#F59E0B"; 
+                $verified_icon  = "fa-clock";
+            }
         }
+    } catch (PDOException $e) {
+        // Silent error handling for the menu include
+        error_log("Menu Bar DB Error: " . $e->getMessage());
     }
 }
 ?>
@@ -324,14 +347,15 @@ if(isset($_SESSION['user_id'])){
             if (strpos($user_image, 'assets/') !== false || strpos($user_image, 'http') === 0 || strpos($user_image, '/') === 0) {
                 $avatar_src = $user_image;
             } else {
-                $avatar_src = $menu_base . 'assets/dist/img/' . $user_image;
+                // Ensure image path is constructed correctly, using the resident's image path from the resident_information table
+                $avatar_src = $menu_base . ltrim($user_image, '../');
             }
         }
         ?>
         <img src="<?= $avatar_src ?>" alt="User">
         
         <div class="profile-info">
-            <strong><?= isset($first_name_user) ? $first_name_user : 'User' ?></strong>
+            <strong><?= isset($first_name_user) ? htmlspecialchars($first_name_user) : 'User' ?></strong>
             
             <div class="resident-id-badge">RESIDENT ID: <?= $display_res_id ?></div>
             
