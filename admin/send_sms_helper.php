@@ -4,7 +4,7 @@
 function sendSMS($number, $message) {
     // 1. API Configuration
     $url = 'https://www.iprogsms.com/api/v1/sms_messages';
-    $api_token = 'c2cd365b1761722d7de88bc70fd9915d53b4f929'; // Your API Token
+    $api_token = '2cd365b1761722d7de88bc70fd9915d53b4f929'; // Your API Token
 
     // 2. Prepare Data (POST Parameters)
     $data = [
