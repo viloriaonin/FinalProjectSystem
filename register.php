@@ -1,11 +1,10 @@
 <?php
 session_start();
-include_once 'connection.php'; 
+include_once 'db_connection.php'; 
 
 // --- CONFIGURATION: SMS API CREDENTIALS ---
 $sms_url    = 'https://sms.iprogtech.com/api/v1/otp/send_otp';
 $sms_user   = 'Willian Thret Acorda'; 
-// Token with typo fixed (Ensure this is the correct token without the leading 'c')
 $sms_token  = 'c2cd365b1761722d7de88bc70fd9915d53b4f929'; 
 $sms_sender = 'BrgySystem'; 
 
@@ -91,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
 
-    // C. REGISTER USER
+    // C. REGISTER USER (PDO)
     if ($_POST['action'] === 'register_user') {
         $username = trim($_POST['add_username']);
         $password = $_POST['add_password'] ?? '';
@@ -108,57 +107,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             exit;
         }
 
-        $stmt = $con->prepare("SELECT user_id FROM users WHERE username = ?");
-        $stmt->bind_param("s", $username);
-        $stmt->execute();
-        $stmt->store_result();
-        if ($stmt->num_rows > 0) {
-            $stmt->close();
-            echo json_encode(['status' => 'errorUsername', 'message' => 'Username already taken.']);
-            exit;
-        }
-        $stmt->close();
+        try {
+            // 1. Check if username exists
+            $stmt = $pdo->prepare("SELECT user_id FROM users WHERE username = :username");
+            $stmt->execute(['username' => $username]);
+            
+            if ($stmt->rowCount() > 0) {
+                echo json_encode(['status' => 'errorUsername', 'message' => 'Username already taken.']);
+                exit;
+            }
 
-        $user_type = 'resident';
-        $stmt = $con->prepare("INSERT INTO users (username, password, user_type, contact_number) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("ssss", $username, $password, $user_type, $contact_number);
-        
-        if ($stmt->execute()) {
-            // NOTE: We do NOT set $_SESSION['user_id'] here anymore.
-            // This prevents auto-login, allowing the user to stay on the register page.
+            // 2. Insert new user
+            // CHANGE: Default to 'applicant' because a new user ID cannot be in residence_information yet.
+            $user_type = 'applicant'; 
             
-            unset($_SESSION['otp'], $_SESSION['otp_time'], $_SESSION['otp_contact'], $_SESSION['otp_verified']);
+            $sql = "INSERT INTO users (username, password, user_type, contact_number) VALUES (:username, :password, :type, :contact)";
+            $stmt = $pdo->prepare($sql);
             
-            echo json_encode(['status' => 'success']);
-        } else {
-            echo json_encode(['status' => 'error', 'message' => 'Database error.']);
+            if ($stmt->execute([
+                'username' => $username, 
+                'password' => $password, 
+                'type' => $user_type, 
+                'contact' => $contact_number
+            ])) {
+                // Clear OTP session data
+                unset($_SESSION['otp'], $_SESSION['otp_time'], $_SESSION['otp_contact'], $_SESSION['otp_verified']);
+                
+                echo json_encode(['status' => 'success']);
+            } else {
+                echo json_encode(['status' => 'error', 'message' => 'Database error during insertion.']);
+            }
+
+        } catch (PDOException $e) {
+            echo json_encode(['status' => 'error', 'message' => 'Database Error: ' . $e->getMessage()]);
         }
-        $stmt->close();
-        $con->close();
         exit;
     }
 }
 
 // --- 2. CHECK LOGIN STATE ---
-// This redirects logged-in users away. 
-// Since we disabled auto-login above, a newly registered user won't trigger this.
 if (isset($_SESSION['user_id']) && isset($_SESSION['user_type'])) {
+    // Redirect logic: Ensure your dashboard pages allow 'applicant' type or add a specific case for them
     $redirect = ($_SESSION['user_type'] == 'admin') ? 'admin/dashboard.php' : 'resident/dashboard.php';
     echo "<script>window.location.href='$redirect';</script>";
     exit;
 }
 
-// --- 3. FETCH BARANGAY INFO ---
+// --- 3. FETCH BARANGAY INFO (PDO) ---
 $barangay = "Barangay Portal";
 $image = "default.png";
 
-$sql = "SELECT * FROM `barangay_information` LIMIT 1";
-$query = $con->prepare($sql);
-$query->execute();
-$result = $query->get_result();
-if ($row = $result->fetch_assoc()) {
-    $barangay = $row['barangay'];
-    $image = $row['images'] ?? 'default.png'; 
+try {
+    $sql = "SELECT * FROM `barangay_information` LIMIT 1";
+    $stmt = $pdo->query($sql); 
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($row) {
+        $barangay = $row['barangay'];
+        $image = !empty($row['images']) ? $row['images'] : 'default.png'; 
+    }
+} catch (PDOException $e) {
+    // Silent fail for UI elements
 }
 ?>
 
