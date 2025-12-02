@@ -1,8 +1,8 @@
 <?php 
 include_once '../db_connection.php';
+include_once 'send_sms_helper.php'; 
 session_start();
 
-// 1. SECURITY CHECK
 if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'admin') {
     die("Unauthorized Access");
 }
@@ -10,14 +10,32 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'admin') {
 try {
     if(isset($_POST['certificate_id'])) {
 
-        // 2. GET INPUTS
         $certificate_id = $_POST['certificate_id'];
-        $message = $_POST['message'] ?? ''; // Admin notes/reason
-        
-        // CHECK STATUS: Get from POST, otherwise default to 'Approved'
+        $message = $_POST['message'] ?? ''; 
         $status = isset($_POST['status']) ? $_POST['status'] : 'Approved';
 
-        // 3. UPDATE REQUEST STATUS
+        // --- 1. FETCH USER CONTACT FROM USERS TABLE ---
+        // We join certificate_requests -> residence_information -> users
+        $sqlInfo = "SELECT 
+                        req.full_name, 
+                        req.type, 
+                        req.contact as req_contact,
+                        u.contact_number as user_contact
+                    FROM certificate_requests req
+                    LEFT JOIN residence_information res ON req.resident_id = res.resident_id
+                    LEFT JOIN users u ON res.user_id = u.user_id
+                    WHERE req.cert_id = ?";
+        
+        $stmtInfo = $pdo->prepare($sqlInfo);
+        $stmtInfo->execute([$certificate_id]);
+        $reqInfo = $stmtInfo->fetch(PDO::FETCH_ASSOC);
+        
+        // Prioritize the number from the USERS table, fallback to the one in the request
+        $contactNumber = !empty($reqInfo['user_contact']) ? $reqInfo['user_contact'] : ($reqInfo['req_contact'] ?? '');
+        $fullName = $reqInfo['full_name'] ?? 'Resident';
+        $docType = $reqInfo['type'] ?? 'Document';
+
+        // 2. Update DB
         $sql_update = "UPDATE certificate_requests 
                        SET status = :status, 
                            admin_notes = :message 
@@ -31,22 +49,26 @@ try {
         ]);
 
         if ($result) {
-            // 4. ACTIVITY LOGGING
-            // Fetch details for the log
-            $sql_details = "SELECT full_name FROM certificate_requests WHERE cert_id = ?";
-            $stmt_details = $pdo->prepare($sql_details);
-            $stmt_details->execute([$certificate_id]);
-            $row = $stmt_details->fetch(PDO::FETCH_ASSOC);
             
-            $resident_name = $row['full_name'] ?? 'Unknown';
+            // --- 3. SEND SMS ---
+            if(!empty($contactNumber)) {
+                if ($status == 'Approved') {
+                    $smsMsg = "Good day $fullName! Your request for $docType has been APPROVED. You may now claim your document at the Barangay Hall.";
+                } else {
+                    $smsMsg = "Hello $fullName, your request for $docType was REJECTED. Reason: $message. Please contact us for more info.";
+                }
+                sendSMS($contactNumber, $smsMsg);
+            }
+            // -------------------
+
+            // Activity Log
             $status_activity_log = 'updated';
             $date_activity = date("j-n-Y g:i A"); 
 
-            // Create specific log message based on action
             if ($status == 'Rejected') {
-                $message_activity = "ADMIN: REJECTED CERTIFICATE REQUEST - ID: $certificate_id | RESIDENT: $resident_name | REASON: $message";
+                $message_activity = "ADMIN: REJECTED CERTIFICATE REQUEST - ID: $certificate_id | RESIDENT: $fullName | REASON: $message";
             } else {
-                $message_activity = "ADMIN: APPROVED CERTIFICATE REQUEST - ID: $certificate_id | RESIDENT: $resident_name | NOTES: $message";
+                $message_activity = "ADMIN: APPROVED CERTIFICATE REQUEST - ID: $certificate_id | RESIDENT: $fullName | NOTES: $message";
             }
 
             $sql_log = "INSERT INTO activity_log (`message`, `date`, `status`) VALUES (?, ?, ?)";

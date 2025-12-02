@@ -6,9 +6,10 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 include_once '../db_connection.php';
+include_once 'send_sms_helper.php'; 
+
 session_start();
 
-// Helper function to calculate age
 function calculateAge($dob) {
     if (empty($dob)) return 0;
     try {
@@ -30,47 +31,34 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
             
             $pdo->beginTransaction();
 
-            // 1. Fetch Applicant Data
-            $stmt = $pdo->prepare("SELECT * FROM residence_applications WHERE applicant_id = ?");
+            // 1. Fetch Applicant Data AND User Contact Number
+            // We JOIN residence_information to get the user_id, then JOIN users to get the contact_number
+            $sql = "SELECT app.*, u.contact_number as user_contact 
+                    FROM residence_applications app
+                    LEFT JOIN residence_information res ON app.resident_id = res.resident_id
+                    LEFT JOIN users u ON res.user_id = u.user_id
+                    WHERE app.applicant_id = ?";
+            
+            $stmt = $pdo->prepare($sql);
             $stmt->execute([$id]);
             $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($data) {
-                // Get the existing Resident ID linked to this application
                 $resident_id = $data['resident_id']; 
-                
-                // Calculate Age
                 $age = !empty($data['age']) ? $data['age'] : calculateAge($data['birth_date']);
 
-                // 2. UPDATE the Existing Resident Information
-                // We use UPDATE instead of INSERT to preserve the user_id link
+                // Update Residence Info
                 $sqlUpdate = "UPDATE residence_information SET 
-                    first_name = :fname, 
-                    middle_name = :mname, 
-                    last_name = :lname, 
-                    suffix = :suffix, 
-                    age = :age,
-                    gender = :gender, 
-                    civil_status = :civil, 
-                    religion = :rel, 
-                    nationality = :nat, 
-                    contact_number = :contact, 
-                    email_address = :email,
-                    birth_date = :bdate, 
-                    birth_place = :bplace, 
-                    house_number = :house, 
-                    purok = :purok, 
-                    fathers_name = :father, 
-                    mothers_name = :mother, 
-                    guardian = :guardian, 
-                    guardian_contact = :gcontact, 
-                    occupation = :occu, 
-                    bloodtype = :blood,
-                    image_path = :imgpath
+                    first_name = :fname, middle_name = :mname, last_name = :lname, suffix = :suffix, 
+                    age = :age, gender = :gender, civil_status = :civil, religion = :rel, 
+                    nationality = :nat, contact_number = :contact, email_address = :email,
+                    birth_date = :bdate, birth_place = :bplace, house_number = :house, 
+                    purok = :purok, fathers_name = :father, mothers_name = :mother, 
+                    guardian = :guardian, guardian_contact = :gcontact, occupation = :occu, 
+                    bloodtype = :blood, image_path = :imgpath
                     WHERE resident_id = :rid";
 
                 $updateResident = $pdo->prepare($sqlUpdate);
-                
                 $updateResident->execute([
                     ':fname'    => $data['first_name'] ?? '',
                     ':mname'    => $data['middle_name'] ?? '',
@@ -94,14 +82,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                     ':occu'     => $data['occupation'] ?? 'None',
                     ':blood'    => $data['blood_type'] ?? 'Unknown',
                     ':imgpath'  => $data['valid_id_path'] ?? '',
-                    ':rid'      => $resident_id // <--- This targets the correct user
+                    ':rid'      => $resident_id
                 ]);
 
-               // 3. Update Application Status
                 $updateApp = $pdo->prepare("UPDATE residence_applications SET status = 'Approved' WHERE applicant_id = ?");
                 $updateApp->execute([$id]);
 
                 $pdo->commit();
+
+                // --- SMS: APPROVED ---
+                // PRIORITIZE THE NUMBER FROM USERS TABLE
+                $contact = !empty($data['user_contact']) ? $data['user_contact'] : $data['contact_number'];
+                $fname = $data['first_name'];
+
+                if(!empty($contact)){
+                    $msg = "Good day $fname! Your Residency Application has been APPROVED. You are now a verified resident and can request certificates online.";
+                    sendSMS($contact, $msg);
+                }
+                // ---------------------
+
                 echo "success";
 
             } else {
@@ -114,28 +113,41 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
             $reason = $_POST['reason'];
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare("SELECT applicant_id, first_name, last_name, email_address, contact_number FROM residence_applications WHERE applicant_id = ?");
+            // Fetch Data + User Contact
+            $sql = "SELECT app.*, u.contact_number as user_contact 
+                    FROM residence_applications app
+                    LEFT JOIN residence_information res ON app.resident_id = res.resident_id
+                    LEFT JOIN users u ON res.user_id = u.user_id
+                    WHERE app.applicant_id = ?";
+            
+            $stmt = $pdo->prepare($sql);
             $stmt->execute([$id]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($row) {
-                // Log Rejection
                 $archiveSql = "INSERT INTO rejected_applications (original_applicant_id, first_name, last_name, email_address, contact_number, rejection_reason) VALUES (?, ?, ?, ?, ?, ?)";
                 $archiveStmt = $pdo->prepare($archiveSql);
                 $archiveStmt->execute([
-                    $row['applicant_id'],
-                    $row['first_name'],
-                    $row['last_name'],
-                    $row['email_address'] ?? 'N/A',
-                    $row['contact_number'] ?? 'N/A',
-                    $reason
+                    $row['applicant_id'], $row['first_name'], $row['last_name'],
+                    $row['email_address'] ?? 'N/A', $row['contact_number'] ?? 'N/A', $reason
                 ]);
 
-                // Update Status (Instead of Deleting, it is better to keep record)
                 $update = $pdo->prepare("UPDATE residence_applications SET status = 'Rejected' WHERE applicant_id = ?");
                 $update->execute([$id]);
 
                 $pdo->commit();
+
+                // --- SMS: REJECTED ---
+                // PRIORITIZE THE NUMBER FROM USERS TABLE
+                $contact = !empty($row['user_contact']) ? $row['user_contact'] : $row['contact_number'];
+                $fname = $row['first_name'];
+
+                if(!empty($contact)){
+                    $msg = "Hello $fname, your Residency Application was REJECTED. Reason: $reason. Please check your data or contact the Barangay.";
+                    sendSMS($contact, $msg);
+                }
+                // ---------------------
+
                 echo "success";
             } else {
                 $pdo->rollBack();
