@@ -268,7 +268,7 @@ try {
               <div class="small-box bg-warning">
                 <div class="inner">
                   <h3 id="kpi_pending_residency"><?= number_format($pending_residency) ?></h3>
-                  <p>Pending Residency Apps</p>
+                  <p>Pending Residency Applications</p>
                 </div>
                 <div class="icon">
                   <i class="fas fa-user-clock"></i>

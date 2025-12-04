@@ -7,7 +7,6 @@ try {
     if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'admin'){
         $user_id = $_SESSION['user_id'];
 
-        // 1. Fetch User Details (Assuming user_id is the primary key as per your schema)
         $sql_user = "SELECT * FROM `users` WHERE `user_id` = ?"; 
         $stmt_user = $pdo->prepare($sql_user);
         $stmt_user->execute([$user_id]); 
@@ -15,19 +14,8 @@ try {
 
         if ($row_user) {
             $first_name_user = $row_user['username'];
-            $last_name_user = ''; // Password shouldn't be displayed, kept structure for compatibility
             $user_type = $row_user['user_type'];
         }
-
-        // 2. Fetch Barangay Information
-        $sql = "SELECT * FROM `barangay_information` LIMIT 1";
-        $stmt = $pdo->query($sql);
-        // Using fetch instead of while loop since we only need one row
-        if($row = $stmt->fetch(PDO::FETCH_ASSOC)){
-            $barangay = $row['barangay'];
-            // ... (other barangay details)
-        }
-    
     } else {
         echo '<script>window.location.href = "../login.php";</script>';
         exit();
@@ -54,26 +42,57 @@ try {
   <link rel="stylesheet" href="../assets/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
 
   <style>
-    /* Your Custom CSS */
-    .dataTables_wrapper .dataTables_paginate .page-link { border: none; }
-    .dataTables_wrapper .dataTables_paginate .page-item .page-link{ color: #fff; border-color: transparent; }
-    .dataTables_wrapper .dataTables_paginate .page-item.active .page-link{
-        color: #fff; border: transparent; background: none; font-weight: bold; background-color: #000;
+    /* --- DATATABLES DARK MODE FIXES --- */
+    .dataTables_wrapper .dataTables_length, 
+    .dataTables_wrapper .dataTables_filter, 
+    .dataTables_wrapper .dataTables_info, 
+    .dataTables_wrapper .dataTables_processing, 
+    .dataTables_wrapper .dataTables_paginate {
+        color: #fff !important; /* Force text to white */
+        margin-bottom: 10px;
     }
-    .page-link:focus{ outline:0; box-shadow:none; }
-    .dataTables_length select{
-        border: 1px solid #fff; border-top: none; border-left: none; border-right: none;
-        cursor: pointer; color: #fff; background-color: transparent;
+
+    /* Search & Length Inputs */
+    .dataTables_wrapper .dataTables_filter input,
+    .dataTables_wrapper .dataTables_length select {
+        background-color: #343a40; /* Dark gray bg */
+        border: 1px solid #6c757d;
+        color: #fff;
+        border-radius: 4px;
+        padding: 4px 8px;
     }
-    .dataTables_length span{ color: #fff; font-weight: 500; }
-    .dataTables_info{ font-size: 13px; margin-top: 8px; font-weight: 500; color: #fff; }
-    #certificateTable{ width: 100% !important; }
-    #certificateTable_filter{ display: none; }
     
-    /* Select2 Fixes */
-    .select2-container--default .select2-selection--single{ background-color: transparent; height: 38px; }
-    .select2-container--default .select2-selection--single .select2-selection__rendered{ color: #fff; }
-  </style>
+    .dataTables_wrapper .dataTables_filter input:focus,
+    .dataTables_wrapper .dataTables_length select:focus {
+        border-color: #007bff; /* Blue border on focus */
+        outline: none;
+    }
+
+    /* Pagination Buttons */
+    .dataTables_wrapper .dataTables_paginate .page-item .page-link {
+        background-color: #343a40;
+        border-color: #6c757d;
+        color: #fff;
+    }
+    .dataTables_wrapper .dataTables_paginate .page-item.active .page-link {
+        background-color: #007bff;
+        border-color: #007bff;
+        color: #fff;
+        font-weight: bold;
+    }
+    .dataTables_wrapper .dataTables_paginate .page-item.disabled .page-link {
+        opacity: 0.5;
+        background-color: #343a40;
+    }
+
+    /* Layout Spacing */
+    table.dataTable { 
+        margin-top: 10px !important; 
+        margin-bottom: 10px !important; 
+        width: 100% !important; 
+    }
+</style>
+
 </head>
 
 <body class="hold-transition dark-mode sidebar-mini">
@@ -88,43 +107,47 @@ try {
             <div class="card-header p-0 pt-1">
                 <ul class="nav nav-tabs" id="custom-tabs-one-tab" role="tablist">
                   <li class="nav-item">
-                    <a class="nav-link active" data-toggle="pill" href="#certificate-tabs" role="tab">Certificate Requests <span class="badge badge-success bg-lime" id="total">0</span></a>
+                    <a class="nav-link active" data-toggle="pill" href="#pending-requests-tab" role="tab">Pending Requests <span class="badge badge-warning right ml-1"><i class="fas fa-clock"></i></span></a>
+                  </li>
+                  <li class="nav-item">
+                    <a class="nav-link" data-toggle="pill" href="#approved-tab" role="tab">Approved <span class="badge badge-success right ml-1"><i class="fas fa-check"></i></span></a>
+                  </li>
+                  <li class="nav-item">
+                    <a class="nav-link" data-toggle="pill" href="#rejected-tab" role="tab">Rejected <span class="badge badge-danger right ml-1"><i class="fas fa-times"></i></span></a>
                   </li>
                 </ul>
             </div>
             
             <div class="card-body">
-                <div class="tab-content">
-                  <div class="tab-pane fade show active" id="certificate-tabs">
-                      
-                      <div class="row">
-                        <div class="col-sm-6">
-                          <div class="input-group mb-3">
-                            <div class="input-group-prepend">
-                              <span class="input-group-text bg-indigo">SEARCH</span>
-                            </div>
-                            <input type="text" class="form-control" id="searching" autocomplete="off" placeholder="Name or Document...">
-                            <div class="input-group-append">
-                              <span class="input-group-text bg-red" id="reset" type="button" style="cursor:pointer;"><i class="fas fa-undo"></i> RESET</span>
-                            </div>
-                          </div>
+                
+                <div class="row">
+                    <div class="col-sm-6">
+                        <div class="input-group mb-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text bg-indigo">SEARCH</span>
                         </div>
-                      </div>
+                        <input type="text" class="form-control" id="searching" autocomplete="off" placeholder="Name or Document...">
+                        <div class="input-group-append">
+                            <span class="input-group-text bg-red" id="reset" type="button" style="cursor:pointer;"><i class="fas fa-undo"></i> RESET</span>
+                        </div>
+                        </div>
+                    </div>
+                </div>
 
+                <div class="tab-content">
+                  
+                  <div class="tab-pane fade show active" id="pending-requests-tab">
                       <div class="table-responsive">
-                      <table class="table table-hover table-striped text-sm" id="certificateTable">
+                      <table class="table table-hover table-striped text-sm" id="pendingRequestTable">
                         <thead>
                           <tr>
                             <th>Resident ID</th>
                             <th>Name</th>
-                            
                             <th>Document</th>
-                            
                             <th>
-                              <select name="date_request" id="date_request" class="form-control form-control-sm">
+                              <select id="date_request_pending" class="form-control form-control-sm filter-date">
                                 <option value="">Date Request</option>
                                 <?php 
-                                // Query based on schema 'certificate_requests' table
                                 $sql_date = "SELECT DATE(created_at) as req_date FROM certificate_requests GROUP BY DATE(created_at)";
                                 $stmt_date = $pdo->query($sql_date);
                                 while($row = $stmt_date->fetch(PDO::FETCH_ASSOC)){
@@ -133,21 +156,7 @@ try {
                                 ?>
                               </select>
                             </th>
-
-                            <th>
-                              <select name="status" id="status" class="form-control form-control-sm">
-                                <option value="">Status</option>
-                                <?php 
-                                // Query based on schema 'certificate_requests' table
-                                $sql_status = "SELECT status FROM certificate_requests GROUP BY status";
-                                $stmt_status = $pdo->query($sql_status);
-                                while($row = $stmt_status->fetch(PDO::FETCH_ASSOC)){
-                                    echo '<option value="'.$row['status'].'">'.$row['status'].'</option>';
-                                }
-                                ?>
-                              </select>
-                            </th>
-                            
+                            <th>Status</th>
                             <th class="text-center">Tools</th>
                           </tr>
                         </thead>
@@ -155,9 +164,46 @@ try {
                       </table>
                       </div>
                   </div>
+
+                  <div class="tab-pane fade" id="approved-tab">
+                      <div class="table-responsive">
+                      <table class="table table-hover table-striped text-sm" id="approvedRequestTable">
+                        <thead>
+                          <tr>
+                            <th>Resident ID</th>
+                            <th>Name</th>
+                            <th>Document</th>
+                            <th>Date Request</th>
+                            <th>Status</th>
+                            <th class="text-center">Tools</th>
+                          </tr>
+                        </thead>
+                        <tbody></tbody>
+                      </table>
+                      </div>
+                  </div>
+
+                  <div class="tab-pane fade" id="rejected-tab">
+                      <div class="table-responsive">
+                      <table class="table table-hover table-striped text-sm" id="rejectedRequestTable">
+                        <thead>
+                          <tr>
+                            <th>Resident ID</th>
+                            <th>Name</th>
+                            <th>Document</th>
+                            <th>Date Request</th>
+                            <th>Status</th>
+                            <th class="text-center">Tools</th>
+                          </tr>
+                        </thead>
+                        <tbody></tbody>
+                      </table>
+                      </div>
+                  </div>
+
                 </div>
             </div>
-            </div>
+        </div>
 
       </div></section>
   </div>
@@ -181,86 +227,109 @@ try {
 <script>
   $(document).ready(function(){
 
-    certificateTable();
+    // Initialize the tables
+    var pendingTable = loadTable('#pendingRequestTable', 'Pending');
+    var approvedTable = loadTable('#approvedRequestTable', 'Approved');
+    var rejectedTable = loadTable('#rejectedRequestTable', 'Rejected');
 
-    function certificateTable(){
-      var date_request = $("#date_request").val();
-      var status = $("#status").val();
+    // Function to load DataTable
+   // REUSABLE FUNCTION TO LOAD DATATABLES
+    function loadTable(tableId, statusFilter){
+      
+      var dateFilter = (tableId === '#pendingRequestTable') ? $("#date_request_pending").val() : '';
 
-      var certificateTable = $("#certificateTable").DataTable({
+      // Prevent duplicate initialization
+      if ($.fn.DataTable.isDataTable(tableId)) {
+          $(tableId).DataTable().destroy();
+      }
+
+      var table = $(tableId).DataTable({
         "processing": true,
         "serverSide": true,
-        "order": [],
+        "responsive": true,
         "autoWidth": false,
-        "ordering": false,
-        "dom": "<'row'<'col-sm-12 col-md-6'><'col-sm-12 col-md-6'f>>" +
-                "<'row'<'col-sm-12'tr>>" +
-                "<'d-flex flex-sm-row-reverse flex-column border-top '<'px-2 'p><'px-2'i> <'px-2'l> >",
-        "pagingType": "full_numbers",
+        "ordering": false, // Disable ordering for now to simplify
+        
+        // --- LAYOUT FIX ---
+        // l = length (show entries), f = filter (search)
+        // t = table
+        // i = info (showing 1 to x), p = pagination
+        "dom": "<'row'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
+               "<'row'<'col-sm-12'tr>>" +
+               "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+               
+        "pagingType": "simple_numbers",
+        
         "language": {
+             "search": "_INPUT_",
+             "searchPlaceholder": "Search records...",
+             "lengthMenu": "Show _MENU_ entries",
+             "info": "Showing _START_ to _END_ of _TOTAL_ entries",
              "paginate": {
-                "next": '<i class="fas fa-angle-right text-white"></i>',
-                "previous": '<i class="fas fa-angle-left text-white"></i>', 
-                "first": '<i class="fa fa-angle-double-left text-white"></i>',
-                "last": '<i class="fa fa-angle-double-right text-white"></i>'        
-             }, 
-             "info":  " _START_ - _END_ of _TOTAL_ ",
+                "next": '<i class="fas fa-angle-right"></i>',
+                "previous": '<i class="fas fa-angle-left"></i>'
+             },
+             "emptyTable": "No requests found for this status."
         },
         "ajax": {
           "url": "certificateTable.php",
           "type": "POST",
           "data": {
-            date_request: date_request,
-            status: status
+            status: statusFilter, 
+            date_request: dateFilter
           },
           "error": function (xhr, error, thrown) {
              console.log("DataTables Error:", xhr.responseText);
           }
         },
-        // Columns configuration matching the new header structure
         "columns": [
-            { "data": 0 }, // Resident ID
-            { "data": 1 }, // Name
-            { "data": 2 }, // Document (Changed from Purpose) - Ensure backend sends document name here
-            { "data": 3 }, // Date Request (created_at)
-            { "data": 4 }, // Status
-            { "data": 5 }  // Tools
+            { "data": 0 }, 
+            { "data": 1 }, 
+            { "data": 2 }, 
+            { "data": 3 }, 
+            { "data": 4 }, 
+            { "data": 5 }  
         ],
         "drawCallback": function (data) {
-            // Ensure your backend sends 'recordsTotal'
-            if(data.json){
-                $('#total').text(data.json.recordsTotal); 
-            }
             $('[data-toggle="tooltip"]').tooltip();
-            $('.dataTables_paginate').addClass("mt-2 mt-md-2 pt-1");
-            $('.dataTables_paginate ul.pagination').addClass("pagination-md");   
         }
       });
-
-      $('#searching').keyup(function(){
-        certificateTable.search($(this).val()).draw();
-      })
     }
 
-    // Refresh table on filter change
-    $(document).on('change',"#date_request, #status", function(){
-          $("#certificateTable").DataTable().destroy();
-          certificateTable();
-          $("#searching").keyup();
-    })
+    // --- SEARCH BAR LOGIC ---
+    $('#searching').on('keyup', function(){
+       var term = $(this).val();
+       // Search all 3 tables
+       $('#pendingRequestTable').DataTable().search(term).draw();
+       $('#approvedRequestTable').DataTable().search(term).draw();
+       $('#rejectedRequestTable').DataTable().search(term).draw();
+    });
 
-    // Reset Button Logic
-    $(document).on('click','#reset',function(){
-        if($("#date_request").val() != '' || $("#status").val() != '' || $("#searching").val() != ''){
-            $("#date_request").val('');
-            $("#status").val('');
-            $("#searching").val('');
-            $("#certificateTable").DataTable().destroy();
-            certificateTable();
-        }
-    })
+    // --- DATE FILTER CHANGE ---
+    $('#date_request_pending').on('change', function(){
+        $('#pendingRequestTable').DataTable().ajax.reload();
+    });
 
-    // Status Modal Logic
+    // --- RESET BUTTON ---
+    $('#reset').on('click', function(){
+        $('#searching').val('');
+        $('#date_request_pending').val('');
+        
+        // Reload all
+        $('#pendingRequestTable').DataTable().search('').draw();
+        $('#approvedRequestTable').DataTable().search('').draw();
+        $('#rejectedRequestTable').DataTable().search('').draw();
+    });
+
+    // --- REFRESH ON TAB SWITCH ---
+    $('a[data-toggle="pill"]').on('shown.bs.tab', function (e) {
+        var target = $(e.target).attr("href");
+        if(target === '#pending-requests-tab') $('#pendingRequestTable').DataTable().ajax.reload(null, false);
+        if(target === '#approved-tab') $('#approvedRequestTable').DataTable().ajax.reload(null, false);
+        if(target === '#rejected-tab') $('#rejectedRequestTable').DataTable().ajax.reload(null, false);
+    });
+
+    // --- STATUS MODAL ---
     $(document).on('click','.acceptStatus',function(){
       $("#show_status").html('');
       var residence_id = $(this).attr('id');
@@ -269,25 +338,15 @@ try {
       $.ajax({
         url: 'certificateRequestStatus.php',
         type: 'POST',
-        data:{
-          residence_id: residence_id,
-          certificate_id: certificate_id,
-        },
+        data:{ residence_id: residence_id, certificate_id: certificate_id },
         success:function(data){
           $("#show_status").html(data);
           $("#showStatusRequestModal").modal('show');
         }
-      }).fail(function(){
-        Swal.fire({
-          title: 'Error',
-          text: 'Something went wrong with ajax!',
-          icon: 'error'
-        })
-      })
-    })
+      });
+    });
 
   });
 </script>
-
 </body>
 </html>

@@ -499,35 +499,37 @@ try {
     }
 
     // --- FUNCTION: VIEW DETAILS ---
-    function viewResidence(){
-      $(document).on('click','.viewResidence',function(){
-        var residence_id = $(this).attr('id');
+   function viewResidence(){
+  $(document).on('click','.viewResidence',function(){
+    var residence_id = $(this).attr('id');
+    var source_table = $(this).attr('data-source'); // 1. Get the source (e.g., 'archive')
 
-        $("#displayResidence").html('');
-      
-        $.ajax({
-          url: 'viewResidenceModal.php',
-          type: 'POST',
-          dataType: 'html',
-          cache: false,
-          data: {
-            residence_id: residence_id
-          },
-          success:function(data){
-            $("#displayResidence").html(data);
-            $("#viewResidenceModal").modal('show');
-          }
-        }).fail(function(){
-          Swal.fire({
-            title: '<strong class="text-danger">Ooppss..</strong>',
-            icon: 'error',
-            html: '<b>Something went wrong with ajax !<b>',
-            width: '400px',
-            confirmButtonColor: '#6610f2',
-          })
-        })
+    $("#displayResidence").html('');
+  
+    $.ajax({
+      url: 'viewResidenceModal.php',
+      type: 'POST',
+      dataType: 'html',
+      cache: false,
+      data: {
+        residence_id: residence_id,
+        source: source_table // 2. Send it to PHP
+      },
+      success:function(data){
+        $("#displayResidence").html(data);
+        $("#viewResidenceModal").modal('show');
+      }
+    }).fail(function(){
+      Swal.fire({
+        title: '<strong class="text-danger">Ooppss..</strong>',
+        icon: 'error',
+        html: '<b>Something went wrong with ajax !<b>',
+        width: '400px',
+        confirmButtonColor: '#6610f2',
       })
-    }
+    })
+  })
+}
 
     // --- FUNCTION: UNARCHIVE (RESTORE) ---
     function unArchiveResidence(){

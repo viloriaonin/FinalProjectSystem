@@ -1,137 +1,128 @@
-<?php 
-include_once '../db_connection.php'; 
+<?php
+// 1. START BUFFERING & DISABLE ERROR DISPLAY
+ob_start();
+ini_set('display_errors', 0);
+error_reporting(0);
 
-// Set header to JSON to prevent parsing errors on the frontend
-header('Content-Type: application/json');
+include_once '../db_connection.php';
+
+// Set header to JSON
+header('Content-Type: application/json; charset=utf-8');
+
+// Default response
+$response = [
+    "draw" => 1,
+    "recordsTotal" => 0,
+    "recordsFiltered" => 0,
+    "data" => [],
+    "error" => null
+];
 
 try {
-    // 1. INITIALIZE VARIABLES
+    // 2. READ INPUTS
+    $draw = isset($_REQUEST['draw']) ? intval($_REQUEST['draw']) : 1;
+    $start = isset($_REQUEST['start']) ? intval($_REQUEST['start']) : 0;
+    $length = isset($_REQUEST['length']) ? intval($_REQUEST['length']) : 10;
+    
+    // Handle Search Input
+    $searchValue = "";
+    if (isset($_REQUEST['search']) && is_array($_REQUEST['search'])) {
+        $searchValue = $_REQUEST['search']['value'] ?? "";
+    } elseif (isset($_REQUEST['search']) && is_string($_REQUEST['search'])) {
+        $searchValue = $_REQUEST['search'];
+    }
+
+    // Custom Filters
+    $statusFilter = $_REQUEST['status'] ?? '';
+    $dateFilter = $_REQUEST['date_request'] ?? '';
+
+    // 3. BUILD QUERY
+    $sqlBase = " FROM certificate_requests WHERE 1=1 ";
     $params = [];
-    $whereClause = [];
 
-    // 2. FILTERING
-    if(!empty($_REQUEST['date_request'])){
-        $whereClause[] = "DATE(created_at) = :date_request";
-        $params[':date_request'] = $_REQUEST['date_request'];
+    // Filter: Status
+    if (!empty($statusFilter)) {
+        $sqlBase .= " AND status = :status";
+        $params[':status'] = $statusFilter;
     }
 
-    if(!empty($_REQUEST['status'])){
-        $whereClause[] = "status = :status";
-        $params[':status'] = $_REQUEST['status'];
+    // Filter: Date
+    if (!empty($dateFilter)) {
+        $sqlBase .= " AND DATE(created_at) = :date_request";
+        $params[':date_request'] = $dateFilter;
     }
 
-    $whereSql = '';
-    if(count($whereClause) > 0){
-        $whereSql = ' AND ' . implode(' AND ', $whereClause);
+    // Filter: Search (FIXED: Unique placeholders for native prepared statements)
+    if (!empty($searchValue)) {
+        $sqlBase .= " AND (full_name LIKE :search1 OR request_code LIKE :search2 OR type LIKE :search3)";
+        $params[':search1'] = "%$searchValue%";
+        $params[':search2'] = "%$searchValue%";
+        $params[':search3'] = "%$searchValue%";
     }
 
-    // 3. BASE QUERY
-    $sql_base = "SELECT * FROM certificate_requests WHERE 1=1 " . $whereSql;
+    // 4. COUNT TOTAL (Without filters)
+    $stmtTotal = $pdo->prepare("SELECT COUNT(*) FROM certificate_requests");
+    $stmtTotal->execute();
+    $totalData = $stmtTotal->fetchColumn();
 
-    // 4. SEARCHING
-    if(!empty($_REQUEST['search']['value'])){
-        $searchValue = $_REQUEST['search']['value'];
-        // Added 'type' to search criteria so you can search by Document Name
-        $sql_base .= " AND (resident_id LIKE :search 
-                        OR full_name LIKE :search 
-                        OR type LIKE :search 
-                        OR purpose LIKE :search 
-                        OR status LIKE :search )";
-        $params[':search'] = "%$searchValue%";
+    // 5. COUNT FILTERED
+    $stmtFiltered = $pdo->prepare("SELECT COUNT(*) " . $sqlBase);
+    $stmtFiltered->execute($params);
+    $totalFiltered = $stmtFiltered->fetchColumn();
+
+    // 6. FETCH DATA
+    $sqlData = "SELECT * " . $sqlBase . " ORDER BY created_at DESC LIMIT :limit OFFSET :offset";
+    $stmt = $pdo->prepare($sqlData);
+
+    // Bind all dynamic parameters
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
     }
+    // Bind limit/offset explicitly as integers
+    $stmt->bindValue(':limit', (int)$length, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', (int)$start, PDO::PARAM_INT);
+    
+    $stmt->execute();
+    $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // 5. COUNT TOTAL (For Pagination)
-    $stmt = $pdo->prepare($sql_base);
-    $stmt->execute($params);
-    $totalData = $stmt->rowCount();
+    // 7. FORMAT DATA
+    $formattedData = [];
+    foreach ($data as $row) {
+        // Badge Logic
+        $statusBadge = '<span class="badge badge-secondary">'.$row['status'].'</span>';
+        if($row['status'] == 'Approved') $statusBadge = '<span class="badge badge-success">Approved</span>';
+        if($row['status'] == 'Rejected') $statusBadge = '<span class="badge badge-danger">Rejected</span>';
+        if($row['status'] == 'Pending') $statusBadge = '<span class="badge badge-warning">Pending</span>';
 
-    // 6. ORDERING
-    // Maps the Column Index from JS to Database Columns
-    $columns = [
-        0 => 'resident_id',
-        1 => 'full_name',
-        2 => 'type', // Changed from 'purpose' to 'type' (Document Name)
-        3 => 'created_at',
-        4 => 'status',
-        5 => 'cert_id' 
-    ];
-
-    if(isset($_REQUEST['order'])){
-        $colIndex = $_REQUEST['order']['0']['column'];
-        $dir = $_REQUEST['order']['0']['dir'];
-        $orderBy = $columns[$colIndex] ?? 'created_at';
-        $sql_base .= " ORDER BY $orderBy $dir ";
-    } else {
-        $sql_base .= " ORDER BY created_at DESC ";
-    }
-
-    // 7. LIMIT (Pagination)
-    if(isset($_REQUEST['length']) && $_REQUEST['length'] != -1){
-        $start = (int)$_REQUEST['start'];
-        $length = (int)$_REQUEST['length'];
-        $sql_base .= " LIMIT $start, $length";
-    }
-
-    // 8. EXECUTE FINAL QUERY
-    $stmt = $pdo->prepare($sql_base);
-    $stmt->execute($params);
-
-    // 9. FORMAT DATA FOR JSON
-    $data = [];
-    while($row = $stmt->fetch(PDO::FETCH_ASSOC)){
-        
-        // A. Status Badge Logic
-        $status_badge = '';
-        if($row['status'] == 'Pending'){
-            $status_badge = '<span class="badge badge-warning">Pending</span>';
-        } elseif($row['status'] == 'Approved'){
-            $status_badge = '<span class="badge badge-success">Approved</span>';
-        } elseif($row['status'] == 'Rejected'){
-            $status_badge = '<span class="badge badge-danger">Rejected</span>';
-        } else {
-            $status_badge = '<span class="badge badge-secondary">'.$row['status'].'</span>';
-        }
-
-        // B. Tools/Buttons Logic
-        $tools = '<div class="btn-group">';
-        
-        // View Button
-        $tools .= '<button type="button" class="btn btn-info btn-sm acceptStatus" id="'.$row['resident_id'].'" data-id="'.$row['cert_id'].'" title="View/Manage">
-                    <i class="fas fa-eye"></i>
+        // Buttons
+        $tools = '<div class="text-center">';
+        $tools .= '<button class="btn btn-primary btn-sm acceptStatus" id="'.$row['resident_id'].'" data-id="'.$row['cert_id'].'">
+                    <i class="fas fa-eye"></i> View
                    </button>';
-
-        // Print Button (Only if Approved)
         $tools .= '</div>';
 
-        // C. Format Date
-        $date_request = date("m/d/Y", strtotime($row['created_at']));
-
-        // D. Build the Row
-        $subdata = [];
-        $subdata[] = $row['resident_id'];     // Col 0
-        $subdata[] = $row['full_name'];       // Col 1
-        
-        // Col 2: CHANGED to display Document Name (type) instead of Purpose
-        $subdata[] = '<span class="font-weight-bold">' . htmlspecialchars($row['type']) . '</span>'; 
-        
-        $subdata[] = $date_request;           // Col 3
-        $subdata[] = $status_badge;           // Col 4
-        $subdata[] = $tools;                  // Col 5
-
-        $data[] = $subdata;
+        $formattedData[] = [
+            $row['resident_id'],
+            strtoupper($row['full_name']),
+            '<span class="font-weight-bold">' . htmlspecialchars($row['type']) . '</span>',
+            date("M d, Y h:i A", strtotime($row['created_at'])),
+            $statusBadge,
+            $tools
+        ];
     }
 
-    // 10. RETURN JSON
-    $json_data = [
-        "draw"            => intval($_REQUEST['draw']),
-        "recordsTotal"    => intval($totalData),
-        "recordsFiltered" => intval($totalData),
-        "data"            => $data
-    ];
+    $response['draw'] = $draw;
+    $response['recordsTotal'] = intval($totalData);
+    $response['recordsFiltered'] = intval($totalFiltered);
+    $response['data'] = $formattedData;
 
-    echo json_encode($json_data);
-
-} catch(PDOException $e) {
-    echo json_encode(['error' => $e->getMessage()]);
+} catch (Exception $e) {
+    // Return error in JSON format so DataTables doesn't crash with "Invalid JSON"
+    $response['error'] = $e->getMessage();
 }
+
+// 8. OUTPUT
+ob_end_clean(); // Clean buffer
+echo json_encode($response);
+exit;
 ?>

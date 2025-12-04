@@ -131,7 +131,7 @@ foreach($empRecords as $row) {
     // Action Buttons
     $id = $row['resident_id'];
     $action = '<div class="d-flex justify-content-center">';
-    $action .= '<i style="cursor: pointer; color: yellow; text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fa fa-eye text-lg px-2 viewResidence" id="'.$id.'" title="View Details"></i>';
+   $action .= '<i style="cursor: pointer; color: yellow; text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fa fa-eye text-lg px-2 viewResidence" id="'.$id.'" data-source="archive" title="View Details"></i>';
     $action .= '<i style="cursor: pointer; color: #28a745; text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fa fa-trash-restore text-lg px-2 unArchiveResidence" id="'.$id.'" title="Restore Resident"></i>';
     $action .= '<i style="cursor: pointer; color: red; text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;" class="fas fa-trash text-lg px-2 deleteArchivedResidence" id="'.$id.'" title="Delete Permanently"></i>';
     $action .= '</div>';

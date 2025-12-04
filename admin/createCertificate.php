@@ -181,23 +181,38 @@ try {
 
         // 3. THE AUTO-FILL FUNCTION
       // 3. THE AUTO-FILL FUNCTION (Matched to your Database Image)
-function autoFillFields() {
-    if(!currentResidentData) return;
+// 3. THE AUTO-FILL FUNCTION
+       // Inside createCertificate.php script
 
-    // A. Map the 'fullname' from PHP to the input named 'name'
-    // Your database image shows field_name = 'name' for rows 1, 4, 8, etc.
-    $('input[name="name"]').val(currentResidentData.fullname);
-    
-    // B. Map Age
-    $('input[name="age"]').val(currentResidentData.age);
-    
-    // C. Map Purok
-    $('input[name="purok"]').val(currentResidentData.purok);
+// 3. THE AUTO-FILL FUNCTION
+        function autoFillFields() {
+            if(!currentResidentData) return;
 
-    // Optional: If you have these columns in your residence_information table, un-comment them:
-    // $('input[name="years_of_living"]').val(currentResidentData.years_stay);
-    // $('input[name="civil_status"]').val(currentResidentData.civil_status);
-}
+            // --- 1. FILL NAMES & BASIC INFO ---
+            $('input[name="name"]').val(currentResidentData.fullname);
+            $('input[name="full_name"]').val(currentResidentData.fullname);
+            $('input[name="age"]').val(currentResidentData.age);
+            $('input[name="purok"]').val(currentResidentData.purok);
+
+            // --- 2. FILL YEARS OF LIVING ---
+            // Assuming your HTML name is 'years_of_living'. 
+            // If it is different, change the name="" part below.
+            if(currentResidentData.years_of_living) {
+                $('input[name="years_of_living"]').val(currentResidentData.years_of_living);
+            }
+
+            // --- 3. FILL RESIDENCE SINCE (YEAR) ---
+            if(currentResidentData.residence_since_year) {
+                var yearStart = currentResidentData.residence_since_year;
+                
+                // TARGETS YOUR SPECIFIC FIELD NAME:
+                $('input[name="since_what_year"]').val(yearStart); 
+                
+                // Keep these just in case you use them in other documents
+                $('input[name="residence_since"]').val(yearStart);
+                $('input[name="resident_since"]').val(yearStart);
+            }
+        }
     });
 </script>
 
