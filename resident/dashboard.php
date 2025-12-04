@@ -1,120 +1,124 @@
 <?php 
-include_once '../db_connection.php';
+// 1. Start Session at the very top to prevent session loss
 session_start();
+ob_start(); // Turn on output buffering
+
+include_once '../db_connection.php';
+
+// --- DEBUG / SECURITY CHECK ---
+// Instead of redirecting immediately (which causes loops), we check logic first.
+
+if(!isset($_SESSION['user_id']) || !isset($_SESSION['user_type'])) {
+    // If no session, show a link instead of looping
+    die("<h1>Session Missing</h1><p>You are not logged in.</p><a href='../login.php'>Click here to Login</a>");
+}
+
+$user_type = trim($_SESSION['user_type']); // Remove any accidental spaces
+
+// Allow 'resident' OR 'applicant'
+if($user_type != 'resident' && $user_type != 'applicant'){
+    // If the type is wrong, stop and show why.
+    die("<h1>Access Denied</h1><p>Your user type is: <strong>" . htmlspecialchars($user_type) . "</strong></p><p>Expected: resident or applicant.</p><a href='../logout.php'>Logout</a>");
+}
+
+// --- IF WE PASS THE CHECK, CONTINUE LOADING THE PAGE ---
 
 try{
-    // --- 1. FIXED: Allow BOTH 'resident' AND 'applicant' to access this page ---
-    if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && 
-      ($_SESSION['user_type'] == 'resident' || $_SESSION['user_type'] == 'applicant')) {
-
-        $user_id = $_SESSION['user_id'];
-        
-        // --- 2. Fetch User Account Info (for login data) ---
-        $sql_user = "SELECT * FROM `users` WHERE `user_id` = :uid ";
-        $stmt_user = $pdo->prepare($sql_user);
-        $stmt_user->execute(['uid' => $user_id]);
-        $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC); 
-        
-        // Initialize display name variables
-        $resident_full_name = 'Resident'; 
-        $resident_id = 'N/A';
-        $user_type = $_SESSION['user_type']; // Use session value
-        
-        // Check if user exists to avoid errors
-        if ($row_user) {
-            $username = $row_user['username'];
-            // If we don't find a resident name later, use username as fallback
-            $resident_full_name = $username; 
-        } else {
-            $username = 'Unknown';
-        }
-
-        // --- 3. Fetch Full Name and Resident ID ---
-        $sql_res = "SELECT 
-                        resident_id, first_name, middle_name, last_name, suffix, image_path
-                    FROM residence_information 
-                    WHERE user_id = :uid LIMIT 1";
-        $stmt_res = $pdo->prepare($sql_res);
-        $stmt_res->execute(['uid' => $user_id]);
-        $res_row = $stmt_res->fetch(PDO::FETCH_ASSOC);
-
-        if ($res_row) {
-            $resident_id = $res_row['resident_id'];
-            $name_parts = [];
-            if (!empty($res_row['first_name'])) $name_parts[] = $res_row['first_name'];
-            if (!empty($res_row['middle_name'])) $name_parts[] = $res_row['middle_name'];
-            if (!empty($res_row['last_name'])) $name_parts[] = $res_row['last_name'];
-            if (!empty($res_row['suffix'])) $name_parts[] = $res_row['suffix'];
-            
-            // Set the full name for display
-            if(!empty($name_parts)) {
-                $resident_full_name = implode(' ', $name_parts);
-            }
-            
-            // Overwrite default image path if available in residence_information
-            if (!empty($res_row['image_path'])) {
-                 $row_user['image_path'] = $res_row['image_path'];
-            }
-        }
-        
-        // --- 4. Fetch Barangay Info ---
-        $sql = "SELECT * FROM `barangay_information`";
-        $stmt_brgy = $pdo->query($sql);
-        $barangay = ''; 
-        $image_logo = ''; 
-        if($row_brgy = $stmt_brgy->fetch(PDO::FETCH_ASSOC)) {
-            $image_logo = $row_brgy['image'] ?? ''; 
-        }
-
-        // --- 5. Fetch Application Status ---
-        $app_status = 'None';
-        $resident_exists = false;
-
-        if ($resident_id != 'N/A') {
-            $resident_exists = true; 
-
-            // Check status using resident_id
-            $sql_app = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
-            $stmt_app = $pdo->prepare($sql_app);
-            $stmt_app->execute(['rid' => $resident_id]);
-            
-            if($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)){
-                $app_status = $row_app['status'];
-            }
-        }
-        
-        $is_verified = false;
-        $badge_class = 'badge-danger';
-        $status_text = 'Not Verified';
-
-        // Verification Logic
-        if (trim(strtolower($app_status)) == 'approved' || trim(strtolower($app_status)) == 'verified') {
-            $is_verified = true;
-            $badge_class = 'badge-success';
-            $status_text = 'Verified';
-            
-        } elseif ($resident_exists && $app_status == 'None') {
-            // Admin created residents
-            $is_verified = true;
-            $badge_class = 'badge-success';
-            $status_text = 'Verified (Admin)';
-            $app_status = 'N/A'; 
-
-        } elseif (trim(strtolower($app_status)) == 'pending') {
-            $badge_class = 'badge-warning';
-            $status_text = 'Pending';
-        }
-
+    $user_id = $_SESSION['user_id'];
+    
+    // --- 2. Fetch User Account Info ---
+    $sql_user = "SELECT * FROM `users` WHERE `user_id` = :uid ";
+    $stmt_user = $pdo->prepare($sql_user);
+    $stmt_user->execute(['uid' => $user_id]);
+    $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC); 
+    
+    // Initialize display name variables
+    $resident_full_name = 'Resident'; 
+    $resident_id = 'N/A';
+    
+    if ($row_user) {
+        $username = $row_user['username'];
+        $resident_full_name = $username; 
     } else {
-        // If user is NOT resident AND NOT applicant, go to login
-        echo '<script>window.location.href = "../login.php";</script>';
-        exit;
+        $username = 'Unknown';
+    }
+
+    // --- 3. Fetch Full Name and Resident ID ---
+    $sql_res = "SELECT 
+                    resident_id, first_name, middle_name, last_name, suffix, image_path
+                FROM residence_information 
+                WHERE user_id = :uid LIMIT 1";
+    $stmt_res = $pdo->prepare($sql_res);
+    $stmt_res->execute(['uid' => $user_id]);
+    $res_row = $stmt_res->fetch(PDO::FETCH_ASSOC);
+
+    if ($res_row) {
+        $resident_id = $res_row['resident_id'];
+        $name_parts = [];
+        if (!empty($res_row['first_name'])) $name_parts[] = $res_row['first_name'];
+        if (!empty($res_row['middle_name'])) $name_parts[] = $res_row['middle_name'];
+        if (!empty($res_row['last_name'])) $name_parts[] = $res_row['last_name'];
+        if (!empty($res_row['suffix'])) $name_parts[] = $res_row['suffix'];
+        
+        if(!empty($name_parts)) {
+            $resident_full_name = implode(' ', $name_parts);
+        }
+        
+        if (!empty($res_row['image_path'])) {
+                $row_user['image_path'] = $res_row['image_path'];
+        }
+    }
+    
+    // --- 4. Fetch Barangay Info ---
+    $sql = "SELECT * FROM `barangay_information`";
+    $stmt_brgy = $pdo->query($sql);
+    $barangay = ''; 
+    $image_logo = ''; 
+    if($row_brgy = $stmt_brgy->fetch(PDO::FETCH_ASSOC)) {
+        $image_logo = $row_brgy['image'] ?? ''; 
+    }
+
+    // --- 5. Fetch Application Status ---
+    $app_status = 'None';
+    $resident_exists = false;
+
+    if ($resident_id != 'N/A') {
+        $resident_exists = true; 
+        $sql_app = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
+        $stmt_app = $pdo->prepare($sql_app);
+        $stmt_app->execute(['rid' => $resident_id]);
+        
+        if($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)){
+            $app_status = $row_app['status'];
+        }
+    }
+    
+    $is_verified = false;
+    $badge_class = 'badge-danger';
+    $status_text = 'Not Verified';
+
+    // Verification Logic
+    if (trim(strtolower($app_status)) == 'approved' || trim(strtolower($app_status)) == 'verified') {
+        $is_verified = true;
+        $badge_class = 'badge-success';
+        $status_text = 'Verified';
+        
+    } elseif ($resident_exists && $app_status == 'None') {
+        // Admin created residents
+        $is_verified = true;
+        $badge_class = 'badge-success';
+        $status_text = 'Verified (Admin)';
+        $app_status = 'N/A'; 
+
+    } elseif (trim(strtolower($app_status)) == 'pending') {
+        $badge_class = 'badge-warning';
+        $status_text = 'Pending';
     }
 
 } catch(PDOException $e){
-    echo "Database Error: " . $e->getMessage();
+    die("Database Error: " . $e->getMessage());
 } catch(Exception $e){
-    echo "Error: " . $e->getMessage();
+    die("Error: " . $e->getMessage());
 }
 ?>
 
