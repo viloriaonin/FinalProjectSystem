@@ -296,6 +296,14 @@ try {
         $has_application = true;
         $application_status = $app_data['status'];
         $admin_remarks = $app_data['admin_remarks'];
+    } else {
+        // --- FIX: ADMIN VERIFIED FALLBACK ---
+        // If no application record exists, but user is ALREADY A RESIDENT, 
+        // treat them as "Verified" so the form hides and shows the success message.
+        if (isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'resident') {
+            $has_application = true;
+            $application_status = 'Verified'; 
+        }
     }
 
     $is_editing = false;
