@@ -13,7 +13,7 @@ try {
     $certificate_types = $stmt_docs->fetchAll(PDO::FETCH_ASSOC);
 
     // 2. CHECK RESIDENT STATUS
-    if (isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'resident') {
+    if (isset($_SESSION['user_id'])) {
         $user_id = $_SESSION['user_id'];
         
         $sql_res = "SELECT resident_id FROM residence_information WHERE user_id = :uid LIMIT 1";
@@ -31,8 +31,14 @@ try {
             
             if ($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)) {
                 $app_status = $row_app['status'];
-                if (trim(strtolower($app_status)) == 'approved') {
+                if (trim(strtolower($app_status)) == 'approved' || trim(strtolower($app_status)) == 'verified') {
                     $is_verified = true;
+                }
+            } else {
+                // --- FIX: ALLOW ACCESS FOR ADMIN-CREATED RESIDENTS ---
+                if (isset($_SESSION['user_type']) && $_SESSION['user_type'] === 'resident') {
+                    $is_verified = true;
+                    $app_status = 'Verified (Admin)';
                 }
             }
         }
@@ -151,39 +157,6 @@ try {
         padding: 0 20px 20px 20px;
         border-top: 1px solid var(--border-color);
         background-color: rgba(0, 0, 0, 0.2);
-    }
-
-    .custom-accordion .req-title {
-        display: block;
-        margin-top: 15px;
-        margin-bottom: 10px;
-        color: var(--accent-color);
-        font-size: 0.9rem;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        font-weight: 600;
-    }
-
-    .custom-accordion ul.req {
-        list-style: none;
-        padding-left: 0;
-        margin-bottom: 20px;
-    }
-
-    .custom-accordion ul.req li {
-        position: relative;
-        padding-left: 20px;
-        margin-bottom: 8px;
-        color: #d1d5db;
-        font-size: 0.95rem;
-    }
-
-    .custom-accordion ul.req li::before {
-        content: "•";
-        color: var(--accent-color);
-        font-weight: bold;
-        position: absolute;
-        left: 0;
     }
 
     /* Button */
@@ -305,41 +278,17 @@ try {
 
 <script>
     function showRequestModal(docId, title) {
-        // Set the certificate title in the modal
         $('#modal-certificate-title').text(title);
-        
-        // Define the base URL for the form page
         const baseUrl = 'certificate_request_form.php';
-        
-        // **URL Parameter Strategy:**
-        // 1. **doc_id** and **title** are always passed.
-        // 2. **request_for** is the new parameter: 'myself' or 'others'.
         
         const myselfUrl = `${baseUrl}?doc_id=${docId}&title=${encodeURIComponent(title)}&request_for=myself`;
         const othersUrl = `${baseUrl}?doc_id=${docId}&title=${encodeURIComponent(title)}&request_for=others`;
         
-        // Set the dynamic links for the buttons
         $('#btn-for-myself').attr('href', myselfUrl);
         $('#btn-for-others').attr('href', othersUrl);
         
-        // Show the modal
         $('#requestChoiceModal').modal('show');
     }
-    
-    // Optional: Accordion functionality for showing requirements
-    // const acc = document.getElementsByClassName("bar");
-    // let i;
-    // for (i = 0; i < acc.length; i++) {
-    //   acc[i].addEventListener("click", function() {
-    //     this.classList.toggle("active");
-    //     const panel = this.nextElementSibling;
-    //     if (panel.style.display === "block") {
-    //       panel.style.display = "none";
-    //     } else {
-    //       panel.style.display = "block";
-    //     }
-    //   });
-    // }
 </script>
 
 </body>

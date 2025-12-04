@@ -11,24 +11,8 @@ $user_id = $_SESSION['user_id'];
 // Default Values
 $is_verified = false; 
 $app_status = 'None';
-$postal_address = 'Barangay Hall'; 
 
 try { 
-    // 2. FETCH BARANGAY INFO
-    $sql_b = "SELECT barangay, municipality, province FROM barangay_information LIMIT 1";
-    $stmt_b = $pdo->query($sql_b);
-    
-    if ($rb = $stmt_b->fetch(PDO::FETCH_ASSOC)){
-        $parts = [];
-        if(!empty($rb['barangay'])) $parts[] = $rb['barangay'];
-        if(!empty($rb['municipality'])) $parts[] = $rb['municipality'];
-        if(!empty($rb['province'])) $parts[] = $rb['province'];
-        
-        if(!empty($parts)) {
-            $postal_address = implode(', ', $parts);
-        }
-    }
-
     // 3. GET RESIDENT ID FIRST
     $stmt_res = $pdo->prepare("SELECT resident_id FROM residence_information WHERE user_id = :uid LIMIT 1");
     $stmt_res->execute(['uid' => $user_id]);
@@ -48,6 +32,12 @@ try {
             if (strcasecmp($app_status, 'approved') == 0 || strcasecmp($app_status, 'verified') == 0) {
                 $is_verified = true;
             }
+        } else {
+             // --- FIX: ALLOW ACCESS FOR ADMIN-CREATED RESIDENTS ---
+             if (isset($_SESSION['user_type']) && $_SESSION['user_type'] === 'resident') {
+                 $is_verified = true;
+                 $app_status = 'Verified (Admin)';
+             }
         }
 
         // 5. LOAD REQUESTS
@@ -82,7 +72,6 @@ try {
     
     body { background-color: var(--bg-dark); color: var(--text-main); font-family: 'Segoe UI'; }
     
-    /* FIX: Added top padding so content doesn't hit the menu bar */
     .content-wrapper { 
         background: var(--bg-dark) !important; 
         padding-top: 100px !important; 
@@ -109,13 +98,6 @@ try {
     .btn-cancel:hover { background: #ef4444; color: white; }
     .btn-claim-disabled { background: #3d424b; color: #a1a1a1; border: 1px solid #3d424b; padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; cursor: not-allowed; white-space: nowrap; }
     
-    /* Modals */
-    .modal-content { background-color: var(--card-bg); color: var(--text-main); border: 1px solid var(--border); }
-    .modal-header { border-bottom: 1px solid var(--border); }
-    .modal-footer { border-top: 1px solid var(--border); }
-    .close { color: var(--text-muted); }
-    .close:hover { color: var(--text-main); }
-    
     /* Custom Search Input */
     .custom-search-input { background-color: var(--bg-dark); border: 1px solid var(--border); color: var(--text-main); border-radius: 4px; padding: 5px 10px; }
     .custom-search-input:focus { background-color: var(--bg-dark); color: var(--text-main); border-color: var(--accent); outline: none; }
@@ -137,6 +119,12 @@ try {
             width: 100%;
         }
     }
+    
+    /* Modal */
+    .modal-content { background-color: var(--card-bg); color: var(--text-main); border: 1px solid var(--border); }
+    .modal-header, .modal-footer { border-color: var(--border); }
+    .close { color: var(--text-muted); text-shadow: none; opacity: 0.7; }
+    .close:hover { color: var(--text-main); opacity: 1; }
 </style>
 </head>
 <body class="hold-transition layout-top-nav">
@@ -245,7 +233,6 @@ try {
         </div>
       </div>
     </div>
-  </div>
   </div>
 
 <div class="modal fade" id="detailsModal" tabindex="-1" role="dialog" aria-labelledby="detailsModalLabel" aria-hidden="true">

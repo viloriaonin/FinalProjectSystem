@@ -2,8 +2,8 @@
 include_once '../db_connection.php';
 session_start();
 
-// --- 1. SECURITY CHECK [FIXED] ---
-// Now allows 'resident' OR 'applicant'
+// --- 1. SECURITY CHECK ---
+// Allow 'resident' OR 'applicant'
 if(!isset($_SESSION['user_id']) || !isset($_SESSION['user_type']) || !in_array($_SESSION['user_type'], ['resident', 'applicant'])){
     echo '<script>window.location.href = "../login.php";</script>';
     exit;
@@ -75,6 +75,30 @@ try {
 
         if ($row_resident) {
             $has_record = true;
+        } else {
+            // --- FIX START: FALLBACK FOR ADMIN-VERIFIED RESIDENTS ---
+            // If no application exists, but user is a 'resident', fetch from residence_information
+            if (isset($_SESSION['user_type']) && $_SESSION['user_type'] === 'resident') {
+                $stmt_info = $pdo->prepare("SELECT * FROM residence_information WHERE resident_id = :rid LIMIT 1");
+                $stmt_info->execute([':rid' => $resident_id]);
+                $info_row = $stmt_info->fetch(PDO::FETCH_ASSOC);
+    
+                if ($info_row) {
+                    $has_record = true;
+                    $row_resident = $info_row;
+    
+                    // MAP FIELDS: residence_information uses different names for some columns compared to residence_applications
+                    $row_resident['father_name'] = $info_row['fathers_name'] ?? '';
+                    $row_resident['mother_name'] = $info_row['mothers_name'] ?? '';
+                    $row_resident['guardian_name'] = $info_row['guardian'] ?? '';
+                    $row_resident['status'] = 'Verified (Admin)'; // Visual status
+                    
+                    // Ensure profile/ID paths are mapped if they exist in the info table
+                    $row_resident['profile_image_path'] = $info_row['profile_image_path'] ?? '';
+                    $row_resident['valid_id_path'] = $info_row['valid_id_path'] ?? '';
+                }
+            }
+            // --- FIX END ---
         }
     }
 
@@ -84,8 +108,8 @@ try {
     if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_resident']) && $has_record) {
         
         // 1. HANDLE FILE UPLOADS
-        $profile_image_path = $row_resident['profile_image_path']; 
-        $valid_id_path = $row_resident['valid_id_path']; 
+        $profile_image_path = $row_resident['profile_image_path'] ?? ''; 
+        $valid_id_path = $row_resident['valid_id_path'] ?? ''; 
 
         // Profile Pic Upload
         if (!empty($_FILES['profile_image']['name'])) {
@@ -158,6 +182,15 @@ try {
             ':id_path' => $valid_id_path,
             ':rid' => $resident_id
         ];
+
+        // --- FIX START: ENSURE RECORD EXISTS BEFORE UPDATING ---
+        // If this is the first time an Admin-Verified user is saving, create the row first.
+        $check_exist = $pdo->prepare("SELECT 1 FROM residence_applications WHERE resident_id = ?");
+        $check_exist->execute([$resident_id]);
+        if (!$check_exist->fetchColumn()) {
+            $pdo->prepare("INSERT INTO residence_applications (resident_id, status) VALUES (?, 'Verified')")->execute([$resident_id]);
+        }
+        // --- FIX END ---
 
         // 3. UPDATE SQL
         $sql1 = "UPDATE residence_applications SET 
