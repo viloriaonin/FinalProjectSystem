@@ -66,7 +66,7 @@ if(isset($_SESSION['user_id']) && isset($pdo)){
                 $app_status_raw = trim(strtolower($chk_row['status']));
             }
 
-            // --- STEP C: Implement DUAL-CHECK Verification Logic ---
+            // --- STEP C: Implement DUAL-CHECK Verification Logic [FIXED] ---
             if($app_status_raw == 'approved' || $app_status_raw == 'verified'){
                 // Condition 1: Approved application (Green)
                 $verified_label = "Verified";
@@ -74,10 +74,20 @@ if(isset($_SESSION['user_id']) && isset($pdo)){
                 $verified_icon  = "fa-check-circle";
 
             } elseif ($resident_exists && $app_status_raw == 'none') {
-                // Condition 2: Admin Verified (Resident exists, but no application record) (Green)
-                $verified_label = "Verified";
-                $verified_color = "#10B981"; 
-                $verified_icon  = "fa-check-circle";
+                // Condition 2: Admin Verified vs New Applicant
+                $current_user_type = isset($_SESSION['user_type']) ? $_SESSION['user_type'] : '';
+
+                if($current_user_type === 'resident') {
+                    // Admin Created Resident (Verified)
+                    $verified_label = "Verified";
+                    $verified_color = "#10B981"; 
+                    $verified_icon  = "fa-check-circle";
+                } else {
+                    // Applicant - No submission yet (Not Verified)
+                    $verified_label = "Not Verified";
+                    $verified_color = "#EF4444"; 
+                    $verified_icon  = "fa-times-circle";
+                }
                 
             } elseif($app_status_raw == 'pending'){
                 // Pending Application (Orange)
@@ -347,7 +357,7 @@ if(isset($_SESSION['user_id']) && isset($pdo)){
             if (strpos($user_image, 'assets/') !== false || strpos($user_image, 'http') === 0 || strpos($user_image, '/') === 0) {
                 $avatar_src = $user_image;
             } else {
-                // Ensure image path is constructed correctly, using the resident's image path from the resident_information table
+                // Ensure image path is constructed correctly
                 $avatar_src = $menu_base . ltrim($user_image, '../');
             }
         }

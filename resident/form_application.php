@@ -16,15 +16,53 @@ include_once '../db_connection.php';
 session_start();
 
 // 2. SECURITY CHECK
-if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] != 'resident') {
+// Allow 'resident' OR 'applicant'
+if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_type'], ['resident', 'applicant'])) {
     echo '<script>window.location.href = "../login.php";</script>';
     exit;
 }
 
+// =============================================================
+//  AUTO-PROMOTION LOGIC (APPLICANT -> RESIDENT)
+// =============================================================
+if (isset($_SESSION['user_type']) && $_SESSION['user_type'] === 'applicant') {
+    try {
+        // 1. Get Resident ID linked to this User
+        $stmt_check_promo = $pdo->prepare("SELECT resident_id FROM residence_information WHERE user_id = :uid");
+        $stmt_check_promo->execute(['uid' => $_SESSION['user_id']]);
+        $promo_res = $stmt_check_promo->fetch(PDO::FETCH_ASSOC);
+
+        if ($promo_res) {
+            // 2. Check the Latest Application Status
+            $stmt_app_status = $pdo->prepare("SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1");
+            $stmt_app_status->execute(['rid' => $promo_res['resident_id']]);
+            $app_status_row = $stmt_app_status->fetch(PDO::FETCH_ASSOC);
+
+            // 3. If Approved, Update Database and Session
+            if ($app_status_row) {
+                $s = strtolower(trim($app_status_row['status']));
+                if ($s === 'approved' || $s === 'verified') {
+                    // Update DB
+                    $update_role = $pdo->prepare("UPDATE users SET user_type = 'resident' WHERE user_id = :uid");
+                    $update_role->execute(['uid' => $_SESSION['user_id']]);
+                    
+                    // Update Session
+                    $_SESSION['user_type'] = 'resident';
+                }
+            }
+        }
+    } catch (Exception $e) {
+        // Silent fail (don't break page if this check fails)
+        error_log("Auto-promotion error: " . $e->getMessage());
+    }
+}
+// =============================================================
+
+
 $user_id = $_SESSION['user_id'];
 $resident_id = null;
 
-// --- CRITICAL DATABASE FIX: Get or Create Resident ID ---
+// --- GET OR CREATE RESIDENT ID ---
 try {
     // Check if this user already has a resident profile linked
     $stmt_check_res = $pdo->prepare("SELECT resident_id FROM residence_information WHERE user_id = :uid");
@@ -54,58 +92,96 @@ try {
     // ---------------------------------------------------------
     if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_application'])) {
         
-        // Prepare Variables
-        $fname = $_POST['first_name'] ?? '';
-        $mname = $_POST['middle_name'] ?? '';
-        $lname = $_POST['last_name'] ?? '';
-        $suffix = $_POST['suffix'] ?? '';
+        // --- HELPER TO UPPERCASE TEXT (EXCEPT EMAIL) ---
+        function toUpper($str) {
+            return mb_strtoupper(trim($str ?? ''), 'UTF-8');
+        }
+
+        // Prepare Variables (Text fields converted to UPPERCASE)
+        $fname = toUpper($_POST['first_name'] ?? '');
+        $mname = toUpper($_POST['middle_name'] ?? '');
+        $lname = toUpper($_POST['last_name'] ?? '');
+        $suffix = toUpper($_POST['suffix'] ?? '');
+        
+        // Selects/Dates/Email kept as is or handled specifically
         $gender = $_POST['gender'] ?? '';
         $dob = !empty($_POST['dob']) ? $_POST['dob'] : NULL;
-        $pob = $_POST['pob'] ?? '';
-        $nationality = $_POST['nationality'] ?? '';
-        $civil = $_POST['civil_status'] ?? '';
-        $religion = $_POST['religion'] ?? '';
-        $blood = $_POST['blood_type'] ?? '';
-        $occ = $_POST['occupation'] ?? '';
-        // $address = $_POST['full_address'] ?? ''; // REMOVED as requested previously
-        $house = $_POST['house_number'] ?? '';
-        $purok = $_POST['purok'] ?? '';
+        $age = !empty($_POST['age']) ? $_POST['age'] : NULL; 
+        
+        $pob = toUpper($_POST['pob'] ?? '');
+        $nationality = toUpper($_POST['nationality'] ?? '');
+        $civil = $_POST['civil_status'] ?? ''; // Select
+        $religion = toUpper($_POST['religion'] ?? '');
+        $blood = $_POST['blood_type'] ?? ''; // Select
+        $occ = toUpper($_POST['occupation'] ?? '');
+        $house = toUpper($_POST['house_number'] ?? '');
+        $purok = toUpper($_POST['purok'] ?? '');
         $contact = $_POST['contact_number'] ?? '';
-        $email = $_POST['email_address'] ?? '';
+        
+        // EMAIL IS NOT UPPERCASED
+        $email = $_POST['email_address'] ?? ''; 
+        
         $voter = $_POST['voter'] ?? '';
+        
+        // --- PWD Logic ---
         $pwd = $_POST['pwd'] ?? '';
+        $pwd_type = ($pwd === 'Yes') ? toUpper($_POST['pwd_type'] ?? '') : ''; 
+
         $single = $_POST['single_parent'] ?? '';
         $senior = $_POST['senior_citizen'] ?? '';
         
-        // PARENTS & GUARDIAN VARS
-        $father = $_POST['father_name'] ?? '';
-        $f_occ = $_POST['father_occupation'] ?? ''; 
+        // PARENTS & GUARDIAN VARS (UPPERCASED)
+        $father = toUpper($_POST['father_name'] ?? '');
+        $f_occ = toUpper($_POST['father_occupation'] ?? ''); 
         $f_age = !empty($_POST['father_age']) ? $_POST['father_age'] : 0; 
-        $f_bday = !empty($_POST['father_birthday']) ? $_POST['father_birthday'] : NULL; // NEW
+        $f_bday = !empty($_POST['father_birthday']) ? $_POST['father_birthday'] : NULL; 
         $f_educ = $_POST['father_education'] ?? '';
         
-        $mother = $_POST['mother_name'] ?? '';
-        $m_occ = $_POST['mother_occupation'] ?? ''; 
+        $mother = toUpper($_POST['mother_name'] ?? '');
+        $m_occ = toUpper($_POST['mother_occupation'] ?? ''); 
         $m_age = !empty($_POST['mother_age']) ? $_POST['mother_age'] : 0; 
-        $m_bday = !empty($_POST['mother_birthday']) ? $_POST['mother_birthday'] : NULL; // NEW
+        $m_bday = !empty($_POST['mother_birthday']) ? $_POST['mother_birthday'] : NULL; 
         $m_educ = $_POST['mother_education'] ?? '';
         
-        $guardian = $_POST['guardian'] ?? '';
+        $guardian = toUpper($_POST['guardian'] ?? '');
         $g_contact = $_POST['guardian_contact'] ?? '';
         
-        // Residency Details
+        // Residency Details (UPDATED LOGIC)
         $duration = $_POST['residency_months'] ?? '';
-        $years_living = !empty($_POST['years_of_living']) ? $_POST['years_of_living'] : 0; 
-        $res_since = !empty($_POST['residence_since']) ? $_POST['residence_since'] : NULL; 
+        
+        // CHANGED: Direct Date Input
+        $res_since = !empty($_POST['resident_since']) ? $_POST['resident_since'] : NULL;
+
+        // CHANGED: Accepts string (e.g., "5 Years and 2 Months")
+        $years_living = !empty($_POST['years_of_living']) ? $_POST['years_of_living'] : ''; 
         
         $gov = $_POST['gov_beneficiary'] ?? '';
         $gov_type = $_POST['beneficiary_type'] ?? '';
         
-        // Dynamic Lists
-        $children_json = isset($_POST['children0']) ? json_encode($_POST['children0']) : '[]';
-        $siblings_json = isset($_POST['siblings']) ? json_encode($_POST['siblings']) : '[]';
+        $children_json = '[]'; 
+        $siblings_json = '[]';
 
-        // Handle File Upload
+        // --- Handle Profile Image Upload ---
+        $profile_image_path = '';
+        if (!empty($_FILES['profile_image']['name'])) {
+            $target_dir_profile = "../assets/uploads/profile/";
+            if (!file_exists($target_dir_profile)) { mkdir($target_dir_profile, 0777, true); }
+
+            $file_ext_profile = pathinfo($_FILES['profile_image']['name'], PATHINFO_EXTENSION);
+            $new_filename_profile = "PROFILE_" . $resident_id . "_" . time() . "." . $file_ext_profile;
+
+            if(move_uploaded_file($_FILES['profile_image']['tmp_name'], $target_dir_profile . $new_filename_profile)){
+                 $profile_image_path = $target_dir_profile . $new_filename_profile;
+            }
+        } else {
+            $old_file_p_q = $pdo->prepare("SELECT profile_image_path FROM residence_applications WHERE resident_id = :rid");
+            $old_file_p_q->execute(['rid' => $resident_id]);
+            if($old_p_row = $old_file_p_q->fetch(PDO::FETCH_ASSOC)){
+                $profile_image_path = $old_p_row['profile_image_path'];
+            }
+        }
+
+        // --- Handle Valid ID File Upload ---
         $valid_id_path = '';
         if (!empty($_FILES['valid_id_image']['name'])) {
             $target_dir = "../assets/uploads/";
@@ -118,7 +194,6 @@ try {
                  $valid_id_path = $target_dir . $new_filename;
             }
         } else {
-            // Check if existing file
             $old_file_q = $pdo->prepare("SELECT valid_id_path FROM residence_applications WHERE resident_id = :rid");
             $old_file_q->execute(['rid' => $resident_id]);
             if($old_row = $old_file_q->fetch(PDO::FETCH_ASSOC)){
@@ -126,48 +201,83 @@ try {
             }
         }
 
-        // UPDATED SQL INSERT
+        // 1. INSERT/UPDATE MAIN APPLICATION
         $sql_insert = "INSERT INTO residence_applications 
-        (resident_id, first_name, middle_name, last_name, suffix, gender, birth_date, birth_place, nationality, civil_status, religion, blood_type, occupation, house_number, purok, contact_number, email_address, voter_status, pwd_status, single_parent_status, senior_status, 
+        (resident_id, first_name, middle_name, last_name, suffix, gender, birth_date, age, birth_place, nationality, civil_status, religion, blood_type, occupation, house_number, purok, contact_number, email_address, voter_status, pwd_status, pwd_type, single_parent_status, senior_status, 
         father_name, father_occupation, father_age, fathers_bday, father_education, 
         mother_name, mother_occupation, mother_age, mothers_bday, mother_education, 
         guardian_name, guardian_contact, 
         residency_duration, years_of_living, residence_since, 
-        gov_beneficiary, beneficiary_type, children_list, siblings_list, valid_id_path, status, admin_remarks)
+        gov_beneficiary, beneficiary_type, children_list, siblings_list, valid_id_path, profile_image_path, status, admin_remarks)
         VALUES 
-        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
         ?, ?, ?, ?, ?, 
         ?, ?, ?, ?, ?, 
         ?, ?, 
         ?, ?, ?, 
-        ?, ?, ?, ?, ?, 'Pending', '')
+        ?, ?, ?, ?, ?, ?, 'Pending', '')
         ON DUPLICATE KEY UPDATE 
             status='Pending', admin_remarks='',
             first_name=VALUES(first_name), middle_name=VALUES(middle_name), last_name=VALUES(last_name), suffix=VALUES(suffix), 
-            gender=VALUES(gender), birth_date=VALUES(birth_date), birth_place=VALUES(birth_place), nationality=VALUES(nationality),
+            gender=VALUES(gender), birth_date=VALUES(birth_date), age=VALUES(age), birth_place=VALUES(birth_place), nationality=VALUES(nationality),
             civil_status=VALUES(civil_status), religion=VALUES(religion), blood_type=VALUES(blood_type), occupation=VALUES(occupation),
             house_number=VALUES(house_number), purok=VALUES(purok), contact_number=VALUES(contact_number), email_address=VALUES(email_address),
-            voter_status=VALUES(voter_status), pwd_status=VALUES(pwd_status), single_parent_status=VALUES(single_parent_status), senior_status=VALUES(senior_status),
+            voter_status=VALUES(voter_status), pwd_status=VALUES(pwd_status), pwd_type=VALUES(pwd_type), single_parent_status=VALUES(single_parent_status), senior_status=VALUES(senior_status),
             father_name=VALUES(father_name), father_occupation=VALUES(father_occupation), father_age=VALUES(father_age), fathers_bday=VALUES(fathers_bday), father_education=VALUES(father_education),
             mother_name=VALUES(mother_name), mother_occupation=VALUES(mother_occupation), mother_age=VALUES(mother_age), mothers_bday=VALUES(mothers_bday), mother_education=VALUES(mother_education),
             guardian_name=VALUES(guardian_name), guardian_contact=VALUES(guardian_contact),
             residency_duration=VALUES(residency_duration), years_of_living=VALUES(years_of_living), residence_since=VALUES(residence_since),
             gov_beneficiary=VALUES(gov_beneficiary), beneficiary_type=VALUES(beneficiary_type),
-            children_list=VALUES(children_list), siblings_list=VALUES(siblings_list), valid_id_path=VALUES(valid_id_path)";
+            children_list=VALUES(children_list), siblings_list=VALUES(siblings_list), valid_id_path=VALUES(valid_id_path), profile_image_path=VALUES(profile_image_path)";
 
         $stmt = $pdo->prepare($sql_insert);
         
         $result = $stmt->execute([
-            $resident_id, $fname, $mname, $lname, $suffix, $gender, $dob, $pob, $nationality, $civil, $religion, $blood, $occ, 
-            $house, $purok, $contact, $email, $voter, $pwd, $single, $senior, 
+            $resident_id, $fname, $mname, $lname, $suffix, $gender, $dob, $age, $pob, $nationality, $civil, $religion, $blood, $occ, 
+            $house, $purok, $contact, $email, $voter, $pwd, $pwd_type, $single, $senior, 
             $father, $f_occ, $f_age, $f_bday, $f_educ, 
             $mother, $m_occ, $m_age, $m_bday, $m_educ, 
             $guardian, $g_contact, 
             $duration, $years_living, $res_since,
-            $gov, $gov_type, $children_json, $siblings_json, $valid_id_path
+            $gov, $gov_type, $children_json, $siblings_json, $valid_id_path, $profile_image_path
         ]);
 
         if ($result) {
+            // 2. SAVE SIBLINGS (Uppercased)
+            $pdo->prepare("DELETE FROM resident_siblings WHERE resident_id = ?")->execute([$resident_id]);
+            if (isset($_POST['siblings']) && is_array($_POST['siblings'])) {
+                $stmtSib = $pdo->prepare("INSERT INTO resident_siblings (resident_id, name, age, birthday, civil_status, education, occupation) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                foreach ($_POST['siblings'] as $sib) {
+                    if (!empty($sib['name'])) { 
+                        $s_age = !empty($sib['age']) ? $sib['age'] : 0;
+                        $s_bday = !empty($sib['birthday']) ? $sib['birthday'] : NULL;
+                        // Uppercase text fields
+                        $s_name = toUpper($sib['name']);
+                        $s_educ = toUpper($sib['education'] ?? '');
+                        $s_occ = toUpper($sib['occupation'] ?? '');
+                        
+                        $stmtSib->execute([$resident_id, $s_name, $s_age, $s_bday, $sib['civil_status'] ?? '', $s_educ, $s_occ]);
+                    }
+                }
+            }
+
+            // 3. SAVE CHILDREN (Uppercased)
+            $pdo->prepare("DELETE FROM resident_children WHERE resident_id = ?")->execute([$resident_id]);
+            if (isset($_POST['children']) && is_array($_POST['children'])) {
+                $stmtChild = $pdo->prepare("INSERT INTO resident_children (resident_id, name, birthdate, age, civil_status, occupation, education) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                foreach ($_POST['children'] as $child) {
+                    if (!empty($child['name'])) {
+                        $c_age = !empty($child['age']) ? $child['age'] : 0;
+                        $c_bday = !empty($child['birthday']) ? $child['birthday'] : NULL;
+                        // Uppercase text fields
+                        $c_name = toUpper($child['name']);
+                        $c_occ = toUpper($child['occupation'] ?? '');
+                        $c_educ = toUpper($child['education'] ?? '');
+                        
+                        $stmtChild->execute([$resident_id, $c_name, $c_bday, $c_age, $child['civil_status'] ?? '', $c_occ, $c_educ]);
+                    }
+                }
+            }
             echo "<script>alert('Application Submitted Successfully!'); window.location.href='form_application.php';</script>";
             exit;
         } else {
@@ -176,7 +286,7 @@ try {
     }
 
     // ---------------------------------------------------------
-    // LOGIC B: CHECK STATUS & FETCH DATA
+    // LOGIC B: CHECK STATUS & FETCH DATA (EDIT MODE)
     // ---------------------------------------------------------
     $check_sql = "SELECT * FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
     $stmt_check = $pdo->prepare($check_sql);
@@ -193,7 +303,6 @@ try {
         $has_application = false; 
         $is_editing = true;       
     }
-
 
 } catch(PDOException $e) {
     die("<div style='color:red; background:white; padding:20px; font-weight:bold;'>Database Error: " . $e->getMessage() . "</div>");
@@ -237,16 +346,13 @@ function isSel($key, $val, $data){
   .form-group label { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; letter-spacing: 0.5px; }
   .form-control { background-color: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 6px; height: 48px; padding: 10px 15px; transition: border-color 0.2s; }
   .form-control:focus { background-color: var(--input-bg); color: var(--text-main); border-color: var(--accent-color); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
-  .form-control::placeholder { color: #4B5563; }
   select option { background-color: var(--card-bg); color: white; }
   .input-group-text { background-color: #232730; border: 1px solid var(--border-color); border-right: none; color: var(--text-muted); }
   .input-group .form-control { border-left: none; }
-  .input-group:focus-within .input-group-text { border-color: var(--accent-color); }
-  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.6); cursor: pointer; }
   .section-title { color: var(--accent-color); font-size: 1.1rem; font-weight: 600; margin-top: 15px; margin-bottom: 25px; padding-bottom: 10px; border-bottom: 1px dashed var(--border-color); display: flex; align-items: center; }
   .section-title i { margin-right: 12px; opacity: 0.8; }
   .btn-primary { background-color: var(--accent-color); border-color: var(--accent-color); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25); font-weight: 600; padding: 10px 25px; border-radius: 6px; }
-  .btn-primary:hover { background-color: #2563eb; box-shadow: 0 6px 15px rgba(59, 130, 246, 0.35); }
+  .btn-primary:hover { background-color: #2563eb; }
   .btn-outline-light { border-color: var(--border-color); color: var(--text-muted); padding: 10px 25px; }
   .btn-outline-light:hover { background-color: var(--border-color); color: white; }
   .table-dark-custom { background-color: transparent; color: var(--text-main); }
@@ -254,9 +360,9 @@ function isSel($key, $val, $data){
   .table-dark-custom td { border-top: 1px solid var(--border-color); vertical-align: middle; }
   .table-dark-custom input, .table-dark-custom select { height: 38px; font-size: 0.9rem; background-color: #232730; }
   .main-footer { background-color: var(--card-bg) !important; border-top: 1px solid var(--border-color); color: var(--text-muted) !important; }
+  .status-container { padding: 80px 20px; text-align: center; }
   @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(0.95); } 100% { opacity: 1; transform: scale(1); } }
   .pulse-icon { animation: pulse 2s infinite; }
-  .status-container { padding: 80px 20px; text-align: center; }
 </style>
 </head>
 
@@ -268,13 +374,12 @@ function isSel($key, $val, $data){
     <div class="container-fluid pt-5 pb-5">
       
       <?php if($has_application && $application_status != 'Cancelled'): ?>
-
         <div class="ui-card status-container">
             <?php if ($application_status == 'Approved' || $application_status == 'Verified'): ?>
                 <i class="fas fa-check-circle fa-6x mb-4" style="color: var(--success);"></i>
                 <h2 class="mb-3">You are a Verified Resident!</h2>
-                <p class="text-muted mb-5">Your application has been approved. You can now request certificates.</p>
-                <a href="certificate_request.php" class="btn btn-primary btn-lg px-5">Request Certificate <i class="fas fa-arrow-right ml-2"></i></a>
+                <p class="text-muted mb-5">Your profile has been upgraded. You can now access full resident features.</p>
+                <a href="dashboard.php" class="btn btn-primary btn-lg px-5">Go to Dashboard <i class="fas fa-arrow-right ml-2"></i></a>
 
             <?php elseif ($application_status == 'Rejected' || $application_status == 'Declined'): ?>
                 <i class="fas fa-times-circle fa-6x mb-4" style="color: var(--danger);"></i>
@@ -284,12 +389,9 @@ function isSel($key, $val, $data){
                         <i class="fas fa-info-circle mr-2"></i> <strong>Reason:</strong> <?= htmlspecialchars($admin_remarks) ?>
                     </div>
                 <?php endif; ?>
-                
                 <div class="mt-5">
                     <p class="text-muted small mb-3">Please correct your information and resubmit.</p>
-                    <a href="form_application.php?action=edit" class="btn btn-outline-light">
-                        <i class="fas fa-edit mr-2"></i> Edit Application
-                    </a>
+                    <a href="form_application.php?action=edit" class="btn btn-outline-light"><i class="fas fa-edit mr-2"></i> Edit Application</a>
                 </div>
 
             <?php else: ?>
@@ -326,6 +428,23 @@ function isSel($key, $val, $data){
                   
                   <div class="tab-pane fade show active" id="tab-applicant" role="tabpanel">
                     
+                    <div class="section-title"><i class="fas fa-camera"></i> Profile Picture</div>
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <div class="form-group">
+                                <label>Upload 2x2 or Passport Size Picture</label>
+                                <div class="input-group">
+                                    <div class="input-group-prepend"><span class="input-group-text"><i class="fas fa-upload"></i></span></div>
+                                    <input type="file" class="form-control" name="profile_image" id="profile_image_input" style="padding-top: 10px;" accept="image/*">
+                                </div>
+                                <div class="mt-2" id="profile_preview_container" style="<?= ($is_editing && !empty($app_data['profile_image_path'])) ? '' : 'display:none;' ?>">
+                                     <small class="text-muted">Preview / Current:</small><br>
+                                     <img id="profile_preview" src="<?= ($is_editing && !empty($app_data['profile_image_path'])) ? $app_data['profile_image_path'] : '#' ?>" alt="Profile Preview" style="max-height: 150px; border-radius: 8px; border: 1px solid #444; margin-top: 5px;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="section-title"><i class="fas fa-id-card"></i> Personal Information</div>
                     <div class="row">
                       <div class="col-md-3"><div class="form-group"><label>First Name</label><div class="input-group"><div class="input-group-prepend"><span class="input-group-text"><i class="fas fa-user"></i></span></div><input type="text" class="form-control" name="first_name" value="<?= getVal('first_name',$app_data) ?>" required></div></div></div>
@@ -336,16 +455,31 @@ function isSel($key, $val, $data){
 
                     <div class="row">
                         <div class="col-md-3"><div class="form-group"><label>Gender</label><select class="form-control" name="gender" required><option value="">Select...</option><option value="Male" <?= isSel('gender','Male',$app_data) ?>>Male</option><option value="Female" <?= isSel('gender','Female',$app_data) ?>>Female</option></select></div></div>
-                        <div class="col-md-3"><div class="form-group"><label>Date of Birth</label><input type="date" class="form-control" name="dob" value="<?= getVal('birth_date',$app_data) ?>" required></div></div>
-                        <div class="col-md-3"><div class="form-group"><label>Place of Birth</label><input type="text" class="form-control" name="pob" value="<?= getVal('birth_place',$app_data) ?>"></div></div>
-                        <div class="col-md-3"><div class="form-group"><label>Nationality</label><input type="text" class="form-control" name="nationality" value="<?= getVal('nationality',$app_data) ?>"></div></div>
+                        <div class="col-md-3"><div class="form-group"><label>Date of Birth</label><input type="date" class="form-control" name="dob" id="dob" value="<?= getVal('birth_date',$app_data) ?>" required></div></div>
+                        <div class="col-md-2"><div class="form-group"><label>Age</label><input type="number" class="form-control" name="age" id="age" value="<?= getVal('age',$app_data) ?>" placeholder="Age" readonly></div></div>
+                        <div class="col-md-4"><div class="form-group"><label>Place of Birth</label><input type="text" class="form-control" name="pob" value="<?= getVal('birth_place',$app_data) ?>"></div></div>
                     </div>
 
                     <div class="row">
+                        <div class="col-md-3"><div class="form-group"><label>Nationality</label><input type="text" class="form-control" name="nationality" value="<?= getVal('nationality',$app_data) ?>"></div></div>
                         <div class="col-md-3"><div class="form-group"><label>Civil Status</label><select class="form-control" name="civil_status"><option value="">Select...</option><option <?= isSel('civil_status','Single',$app_data) ?>>Single</option><option <?= isSel('civil_status','Married',$app_data) ?>>Married</option><option <?= isSel('civil_status','Widowed',$app_data) ?>>Widowed</option><option <?= isSel('civil_status','Separated',$app_data) ?>>Separated</option></select></div></div>
                         <div class="col-md-3"><div class="form-group"><label>Religion</label><input type="text" class="form-control" name="religion" value="<?= getVal('religion',$app_data) ?>"></div></div>
-                        <div class="col-md-3"><div class="form-group"><label>Blood Type</label><select class="form-control" name="blood_type"><option value="">Select...</option><option <?= isSel('blood_type','A+',$app_data) ?>>A+</option><option <?= isSel('blood_type','O+',$app_data) ?>>O+</option></select></div></div>
-                        <div class="col-md-3"><div class="form-group"><label>Occupation</label><input type="text" class="form-control" name="occupation" value="<?= getVal('occupation',$app_data) ?>"></div></div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>Blood Type</label>
+                                <select class="form-control" name="blood_type">
+                                    <option value="">Select...</option>
+                                    <option value="A+" <?= isSel('blood_type','A+',$app_data) ?>>A+</option>
+                                    <option value="B+" <?= isSel('blood_type','B+',$app_data) ?>>B+</option>
+                                    <option value="O+" <?= isSel('blood_type','O+',$app_data) ?>>O+</option>
+                                    <option value="AB+" <?= isSel('blood_type','AB+',$app_data) ?>>AB+</option>
+                                    <option value="UNKNOWN" <?= isSel('blood_type','UNKNOWN',$app_data) ?>>UNKNOWN</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12"><div class="form-group"><label>Occupation</label><input type="text" class="form-control" name="occupation" value="<?= getVal('occupation',$app_data) ?>"></div></div>
                     </div>
 
                     <div class="section-title"><i class="fas fa-map-marker-alt"></i> Address & Contact</div>
@@ -362,141 +496,86 @@ function isSel($key, $val, $data){
                     <div class="section-title"><i class="fas fa-list"></i> Additional Information</div>
                     <div class="row">
                         <div class="col-md-3"><div class="form-group"><label>Voter Status</label><select class="form-control" name="voter"><option value="">Select</option><option value="Yes" <?= isSel('voter_status','Yes',$app_data) ?>>Yes</option><option value="No" <?= isSel('voter_status','No',$app_data) ?>>No</option></select></div></div>
-                        <div class="col-md-3"><div class="form-group"><label>PWD</label><select class="form-control" name="pwd"><option value="">Select</option><option value="Yes" <?= isSel('pwd_status','Yes',$app_data) ?>>Yes</option><option value="No" <?= isSel('pwd_status','No',$app_data) ?>>No</option></select></div></div>
+                        
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>PWD</label>
+                                <select class="form-control" name="pwd" id="pwd_status">
+                                    <option value="">Select</option>
+                                    <option value="Yes" <?= isSel('pwd_status','Yes',$app_data) ?>>Yes</option>
+                                    <option value="No" <?= isSel('pwd_status','No',$app_data) ?>>No</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-3" id="pwd_type_div" style="display: none;">
+                            <div class="form-group">
+                                <label>Specify Disability</label>
+                                <input type="text" class="form-control" name="pwd_type" placeholder="Type of Disability" value="<?= getVal('pwd_type',$app_data) ?>">
+                            </div>
+                        </div>
+
                         <div class="col-md-3"><div class="form-group"><label>Single Parent</label><select class="form-control" name="single_parent"><option value="">Select</option><option value="Yes" <?= isSel('single_parent_status','Yes',$app_data) ?>>Yes</option><option value="No" <?= isSel('single_parent_status','No',$app_data) ?>>No</option></select></div></div>
                         <div class="col-md-3"><div class="form-group"><label>Senior Citizen</label><select class="form-control" name="senior_citizen"><option value="">Select</option><option value="Yes" <?= isSel('senior_status','Yes',$app_data) ?>>Yes</option><option value="No" <?= isSel('senior_status','No',$app_data) ?>>No</option></select></div></div>
                     </div>
 
                     <div class="section-title"><i class="fas fa-user-friends"></i> Parents Details</div>
-                    
                     <div class="row">
                         <div class="col-md-8">
-                            <div class="form-group">
-                                <label>Father's Name <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" name="father_name" value="<?= getVal('father_name',$app_data) ?>" required>
-                            </div>
+                            <div class="form-group"><label>Father's Name <span class="text-danger">*</span></label><input type="text" class="form-control" name="father_name" value="<?= getVal('father_name',$app_data) ?>" required></div>
                         </div>
                         <div class="col-md-4">
-                            <div class="form-group">
-                                <label>Father's Occupation</label>
-                                <input type="text" class="form-control" name="father_occupation" placeholder="Occupation" value="<?= getVal('father_occupation',$app_data) ?>">
-                            </div>
+                            <div class="form-group"><label>Father's Occupation</label><input type="text" class="form-control" name="father_occupation" placeholder="Occupation" value="<?= getVal('father_occupation',$app_data) ?>"></div>
                         </div>
                     </div>
                     <div class="row">
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label>Father's Age</label>
-                                <input type="number" class="form-control" name="father_age" placeholder="Age" value="<?= getVal('father_age',$app_data) ?>">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label>Father's Birthday</label>
-                                <input type="date" class="form-control" name="father_birthday" value="<?= getVal('fathers_bday',$app_data) ?>">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label>Father's Highest Education</label>
-                                <select class="form-control" name="father_education">
-                                    <option value="">Select</option>
-                                    <option value="Elementary" <?= isSel('father_education','Elementary',$app_data) ?>>Elementary</option>
-                                    <option value="High School" <?= isSel('father_education','High School',$app_data) ?>>High School</option>
-                                    <option value="College" <?= isSel('father_education','College',$app_data) ?>>College</option>
-                                    <option value="Vocational" <?= isSel('father_education','Vocational',$app_data) ?>>Vocational</option>
-                                    <option value="None" <?= isSel('father_education','None',$app_data) ?>>None</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-8">
-                            <div class="form-group">
-                                <label>Mother's Name <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" name="mother_name" value="<?= getVal('mother_name',$app_data) ?>" required>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label>Mother's Occupation</label>
-                                <input type="text" class="form-control" name="mother_occupation" placeholder="Occupation" value="<?= getVal('mother_occupation',$app_data) ?>">
-                            </div>
-                        </div>
+                        <div class="col-md-4"><div class="form-group"><label>Father's Age</label><input type="number" class="form-control" name="father_age" placeholder="Age" value="<?= getVal('father_age',$app_data) ?>"></div></div>
+                        <div class="col-md-4"><div class="form-group"><label>Father's Birthday</label><input type="date" class="form-control" name="father_birthday" value="<?= getVal('fathers_bday',$app_data) ?>"></div></div>
+                        <div class="col-md-4"><div class="form-group"><label>Father's Highest Education</label><select class="form-control" name="father_education"><option value="">Select</option><option value="Elementary" <?= isSel('father_education','Elementary',$app_data) ?>>Elementary</option><option value="High School" <?= isSel('father_education','High School',$app_data) ?>>High School</option><option value="College" <?= isSel('father_education','College',$app_data) ?>>College</option><option value="Vocational" <?= isSel('father_education','Vocational',$app_data) ?>>Vocational</option><option value="None" <?= isSel('father_education','None',$app_data) ?>>None</option></select></div></div>
                     </div>
                     <div class="row">
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label>Mother's Age</label>
-                                <input type="number" class="form-control" name="mother_age" placeholder="Age" value="<?= getVal('mother_age',$app_data) ?>">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label>Mother's Birthday</label>
-                                <input type="date" class="form-control" name="mother_birthday" value="<?= getVal('mothers_bday',$app_data) ?>">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label>Mother's Highest Education</label>
-                                <select class="form-control" name="mother_education">
-                                    <option value="">Select</option>
-                                    <option value="Elementary" <?= isSel('mother_education','Elementary',$app_data) ?>>Elementary</option>
-                                    <option value="High School" <?= isSel('mother_education','High School',$app_data) ?>>High School</option>
-                                    <option value="College" <?= isSel('mother_education','College',$app_data) ?>>College</option>
-                                    <option value="Vocational" <?= isSel('mother_education','Vocational',$app_data) ?>>Vocational</option>
-                                    <option value="None" <?= isSel('mother_education','None',$app_data) ?>>None</option>
-                                </select>
-                            </div>
-                        </div>
+                        <div class="col-md-8"><div class="form-group"><label>Mother's Name <span class="text-danger">*</span></label><input type="text" class="form-control" name="mother_name" value="<?= getVal('mother_name',$app_data) ?>" required></div></div>
+                        <div class="col-md-4"><div class="form-group"><label>Mother's Occupation</label><input type="text" class="form-control" name="mother_occupation" placeholder="Occupation" value="<?= getVal('mother_occupation',$app_data) ?>"></div></div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4"><div class="form-group"><label>Mother's Age</label><input type="number" class="form-control" name="mother_age" placeholder="Age" value="<?= getVal('mother_age',$app_data) ?>"></div></div>
+                        <div class="col-md-4"><div class="form-group"><label>Mother's Birthday</label><input type="date" class="form-control" name="mother_birthday" value="<?= getVal('mothers_bday',$app_data) ?>"></div></div>
+                        <div class="col-md-4"><div class="form-group"><label>Mother's Highest Education</label><select class="form-control" name="mother_education"><option value="">Select</option><option value="Elementary" <?= isSel('mother_education','Elementary',$app_data) ?>>Elementary</option><option value="High School" <?= isSel('mother_education','High School',$app_data) ?>>High School</option><option value="College" <?= isSel('mother_education','College',$app_data) ?>>College</option><option value="Vocational" <?= isSel('mother_education','Vocational',$app_data) ?>>Vocational</option><option value="None" <?= isSel('mother_education','None',$app_data) ?>>None</option></select></div></div>
                     </div>
 
                     <div class="section-title"><i class="fas fa-user-shield"></i> Guardian Info</div>
                     <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Guardian's Name <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" name="guardian" value="<?= getVal('guardian_name',$app_data) ?>" required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Guardian's Contact <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" name="guardian_contact" value="<?= getVal('guardian_contact',$app_data) ?>" required>
-                            </div>
-                        </div>
+                        <div class="col-md-6"><div class="form-group"><label>Guardian's Name <span class="text-danger">*</span></label><input type="text" class="form-control" name="guardian" value="<?= getVal('guardian_name',$app_data) ?>" required></div></div>
+                        <div class="col-md-6"><div class="form-group"><label>Guardian's Contact <span class="text-danger">*</span></label><input type="text" class="form-control" name="guardian_contact" value="<?= getVal('guardian_contact',$app_data) ?>" required></div></div>
                     </div>
-
                   </div>
                   
                   <div class="tab-pane fade" id="tab-residency" role="tabpanel">
                     
                     <div class="section-title"><i class="fas fa-file-contract"></i> Residency Verification</div>
                     <div class="row">
-                      <div class="col-md-4">
-                          <div class="form-group">
-                              <label>Length Category</label>
-                              <select class="form-control" name="residency_months">
-                                  <option value="">Select Category</option>
-                                  <option value="below_6" <?= isSel('residency_duration','below_6',$app_data) ?>>Less than 6 months</option>
-                                  <option value="above_6" <?= isSel('residency_duration','above_6',$app_data) ?>>6 months or more</option>
-                              </select>
-                          </div>
-                      </div>
-                      <div class="col-md-4">
-                          <div class="form-group">
-                              <label>Years of Living</label>
-                              <input type="number" class="form-control" name="years_of_living" placeholder="e.g. 10" value="<?= getVal('years_of_living',$app_data) ?>">
-                          </div>
-                      </div>
-                      <div class="col-md-4">
-                          <div class="form-group">
-                              <label>Residence Since</label>
-                              <input type="date" class="form-control" name="residence_since" value="<?= getVal('residence_since',$app_data) ?>">
-                          </div>
-                      </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>How long as resident?</label> <select class="form-control" name="residency_months">
+                                    <option value="">SELECT</option>
+                                    <option value="below_6" <?= isSel('residency_duration','below_6',$app_data) ?>>Less than 6 months</option>
+                                    <option value="above_6" <?= isSel('residency_duration','above_6',$app_data) ?>>6 months or more</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Resident Since</label> <input type="date" class="form-control" name="resident_since" id="resident_since" 
+                                       value="<?= getVal('residence_since',$app_data) ?>">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Years of Residing</label> <input type="text" class="form-control" name="years_of_living" id="years_of_living" 
+                                       placeholder="Auto-calculated..." 
+                                       value="<?= getVal('years_of_living',$app_data) ?>" 
+                                       readonly style="background-color: #2b303b; cursor: not-allowed;">
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="row">
@@ -505,31 +584,43 @@ function isSel($key, $val, $data){
                                 <label>Upload Valid ID</label>
                                 <div class="input-group">
                                     <div class="input-group-prepend"><span class="input-group-text"><i class="fas fa-upload"></i></span></div>
-                                    <input type="file" class="form-control" name="valid_id_image" style="padding-top: 10px;">
+                                    <input type="file" class="form-control" name="valid_id_image" id="valid_id_image_input" style="padding-top: 10px;" accept="image/*">
                                 </div>
-                                 <?php if($is_editing && !empty($app_data['valid_id_path'])): ?>
-                                     <small class="text-success"><i class="fas fa-check mr-1"></i> Current file: <?= basename($app_data['valid_id_path']) ?></small>
-                                 <?php endif; ?>
+                                <div class="mt-2" id="id_preview_container" style="<?= ($is_editing && !empty($app_data['valid_id_path'])) ? '' : 'display:none;' ?>">
+                                    <small class="text-muted">Preview / Current:</small><br>
+                                    <img id="id_preview" src="<?= ($is_editing && !empty($app_data['valid_id_path'])) ? $app_data['valid_id_path'] : '#' ?>" alt="ID Preview" style="max-height: 150px; border-radius: 8px; border: 1px solid #444; margin-top: 5px;">
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="section-title"><i class="fas fa-baby"></i> Children (0-59 Months)</div>
-                    <div class="form-group">
-                        <label>Do you have children aged 0-59 months?</label>
-                        <div class="ml-2">
-                          <div class="custom-control custom-radio custom-control-inline"><input type="radio" id="children_0_59_no" name="children_0_59_yesno" value="no" class="custom-control-input" checked><label class="custom-control-label" for="children_0_59_no">No</label></div>
-                          <div class="custom-control custom-radio custom-control-inline"><input type="radio" id="children_0_59_yes" name="children_0_59_yesno" value="yes" class="custom-control-input"><label class="custom-control-label" for="children_0_59_yes">Yes</label></div>
-                        </div>
-                    </div>
-                    <div id="children_0_59_container" style="display:none;">
-                        <button type="button" id="add_child_0" class="btn btn-sm btn-outline-light mb-3"><i class="fas fa-plus"></i> Add Child</button>
-                        <div class="table-responsive"><table class="table table-bordered table-dark-custom"><thead><tr><th>Name</th><th>Age (months)</th><th>Birthday</th><th>Action</th></tr></thead><tbody id="children_0_tbody"></tbody></table></div>
+                    <div class="section-title"><i class="fas fa-child"></i> Children Details</div>
+                    <button type="button" id="add_child" class="btn btn-sm btn-outline-light mb-3"><i class="fas fa-plus"></i> Add Child</button>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-dark-custom">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Birthdate</th>
+                                    <th>Age</th>
+                                    <th>Civil Status</th>
+                                    <th>Occupation</th>
+                                    <th>Highest Educational Attainment</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="children_tbody"></tbody>
+                        </table>
                     </div>
 
-                    <div class="section-title"><i class="fas fa-users"></i> Siblings</div>
+                    <div class="section-title"><i class="fas fa-users"></i> Siblings Details</div>
                     <button type="button" id="add_sibling" class="btn btn-sm btn-outline-light mb-3"><i class="fas fa-plus"></i> Add Sibling</button>
-                    <div class="table-responsive"><table class="table table-bordered table-dark-custom"><thead><tr><th>Name</th><th>Age</th><th>Birthday</th><th>Education</th><th>Action</th></tr></thead><tbody id="siblings_tbody"></tbody></table></div>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-dark-custom">
+                            <thead><tr><th>Name</th><th>Age</th><th>Birthday</th><th>Civil Status</th><th>Education</th><th>Occupation</th><th>Action</th></tr></thead>
+                            <tbody id="siblings_tbody"></tbody>
+                        </table>
+                    </div>
 
                     <div class="section-title"><i class="fas fa-hand-holding-heart"></i> Government Beneficiary</div>
                     <div class="form-group">
@@ -568,50 +659,147 @@ function isSel($key, $val, $data){
 
 <script>
 $(function(){
-  // 1. DYNAMIC ROWS LOGIC
+  
+  // --- Auto-Calculate Age from DOB ---
+  $('#dob').on('change', function() {
+      var dob = new Date($(this).val());
+      var today = new Date();
+      if (isNaN(dob.getTime())) {
+          $('#age').val('');
+      } else {
+          var age = today.getFullYear() - dob.getFullYear();
+          var m = today.getMonth() - dob.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+              age--;
+          }
+          $('#age').val(age);
+      }
+  });
+  if ($('#dob').val()) { $('#dob').trigger('change'); }
+
+  // --- NEW: RESIDENCY CALCULATION (YEARS & MONTHS) ---
+  function calculateResidency() {
+      var startDateInput = $('#resident_since').val();
+      var outputField = $('#years_of_living');
+
+      if (!startDateInput) {
+          outputField.val('');
+          return;
+      }
+
+      var startDate = new Date(startDateInput);
+      var today = new Date();
+
+      var years = today.getFullYear() - startDate.getFullYear();
+      var months = today.getMonth() - startDate.getMonth();
+
+      // Adjust if current month is before start month or same month but day hasn't passed
+      if (months < 0 || (months === 0 && today.getDate() < startDate.getDate())) {
+          years--;
+          months += 12;
+      }
+      // Adjust day overlap
+      if (today.getDate() < startDate.getDate()) {
+          months--;
+      }
+
+      // Formatting
+      var result = "";
+      if (years < 0) {
+          outputField.val("Date is in the future");
+          return;
+      }
+
+      result += years + (years === 1 ? " Year" : " Years");
+      result += " and ";
+      result += months + (months === 1 ? " Month" : " Months");
+
+      outputField.val(result);
+  }
+
+  // Trigger on change and on load (if editing)
+  $('#resident_since').on('change', calculateResidency);
+  if($('#resident_since').val()){ calculateResidency(); }
+
+
+  // --- NEW: Toggle PWD Specifics ---
+  function togglePwd(){
+      if($('#pwd_status').val() == 'Yes'){
+          $('#pwd_type_div').show();
+      } else {
+          $('#pwd_type_div').hide();
+          $('input[name="pwd_type"]').val(''); // Clear input if hidden
+      }
+  }
+  $('#pwd_status').change(togglePwd);
+  togglePwd(); // Run on page load (for edit mode)
+
+  // --- NEW: Image Preview Function ---
+  function readURL(input, imgSelector, containerSelector) {
+    if (input.files && input.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            $(imgSelector).attr('src', e.target.result);
+            $(containerSelector).show();
+        }
+        reader.readAsDataURL(input.files[0]);
+    }
+  }
+  // Attach listeners to file inputs
+  $("#profile_image_input").change(function() {
+    readURL(this, '#profile_preview', '#profile_preview_container');
+  });
+  $("#valid_id_image_input").change(function() {
+    readURL(this, '#id_preview', '#id_preview_container');
+  });
+
+  // --- NEW: AUTO CAPSLOCK (EXCEPT EMAIL) ---
+  $(document).on('input', 'input[type="text"]', function() {
+    // Check if the input is NOT the email address field
+    if (this.name !== 'email_address') {
+        var start = this.selectionStart;
+        var end = this.selectionEnd;
+        this.value = this.value.toUpperCase();
+        this.setSelectionRange(start, end);
+    }
+  });
+
+
+  // --- CHILDREN ROW ---
+  function addChildRow(data){
+    data = data || {};
+    var idx = Date.now() + Math.random().toString(36).substring(7);
+    var $tr = $('<tr>');
+    $tr.append('<td><input type="text" name="children['+idx+'][name]" class="form-control" value="'+(data.name||'')+'"></td>');
+    $tr.append('<td><input type="date" name="children['+idx+'][birthday]" class="form-control" value="'+(data.birthdate||'')+'"></td>');
+    $tr.append('<td><input type="number" name="children['+idx+'][age]" class="form-control" value="'+(data.age||'')+'"></td>');
+    $tr.append('<td><select name="children['+idx+'][civil_status]" class="form-control"><option value="Single">Single</option><option value="Married">Married</option></select></td>');
+    $tr.append('<td><input type="text" name="children['+idx+'][occupation]" class="form-control" placeholder="Occupation" value="'+(data.occupation||'')+'"></td>');
+    $tr.append('<td><input type="text" name="children['+idx+'][education]" class="form-control" placeholder="Highest Ed" value="'+(data.education||'')+'"></td>');
+    $tr.append('<td><button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="fas fa-trash"></i></button></td>');
+    $('#children_tbody').append($tr);
+  }
+  $('#add_child').click(function(){ addChildRow(); });
+
+  // --- SIBLINGS ROW ---
   function addSiblingRow(data){
     data = data || {};
-    var idx = Date.now();
+    var idx = Date.now() + Math.random().toString(36).substring(7);
     var $tr = $('<tr>');
     $tr.append('<td><input type="text" name="siblings['+idx+'][name]" class="form-control" value="'+(data.name||'')+'"></td>');
-    $tr.append('<td><input type="number" min="0" name="siblings['+idx+'][age]" class="form-control" value="'+(data.age||'')+'"></td>');
+    $tr.append('<td><input type="number" name="siblings['+idx+'][age]" class="form-control" value="'+(data.age||'')+'"></td>');
     $tr.append('<td><input type="date" name="siblings['+idx+'][birthday]" class="form-control" value="'+(data.birthday||'')+'"></td>');
-    $tr.append('<td><select name="siblings['+idx+'][education]" class="form-control"><option value="">Select</option><option value="primary">Primary</option><option value="secondary">Secondary</option><option value="college">College</option></select></td>');
-    $tr.append('<td><button type="button" class="btn btn-sm btn-outline-danger remove-sibling"><i class="fas fa-trash"></i></button></td>');
+    $tr.append('<td><select name="siblings['+idx+'][civil_status]" class="form-control"><option value="Single">Single</option><option value="Married">Married</option></select></td>');
+    $tr.append('<td><input type="text" name="siblings['+idx+'][education]" class="form-control" placeholder="Highest Ed" value="'+(data.education||'')+'"></td>');
+    $tr.append('<td><input type="text" name="siblings['+idx+'][occupation]" class="form-control" placeholder="Occupation" value="'+(data.occupation||'')+'"></td>');
+    $tr.append('<td><button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="fas fa-trash"></i></button></td>');
     $('#siblings_tbody').append($tr);
   }
-  $('#add_sibling').on('click', function(){ addSiblingRow(); });
-  $('#siblings_tbody').on('click', '.remove-sibling', function(){ $(this).closest('tr').remove(); });
+  $('#add_sibling').click(function(){ addSiblingRow(); });
 
-  function addChild0Row(data){
-    data = data || {};
-    var idx = Date.now();
-    var $tr = $('<tr>');
-    $tr.append('<td><input type="text" name="children0['+idx+'][name]" class="form-control" value="'+(data.name||'')+'"></td>');
-    $tr.append('<td><input type="number" name="children0['+idx+'][age_months]" min="0" max="59" class="form-control" value="'+(data.age_months||'')+'"></td>');
-    $tr.append('<td><input type="date" name="children0['+idx+'][birthday]" class="form-control" value="'+(data.birthday||'')+'"></td>');
-    $tr.append('<td><button type="button" class="btn btn-sm btn-outline-danger remove-child0"><i class="fas fa-trash"></i></button></td>');
-    $('#children_0_tbody').append($tr);
-  }
-  $('#add_child_0').on('click', function(){ addChild0Row(); });
-  $('#children_0_tbody').on('click', '.remove-child0', function(){ $(this).closest('tr').remove(); });
+  $(document).on('click', '.remove-row', function(){ $(this).closest('tr').remove(); });
 
-  $('input[name="children_0_59_yesno"]').on('change', function(){
-    if($('#children_0_59_yes').is(':checked')){ $('#children_0_59_container').slideDown(); } 
-    else { $('#children_0_59_container').slideUp(); $('#children_0_tbody').empty(); }
-  });
-
-  $('input[name="gov_beneficiary"]').on('change', function(){
-    if($('#gov_yes').is(':checked')){ $('#beneficiary_type_wrap').slideDown(); } 
-    else { $('#beneficiary_type_wrap').slideUp(); $('#beneficiary_type').val(''); }
-  });
-  
-  // TRIGGER GOV CHECK on Edit
-  if($('input[name="gov_beneficiary"]:checked').val() == 'yes'){
-      $('#beneficiary_type_wrap').show();
-  }
-
-  // 2. TAB SWITCHING & BUTTON VISIBILITY
+  // --- TAB NAVIGATION ---
   function updateFooterButtons(){
     var onApplicant = $('#tab-applicant').hasClass('active');
     if(onApplicant){
@@ -620,35 +808,39 @@ $(function(){
       $('#btn-next').hide(); $('#btn-submit').show();
     }
   }
-
   $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) { updateFooterButtons(); });
-  
   $('#btn-next').on('click', function(){
     $('#tab-residency-link').tab('show'); 
     updateFooterButtons();
   });
-  
-  // Init
   updateFooterButtons();
-  $('#contact_number').on('input', function(){ this.value = this.value.replace(/\D+/g,''); });
   
-  // PRE-FILL DYNAMIC LISTS IF EDITING
+  // Gov Beneficiary Toggle
+  $('input[name="gov_beneficiary"]').on('change', function(){
+    if($('#gov_yes').is(':checked')){ $('#beneficiary_type_wrap').slideDown(); } 
+    else { $('#beneficiary_type_wrap').slideUp(); $('#beneficiary_type').val(''); }
+  });
+  if($('input[name="gov_beneficiary"]:checked').val() == 'yes'){
+      $('#beneficiary_type_wrap').show();
+  }
+
+  // --- PRE-FILL DATA (EDIT MODE) ---
   <?php 
-    if($is_editing){
-        if(!empty($app_data['siblings_list'])){
-            echo "var savedSiblings = ". $app_data['siblings_list'] .";";
-            echo "if(savedSiblings.length > 0){ savedSiblings.forEach(function(item){ addSiblingRow(item); }); }";
-        }
-        if(!empty($app_data['children_list'])){
-            echo "var savedChildren = ". $app_data['children_list'] .";";
-            echo "if(savedChildren.length > 0){ 
-                $('#children_0_59_yes').prop('checked', true);
-                $('#children_0_59_container').show();
-                savedChildren.forEach(function(item){ addChild0Row(item); }); 
-            }";
-        }
-    }
+  if($is_editing){
+      $stmtS = $pdo->prepare("SELECT * FROM resident_siblings WHERE resident_id = ?");
+      $stmtS->execute([$resident_id]);
+      $sibs = $stmtS->fetchAll(PDO::FETCH_ASSOC);
+      echo "var savedSibs = " . json_encode($sibs) . ";";
+      echo "if(savedSibs){ savedSibs.forEach(function(s){ addSiblingRow(s); }); }";
+
+      $stmtC = $pdo->prepare("SELECT * FROM resident_children WHERE resident_id = ?");
+      $stmtC->execute([$resident_id]);
+      $kids = $stmtC->fetchAll(PDO::FETCH_ASSOC);
+      echo "var savedKids = " . json_encode($kids) . ";";
+      echo "if(savedKids){ savedKids.forEach(function(k){ addChildRow(k); }); }";
+  }
   ?>
 });
 </script>
-  
+</body>
+</html>

@@ -6,8 +6,6 @@ ob_start(); // Turn on output buffering
 include_once '../db_connection.php';
 
 // --- DEBUG / SECURITY CHECK ---
-// Instead of redirecting immediately (which causes loops), we check logic first.
-
 if(!isset($_SESSION['user_id']) || !isset($_SESSION['user_type'])) {
     // If no session, show a link instead of looping
     die("<h1>Session Missing</h1><p>You are not logged in.</p><a href='../login.php'>Click here to Login</a>");
@@ -97,18 +95,26 @@ try{
     $badge_class = 'badge-danger';
     $status_text = 'Not Verified';
 
-    // Verification Logic
+    // --- VERIFICATION LOGIC [FIXED] ---
     if (trim(strtolower($app_status)) == 'approved' || trim(strtolower($app_status)) == 'verified') {
         $is_verified = true;
         $badge_class = 'badge-success';
         $status_text = 'Verified';
         
     } elseif ($resident_exists && $app_status == 'None') {
-        // Admin created residents
-        $is_verified = true;
-        $badge_class = 'badge-success';
-        $status_text = 'Verified (Admin)';
-        $app_status = 'N/A'; 
+        // [FIX] Check user type: 
+        // If 'resident' type (Admin encoded), they are verified.
+        // If 'applicant' type (Self registered), they are NOT verified yet.
+        if($user_type === 'resident') {
+            $is_verified = true;
+            $badge_class = 'badge-success';
+            $status_text = 'Verified (Admin)';
+            $app_status = 'N/A'; 
+        } else {
+            // Applicant with ID but no application yet
+            $badge_class = 'badge-danger';
+            $status_text = 'Not Verified';
+        }
 
     } elseif (trim(strtolower($app_status)) == 'pending') {
         $badge_class = 'badge-warning';
@@ -401,15 +407,16 @@ try{
                         
                         <div class="col-md-3 text-center">
                             <?php
-                                // FIX: Added is_array($row_user) check
                                 $img_src = (is_array($row_user) && !empty($row_user['image_path'])) ? $row_user['image_path'] : '../assets/dist/img/default-user.jpg';
                             ?>
                             <img src="<?= $img_src ?>" alt="Profile" class="profile-avatar">
                             
                             <h2 class="profile-name">
-                                    <?= htmlspecialchars($resident_full_name) ?>
-                                </h2>
-                                <div class="profile-role">Resident ID: <span style="font-family: monospace;"><?= isset($resident_id) ? $resident_id : 'N/A' ?></span></div>
+                                <?= htmlspecialchars($resident_full_name) ?>
+                            </h2>
+                            <div class="profile-role">
+                                <?= ($user_type === 'applicant') ? 'Resident' : 'Resident' ?> ID: <span style="font-family: monospace;"><?= isset($resident_id) ? $resident_id : 'N/A' ?></span>
+                            </div>
 
                             <div class="profile-status-badge <?= $badge_class ?> mt-2">
                                 <?php if($is_verified): ?>
