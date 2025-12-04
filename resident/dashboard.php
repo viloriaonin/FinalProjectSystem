@@ -3,114 +3,117 @@ include_once '../db_connection.php';
 session_start();
 
 try{
-    // --- 1. AUTH CHECK: Allow BOTH 'resident' AND 'applicant' ---
+    // --- 1. FIXED: Allow BOTH 'resident' AND 'applicant' to access this page ---
     if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && 
       ($_SESSION['user_type'] == 'resident' || $_SESSION['user_type'] == 'applicant')) {
 
         $user_id = $_SESSION['user_id'];
         
-        // --- 2. FETCH CORE USER DATA (Primary Source) ---
-        $sql_user = "SELECT * FROM `users` WHERE `user_id` = :uid LIMIT 1";
+        // --- 2. Fetch User Account Info (for login data) ---
+        $sql_user = "SELECT * FROM `users` WHERE `user_id` = :uid ";
         $stmt_user = $pdo->prepare($sql_user);
         $stmt_user->execute(['uid' => $user_id]);
         $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC); 
         
-        // Initialize Defaults
-        // Fallback to username if real name isn't found later
-        $resident_full_name = isset($row_user['username']) ? $row_user['username'] : 'Resident';
-        $user_contact = isset($row_user['contact_number']) ? $row_user['contact_number'] : 'N/A';
-        
+        // Initialize display name variables
+        $resident_full_name = 'Resident'; 
         $resident_id = 'N/A';
-        $app_status = 'None';
-        $is_verified = false;
-        $badge_class = 'badge-danger';
-        $status_text = 'Not Verified';
-        $profile_img_src = '../assets/dist/img/default-user.jpg'; 
+        $user_type = $_SESSION['user_type']; // Use session value
         
-        $resident_exists = false;
+        // Check if user exists to avoid errors
+        if ($row_user) {
+            $username = $row_user['username'];
+            // If we don't find a resident name later, use username as fallback
+            $resident_full_name = $username; 
+        } else {
+            $username = 'Unknown';
+        }
 
-        // --- 3. FETCH RESIDENT INFO (If Linked) ---
-        $sql_res_info = "SELECT resident_id, first_name, middle_name, last_name, suffix, image_path 
-                         FROM residence_information 
-                         WHERE user_id = :uid LIMIT 1";
-        $stmt_res_info = $pdo->prepare($sql_res_info);
-        $stmt_res_info->execute(['uid' => $user_id]);
-        $res_info_row = $stmt_res_info->fetch(PDO::FETCH_ASSOC);
+        // --- 3. Fetch Full Name and Resident ID ---
+        $sql_res = "SELECT 
+                        resident_id, first_name, middle_name, last_name, suffix, image_path
+                    FROM residence_information 
+                    WHERE user_id = :uid LIMIT 1";
+        $stmt_res = $pdo->prepare($sql_res);
+        $stmt_res->execute(['uid' => $user_id]);
+        $res_row = $stmt_res->fetch(PDO::FETCH_ASSOC);
 
-        if ($res_info_row) {
-            $resident_exists = true;
-            $resident_id = $res_info_row['resident_id'];
-
-            // Construct Full Name
-            $name_parts = array_filter([
-                $res_info_row['first_name'] ?? '',
-                $res_info_row['middle_name'] ?? '',
-                $res_info_row['last_name'] ?? '',
-                $res_info_row['suffix'] ?? ''
-            ]);
+        if ($res_row) {
+            $resident_id = $res_row['resident_id'];
+            $name_parts = [];
+            if (!empty($res_row['first_name'])) $name_parts[] = $res_row['first_name'];
+            if (!empty($res_row['middle_name'])) $name_parts[] = $res_row['middle_name'];
+            if (!empty($res_row['last_name'])) $name_parts[] = $res_row['last_name'];
+            if (!empty($res_row['suffix'])) $name_parts[] = $res_row['suffix'];
             
-            if (!empty($name_parts)) {
-                $resident_full_name = strtoupper(implode(' ', $name_parts));
+            // Set the full name for display
+            if(!empty($name_parts)) {
+                $resident_full_name = implode(' ', $name_parts);
             }
-
-            // Handle Profile Picture (Robust Path Logic)
-            if (!empty($res_info_row['image_path'])) {
-                // Handle paths that might be relative or absolute (http)
-                if (strpos($res_info_row['image_path'], 'assets/') !== false || strpos($res_info_row['image_path'], 'http') === 0) {
-                     $profile_img_src = '../' . ltrim($res_info_row['image_path'], '../');
-                } else {
-                    $profile_img_src = '../assets/dist/img/' . $res_info_row['image_path'];
-                }
-            }
-
-            // --- 4. CHECK APPLICATION STATUS ---
-            $sql_app = "SELECT * FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
-            $stmt_app = $pdo->prepare($sql_app);
-            $stmt_app->execute(['rid' => $resident_id]);
-            $row_app = $stmt_app->fetch(PDO::FETCH_ASSOC);
-
-            if ($row_app) {
-                $app_status = $row_app['status'];
-                
-                // If application has a specific profile image, it takes precedence
-                if (!empty($row_app['profile_image_path'])) {
-                    $profile_img_src = $row_app['profile_image_path'];
-                }
+            
+            // Overwrite default image path if available in residence_information
+            if (!empty($res_row['image_path'])) {
+                 $row_user['image_path'] = $res_row['image_path'];
             }
         }
         
-        // --- 5. Fetch Barangay Logo ---
-        $stmt_brgy = $pdo->query("SELECT image_path FROM `barangay_information` LIMIT 1");
-        $barangay_info = $stmt_brgy->fetch(PDO::FETCH_ASSOC);
-        $image_logo = $barangay_info['image_path'] ?? ''; 
+        // --- 4. Fetch Barangay Info ---
+        $sql = "SELECT * FROM `barangay_information`";
+        $stmt_brgy = $pdo->query($sql);
+        $barangay = ''; 
+        $image_logo = ''; 
+        if($row_brgy = $stmt_brgy->fetch(PDO::FETCH_ASSOC)) {
+            $image_logo = $row_brgy['image'] ?? ''; 
+        }
+
+        // --- 5. Fetch Application Status ---
+        $app_status = 'None';
+        $resident_exists = false;
+
+        if ($resident_id != 'N/A') {
+            $resident_exists = true; 
+
+            // Check status using resident_id
+            $sql_app = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
+            $stmt_app = $pdo->prepare($sql_app);
+            $stmt_app->execute(['rid' => $resident_id]);
+            
+            if($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)){
+                $app_status = $row_app['status'];
+            }
+        }
         
-        // --- 6. Determine Verification Status for Badges ---
-        $status_lower = trim(strtolower($app_status));
-        
-        if ($status_lower == 'approved' || $status_lower == 'verified') {
+        $is_verified = false;
+        $badge_class = 'badge-danger';
+        $status_text = 'Not Verified';
+
+        // Verification Logic
+        if (trim(strtolower($app_status)) == 'approved' || trim(strtolower($app_status)) == 'verified') {
             $is_verified = true;
             $badge_class = 'badge-success';
             $status_text = 'Verified';
+            
         } elseif ($resident_exists && $app_status == 'None') {
-            // Case: Resident exists in info table but no application (Admin Added)
+            // Admin created residents
             $is_verified = true;
             $badge_class = 'badge-success';
             $status_text = 'Verified (Admin)';
-            $app_status = 'Admin Verified';
-        } elseif ($status_lower == 'pending') {
+            $app_status = 'N/A'; 
+
+        } elseif (trim(strtolower($app_status)) == 'pending') {
             $badge_class = 'badge-warning';
             $status_text = 'Pending';
         }
 
     } else {
-        // Not a resident and not an applicant
+        // If user is NOT resident AND NOT applicant, go to login
         echo '<script>window.location.href = "../login.php";</script>';
         exit;
     }
 
-}catch(PDOException $e){
+} catch(PDOException $e){
     echo "Database Error: " . $e->getMessage();
-}catch(Exception $e){
+} catch(Exception $e){
     echo "Error: " . $e->getMessage();
 }
 ?>
@@ -309,7 +312,7 @@ try{
     .section-header span { background: var(--bg-dark); padding-right: 15px; color: var(--text-secondary); font-weight: 600; letter-spacing: 1px; text-transform: uppercase; font-size: 0.8rem; }
     .section-divider { position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background: var(--border-color); z-index: -1; }
 
-    /* Fixed Footer (From Second File) */
+    /* Fixed Footer */
     .main-footer {
         background-color: var(--card-bg) !important;
         border-top: 1px solid var(--border-color);
@@ -342,7 +345,7 @@ try{
 </head>
 <body class="hold-transition sidebar-mini layout-fixed layout-navbar-fixed">
 
-<div class="wrapper">
+  <div class="wrapper">
 
     <?php include_once __DIR__ . '/../includes/menu_bar.php'; ?>
 
@@ -353,7 +356,7 @@ try{
             <div class="welcome-card">
                 <div class="d-flex align-items-center mb-2">
                     <?php if(!empty($image_logo)): ?>
-                        <img src="<?= (strpos($image_logo, 'assets') !== false) ? '../'.$image_logo : $image_logo ?>" alt="logo" class="logo-img mr-3">
+                        <img src="../assets/dist/img/<?= $image_logo;?>" alt="logo" class="logo-img mr-3">
                     <?php else: ?>
                         <i class="fas fa-landmark fa-3x mr-3" style="color: #58a6ff;"></i>
                     <?php endif; ?>
@@ -393,17 +396,21 @@ try{
                     <div class="row align-items-start">
                         
                         <div class="col-md-3 text-center">
-                            <img src="<?= $profile_img_src ?>" alt="Profile" class="profile-avatar">
+                            <?php
+                                // FIX: Added is_array($row_user) check
+                                $img_src = (is_array($row_user) && !empty($row_user['image_path'])) ? $row_user['image_path'] : '../assets/dist/img/default-user.jpg';
+                            ?>
+                            <img src="<?= $img_src ?>" alt="Profile" class="profile-avatar">
                             
                             <h2 class="profile-name">
-                                <?= htmlspecialchars($resident_full_name) ?>
-                            </h2>
-                            <div class="profile-role">Resident ID: <span style="font-family: monospace;"><?= isset($resident_id) ? $resident_id : 'N/A' ?></span></div>
+                                    <?= htmlspecialchars($resident_full_name) ?>
+                                </h2>
+                                <div class="profile-role">Resident ID: <span style="font-family: monospace;"><?= isset($resident_id) ? $resident_id : 'N/A' ?></span></div>
 
                             <div class="profile-status-badge <?= $badge_class ?> mt-2">
                                 <?php if($is_verified): ?>
                                     <i class="fas fa-check-circle mr-1"></i> 
-                                <?php elseif($status_lower == 'pending'): ?>
+                                <?php elseif($app_status == 'Pending'): ?>
                                     <i class="fas fa-clock mr-1"></i>
                                 <?php else: ?>
                                     <i class="fas fa-times-circle mr-1"></i>
@@ -411,7 +418,7 @@ try{
                                 <?= $status_text ?>
                             </div>
 
-                            <?php if(!$is_verified && $status_lower != 'pending'): ?>
+                            <?php if(!$is_verified && $app_status != 'Pending'): ?>
                                 <div class="mt-1">
                                     <a href="form_application.php" class="btn-apply">Verify Now</a>
                                 </div>
@@ -427,13 +434,13 @@ try{
                                 <div class="info-group">
                                     <span class="info-label">Username</span>
                                     <span class="info-value">
-                                        <?= htmlspecialchars((isset($row_user['username'])) ? $row_user['username'] : 'Unknown') ?>
+                                        <?= htmlspecialchars((is_array($row_user) && isset($row_user['username'])) ? $row_user['username'] : 'Unknown') ?>
                                     </span>
                                 </div>
                                 <div class="info-group">
                                     <span class="info-label">Contact Number</span>
                                     <span class="info-value">
-                                        <?= htmlspecialchars($user_contact) ?>
+                                        <?= htmlspecialchars((is_array($row_user) && isset($row_user['contact_number'])) ? $row_user['contact_number'] : 'N/A') ?>
                                     </span>
                                 </div>
                                 <div class="info-group">
