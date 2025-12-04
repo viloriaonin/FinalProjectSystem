@@ -38,22 +38,21 @@ try {
     if ($res_row) {
         $resident_id = $res_row['resident_id'];
 
-        // 4. CHECK RESIDENCY STATUS (Using resident_id)
+        // 4. CHECK RESIDENCY STATUS
         $sql_app = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
         $stmt_app = $pdo->prepare($sql_app);
         $stmt_app->execute(['rid' => $resident_id]);
         
         if ($row_app = $stmt_app->fetch(PDO::FETCH_ASSOC)) {
             $app_status = trim($row_app['status']);
-            // Case-insensitive check
             if (strcasecmp($app_status, 'approved') == 0 || strcasecmp($app_status, 'verified') == 0) {
                 $is_verified = true;
             }
         }
 
-        // 5. LOAD REQUESTS (Using resident_id)
+        // 5. LOAD REQUESTS (Ensuring cert_id is selected)
         if ($is_verified) {
-            $sql_req = "SELECT request_code, type, purpose, status, created_at 
+            $sql_req = "SELECT cert_id, request_code, type, purpose, status, created_at, document_id, submission_id
                         FROM certificate_requests 
                         WHERE resident_id = :rid 
                         ORDER BY created_at DESC";
@@ -97,9 +96,38 @@ try {
     .table-dark-mode th { border-top: none; border-bottom: 2px solid var(--border); text-transform: uppercase; color: var(--text-muted); font-size: 0.85rem; }
     
     .locked-state { text-align: center; padding: 60px 20px; }
+    .btn-view-details { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid #3b82f6; padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; transition: 0.2s; }
+    .btn-view-details:hover { background: #3b82f6; color: white; }
     .btn-cancel { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444; padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; transition: 0.2s; }
     .btn-cancel:hover { background: #ef4444; color: white; }
+    .btn-claim-disabled { background: #3d424b; color: #a1a1a1; border: 1px solid #3d424b; padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; cursor: not-allowed; }
     .main-footer { background-color: var(--card-bg) !important; border-top: 1px solid var(--border); color: var(--text-muted) !important; }
+
+    .modal-content { background-color: var(--card-bg); color: var(--text-main); border: 1px solid var(--border); }
+    .modal-header { border-bottom: 1px solid var(--border); }
+    .modal-footer { border-top: 1px solid var(--border); }
+    .close { color: var(--text-muted); }
+    .close:hover { color: var(--text-main); }
+    
+    /* Custom Search Input Style */
+    .custom-search-input {
+        background-color: var(--bg-dark);
+        border: 1px solid var(--border);
+        color: var(--text-main);
+        border-radius: 4px;
+        padding: 5px 10px;
+    }
+    .custom-search-input:focus {
+        background-color: var(--bg-dark);
+        color: var(--text-main);
+        border-color: var(--accent);
+        outline: none;
+    }
+    .input-group-text {
+        background-color: var(--border);
+        border-color: var(--border);
+        color: var(--text-muted);
+    }
 </style>
 </head>
 <body class="hold-transition layout-top-nav">
@@ -112,23 +140,42 @@ try {
         <div class="ui-card container" style="max-width: 1100px;">
           
           <?php if ($is_verified): ?>
-              <div class="d-flex justify-content-between mb-4 align-items-center">
+              <div class="d-flex justify-content-between mb-4 align-items-center flex-wrap">
                   <div>
                       <h3 class="m-0">My Requests</h3>
                       <p class="text-muted m-0">Track your certificate status</p>
                   </div>
-                  <a href="certificate_request.php" class="btn btn-primary btn-sm"><i class="fas fa-plus mr-1"></i> New Request</a>
+                  
+                  <div class="d-flex align-items-center mt-2 mt-md-0">
+                      <div class="input-group input-group-sm mr-2" style="width: 200px;">
+                          <input type="text" id="customSearch" class="form-control custom-search-input" placeholder="Search...">
+                          <div class="input-group-append">
+                              <span class="input-group-text"><i class="fas fa-search"></i></span>
+                          </div>
+                      </div>
+                      
+                      <a href="certificate_request.php" class="btn btn-primary btn-sm" style="white-space: nowrap;">
+                          <i class="fas fa-plus mr-1"></i> New Request
+                      </a>
+                  </div>
               </div>
 
               <div class="table-responsive">
                 <table id="historyTable" class="table table-dark-mode">
                     <thead>
-                        <tr><th>Ref #</th><th>Type</th><th>Status</th><th>Date</th><th>Action</th></tr>
+                        <tr>
+                            <th>Ref #</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                            <th>Claim Stub</th>
+                            <th>Action</th>
+                        </tr>
                     </thead>
                     <tbody>
                     <?php if (count($my) > 0): ?>
                       <?php foreach ($my as $r): 
-                        $st = strtolower($r['status']);
+                        $st = strtolower(trim($r['status']));
                         $cls = 'status-pending';
                         if($st=='approved' || $st=='verified') $cls = 'status-approved';
                         elseif($st=='rejected' || $st=='cancelled') $cls = 'status-rejected';
@@ -141,19 +188,34 @@ try {
                             </td>
                             <td><span class="status-badge <?php echo $cls; ?>"><?php echo htmlspecialchars($r['status']); ?></span></td>
                             <td><?php echo date('M d, Y', strtotime($r['created_at'])); ?></td>
+                            
                             <td>
-                                <?php if($st == 'pending'): ?>
-                                    <button class="btn btn-sm btn-danger cancel-btn" data-id="<?php echo $r['request_code']; ?>">Cancel</button>
-                                <?php elseif($st == 'approved'): ?>
+                                <?php if($st == 'approved' || $st == 'verified'): ?>
                                     <a href="print_receipt.php?code=<?php echo $r['request_code']; ?>" target="_blank" class="btn btn-sm btn-success">
                                         <i class="fas fa-receipt"></i> Claim Stub
                                     </a>
+                                <?php else: ?>
+                                    <button class="btn-sm btn-claim-disabled" disabled>
+                                        <i class="fas fa-receipt"></i> Claim Stub
+                                    </button>
                                 <?php endif; ?>
+                            </td>
+
+                            <td>
+                                <button class="btn btn-sm btn-view-details view-details-btn" 
+                                        data-req-code="<?php echo htmlspecialchars($r['request_code']); ?>"
+                                        data-cert-id="<?php echo $r['cert_id']; ?>"
+                                        data-doc-id="<?php echo $r['document_id']; ?>"
+                                        data-sub-id="<?php echo $r['submission_id']; ?>"
+                                        data-type="<?php echo htmlspecialchars($r['type']); ?>"
+                                        data-toggle="modal" 
+                                        data-target="#detailsModal">
+                                    Details </button>
                             </td>
                         </tr>
                       <?php endforeach; ?>
                     <?php else: ?>
-                        <tr><td colspan="5" class="text-center text-muted py-4">No request history found.</td></tr>
+                        <tr><td colspan="6" class="text-center text-muted py-4">No request history found.</td></tr>
                     <?php endif; ?>
                     </tbody>
                 </table>
@@ -182,6 +244,34 @@ try {
   </footer>
 </div>
 
+<div class="modal fade" id="detailsModal" tabindex="-1" role="dialog" aria-labelledby="detailsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="detailsModalLabel">Request Details - <span id="modalRequestType"></span></h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <p class="text-muted m-0">Reference #: <strong id="modalRequestCode"></strong></p>
+            <span id="modalRequestStatus" class="status-badge"></span>
+        </div>
+        
+        <h6 class="mb-3 text-white">Submitted Information:</h6>
+        <div id="modalSubmittedData" class="p-3 ui-card">
+            <div class="text-center py-5 text-muted"><i class="fas fa-spinner fa-spin mr-2"></i> Loading data...</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-cancel" id="confirmCancelBtn" style="display:none;">Cancel Request</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
 <script src="../assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="../assets/plugins/datatables/jquery.dataTables.min.js"></script>
@@ -190,74 +280,139 @@ try {
 
 <script>
 $(function(){ 
-    // Initialize DataTables if table exists
+    // Initialize DataTable
     if($('#historyTable').length && <?php echo count($my); ?> > 0){
-        $('#historyTable').DataTable({ "order": [[3, 'desc']], "lengthChange": false });
+        var table = $('#historyTable').DataTable({ 
+            "order": [[3, 'desc']], 
+            "lengthChange": false, // Remove "Show X entries"
+            "info": false,         // Remove "Showing 1 to 7 of 7 entries"
+            "dom": 'rtp'           // Hide default search box (f), keep table (t) and pagination (p)
+        });
+
+        // Link Custom Search Input to DataTable
+        $('#customSearch').on('keyup', function(){
+            table.search(this.value).draw();
+        });
     }
 
-    // --- CANCEL CONFIRMATION LOGIC ---
-    $('body').on('click', '.cancel-btn', function() {
-      var id = $(this).data('id');
-      var btn = $(this); // Reference to the button for visual feedback
+    // --- VIEW DETAILS BUTTON LOGIC ---
+    $('body').on('click', '.view-details-btn', function() {
+        var reqCode = $(this).attr('data-req-code'); 
+        var certId  = $(this).attr('data-cert-id'); 
+        var docId   = $(this).data('doc-id');
+        var subId   = $(this).data('sub-id');
+        var reqType = $(this).data('type');
 
-      // Function to execute the AJAX call after confirmation
-      function executeCancel() {
-          btn.prop('disabled', true).text('Cancelling...'); // Disable button
-          
-          $.post('cancel_request.php', {request_id: id}, function(data){
-              if(data.status == 'success') {
-                  if(typeof Swal !== 'undefined'){
-                      Swal.fire({
-                          title: 'Cancelled!', 
-                          text: data.message, 
-                          icon: 'success',
-                          background: '#1C1F26',
-                          color: '#ffffff',
-                          showConfirmButton: false,
-                          timer: 1500
-                      }).then(() => location.reload());
-                  } else {
-                      alert(data.message);
-                      location.reload();
-                  }
-              } else { 
-                  if(typeof Swal !== 'undefined'){
-                      Swal.fire({ icon: 'error', title: 'Error', text: data.message, background: '#1C1F26', color: '#ffffff' });
-                  } else {
-                      alert(data.message);
-                  }
-                  btn.prop('disabled', false).text('Cancel'); // Re-enable button
-              }
-          }, 'json').fail(function() {
-              alert('Server connection failed');
-              btn.prop('disabled', false).text('Cancel');
-          });
-      }
+        var row = $(this).closest('tr');
+        var statusBadge = row.find('.status-badge');
+        var statusText = statusBadge.text();
+        var statusClasses = statusBadge.attr('class');
 
-      // 1. Try SweetAlert Confirmation
-      if(typeof Swal !== 'undefined'){
-          Swal.fire({
-              title: 'Cancel Request?', 
-              text: "Are you sure you want to cancel this request?",
-              icon: 'warning', 
-              showCancelButton: true,
-              confirmButtonText: 'Yes, Cancel It', 
-              cancelButtonText: 'No, Keep It',
-              confirmButtonColor: '#ef4444',
-              cancelButtonColor: '#6c757d',
-              background: '#1C1F26',
-              color: '#ffffff'
-          }).then((res) => {
-              if (res.isConfirmed) {
-                  executeCancel();
-              }
-          });
-      } else {
-          // 2. Fallback to Standard Browser Confirm
-          if(confirm("Are you sure you want to cancel this request?")){
-              executeCancel();
-          }
-      }
+        $('#modalRequestCode').text(reqCode);
+        $('#modalRequestType').text(reqType);
+        $('#modalRequestStatus').text(statusText).attr('class', statusClasses);
+        
+        $('#confirmCancelBtn').attr('data-cert-id', certId);
+        
+        var status = statusText.toLowerCase().trim();
+        if (status === 'pending' || status === 'verification') {
+            $('#confirmCancelBtn').show().prop('disabled', false).text('Cancel Request'); 
+        } else {
+             $('#confirmCancelBtn').hide();
+        }
+
+        $('#modalSubmittedData').html('<div class="text-center py-5 text-muted"><i class="fas fa-spinner fa-spin mr-2"></i> Loading data...</div>');
+
+        $.post('fetch_request_data.php', {document_id: docId, submission_id: subId}, function(data){
+            if(data.status === 'success') {
+                var html = '';
+                if(data.fields) {
+                    data.fields.forEach(function(field) {
+                        html += '<div class="row mb-2"><div class="col-sm-5 text-muted">' + field.label + ':</div><div class="col-sm-7"><strong>' + field.value + '</strong></div></div>';
+                    });
+                }
+                $('#modalSubmittedData').html(html);
+            } else {
+                $('#modalSubmittedData').html('<div class="text-center py-5 text-danger"><i class="fas fa-exclamation-triangle mr-2"></i> ' + data.message + '</div>');
+            }
+        }, 'json').fail(function() {
+            $('#modalSubmittedData').html('<div class="text-center py-5 text-muted"><i class="fas fa-server mr-2"></i> Details unavailable.</div>');
+        });
+    });
+
+    // --- CANCEL CONFIRMATION BUTTON CLICK ---
+    $('body').on('click', '#confirmCancelBtn', function() {
+        var certId = $(this).attr('data-cert-id'); 
+        var btn = $(this);
+
+        if(!certId) { alert("Error: Request ID missing."); return; }
+        $('#detailsModal').modal('hide'); 
+
+        function executeCancel() {
+            btn.prop('disabled', true).text('Cancelling...');
+            $.post('cancel_request.php', { cert_id: certId }, function(data) {
+                if (data.status === 'success') {
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            title: 'Cancelled!',
+                            text: data.message,
+                            icon: 'success',
+                            background: '#1C1F26',
+                            color: '#ffffff',
+                            showConfirmButton: false,
+                            timer: 1500
+                        }).then(() => location.reload());
+                    } else {
+                        alert(data.message);
+                        location.reload();
+                    }
+                } else {
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Failed',
+                            text: data.message,
+                            background: '#1C1F26',
+                            color: '#ffffff'
+                        });
+                    } else {
+                        alert(data.message);
+                    }
+                    btn.prop('disabled', false).text('Cancel Request');
+                }
+            }, 'json').fail(function(xhr, status, error) {
+                console.error("Server Error:", xhr.responseText);
+                alert('Connection Error. Please check console.');
+                btn.prop('disabled', false).text('Cancel Request');
+            });
+        }
+
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: 'Confirm Cancellation?',
+                text: "Are you sure you want to cancel this request?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, Cancel It',
+                cancelButtonText: 'No, Keep It',
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#6c757d',
+                background: '#1C1F26',
+                color: '#ffffff'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    executeCancel();
+                } else {
+                    $('#detailsModal').modal('show'); 
+                }
+            });
+        } else {
+            if (confirm("Are you sure you want to cancel this request?")) {
+                executeCancel();
+            } else {
+                $('#detailsModal').modal('show');
+            }
+        }
     });
 });
 </script>
