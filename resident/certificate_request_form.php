@@ -10,7 +10,7 @@ if (!isset($_GET['doc_id']) || !isset($_GET['request_for'])) {
 $doc_id = intval($_GET['doc_id']);
 $request_for = strtolower($_GET['request_for']); // 'myself' or 'others'
 
-$resident_info = null; // Variable to hold auto-fill data
+$resident_info = null; 
 
 try {
     // 2. FETCH DOCUMENT DETAILS
@@ -22,7 +22,7 @@ try {
         die("Error: Document not found.");
     }
 
-    // 3. FETCH RESIDENT INFORMATION (Always fetch to allow auto-fill for both cases)
+    // 3. FETCH RESIDENT INFORMATION
     if (isset($_SESSION['user_id'])) {
         $user_id = $_SESSION['user_id'];
         
@@ -41,8 +41,6 @@ try {
         $resident_info = $stmt_resident->fetch(PDO::FETCH_ASSOC);
 
         if ($resident_info) {
-            $resident_info['contact_no'] = $resident_info['contact_number']; 
-            $resident_info['email'] = $resident_info['email_address'];
             $resident_info['full_name'] = trim($resident_info['first_name'] . ' ' . $resident_info['middle_name'] . ' ' . $resident_info['last_name'] . ' ' . $resident_info['suffix']);
         }
     }
@@ -52,18 +50,11 @@ try {
     $stmtFields->execute([$doc_id]);
     $fields = $stmtFields->fetchAll(PDO::FETCH_ASSOC);
 
-    // --- NEW: Define Dropdown Options ---
+    // --- Define Dropdown Options ---
     $select_options = [];
-    
-    // Check if this is Indigency Certificate (With Request) - ID 5
     if ($doc_id == 5) { 
-        $select_options['indigency_reason'] = [
-            'Scholarship',
-            'Medical',
-            'Financial'
-        ];
+        $select_options['indigency_reason'] = ['Scholarship', 'Medical', 'Financial'];
     }
-    // ------------------------------------
 
 } catch (PDOException $e) {
     die("Database Error: " . $e->getMessage());
@@ -78,7 +69,6 @@ try {
     <title>Request: <?= htmlspecialchars($doc['doc_name']); ?></title>
     
     <link rel="stylesheet" href="../assets/plugins/fontawesome-free/css/all.min.css">
-    <link rel="stylesheet" href="../assets/plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
     <link rel="stylesheet" href="../assets/dist/css/adminlte.min.css">
     <link rel="stylesheet" href="../assets/plugins/sweetalert2/css/sweetalert2.min.css">
 
@@ -91,11 +81,10 @@ try {
         --theme-border: #2d333b;
         --theme-text: #e2e8f0;
         --theme-blue: #3b82f6;
-        --theme-blue-hover: #2563eb;
     }
 
     body.dark-mode { background-color: var(--theme-bg); color: var(--theme-text); }
-    body.dark-mode .content-wrapper { background-color: var(--theme-bg) !important; }
+    .content-wrapper { background-color: var(--theme-bg) !important; }
     
     .card-custom {
         background-color: var(--theme-card); 
@@ -127,10 +116,7 @@ try {
         font-weight: 600;
         transition: all 0.3s;
     }
-    .btn-submit:hover {
-        background-color: var(--theme-blue-hover);
-        transform: translateY(-1px);
-    }
+    .btn-submit:hover { background-color: #2563eb; transform: translateY(-1px); }
 
     .form-label { color: #94a3b8; font-size: 0.9rem; margin-bottom: 8px; display: block; font-weight: 500; }
     .container-main { max-width: 700px; margin: 40px auto; }
@@ -162,50 +148,39 @@ try {
                             
                             <form id="dynamicRequestForm">
                                 <input type="hidden" name="document_id" value="<?= $doc_id ?>">
+                                
                                 <input type="hidden" name="request_for" value="<?= htmlspecialchars($request_for) ?>">
 
                                 <?php if ($request_for === 'others'): ?>
-                                <h5 class="text-info mb-3"><i class="fas fa-users mr-2"></i> Requestee Details</h5>
-                                <div class="form-group mb-4">
-                                    <label class="form-label">Full Name of Person Requesting For</label>
-                                    <input 
-                                        type="text" 
-                                        class="form-control form-control-custom" 
-                                        name="requestee_full_name" 
-                                        placeholder="Enter Full Name of Requestee" 
-                                        required
-                                        value="<?= $resident_info ? htmlspecialchars($resident_info['full_name']) : '' ?>"
-                                    >
-                                </div>
-                                <div class="form-group mb-4">
-                                    <label class="form-label">Relationship to the Requestee</label>
-                                    <select 
-                                        class="form-control form-control-custom" 
-                                        name="requestee_relationship" 
-                                        id="requestee_relationship" 
-                                        required>
-                                        <option value="" disabled selected>Select relationship</option>
-                                        <option value="Sibling">Sibling</option>
-                                        <option value="Child">Child</option>
-                                        <option value="Parent">Parent</option>
-                                        <option value="Spouse">Spouse</option>
-                                        <option value="Other">Other (Please specify)</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="form-group mb-4" id="other_relationship_field" style="display:none;">
-                                    <label class="form-label">Specify Relationship</label>
-                                    <input 
-                                        type="text" 
-                                        class="form-control form-control-custom" 
-                                        name="requestee_relationship_other" 
-                                        placeholder="e.g., Cousin, Guardian, etc."
-                                        >
-                                </div>
+                                    <h5 class="text-info mb-3"><i class="fas fa-users mr-2"></i> Requestee Details</h5>
+                                    
+                                    <div class="form-group mb-4">
+                                        <label class="form-label">Full Name of Person Requesting For</label>
+                                        <input type="text" class="form-control form-control-custom" name="requestee_full_name" placeholder="Enter Full Name" required>
+                                    </div>
+                                    
+                                    <div class="form-group mb-4">
+                                        <label class="form-label">Relationship</label>
+                                        <select class="form-control form-control-custom" name="requestee_relationship" id="requestee_relationship" required>
+                                            <option value="" disabled selected>Select relationship</option>
+                                            <option value="Sibling">Sibling</option>
+                                            <option value="Child">Child</option>
+                                            <option value="Parent">Parent</option>
+                                            <option value="Spouse">Spouse</option>
+                                            <option value="Other">Other (Please specify)</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="form-group mb-4" id="other_relationship_field" style="display:none;">
+                                        <label class="form-label">Specify Relationship</label>
+                                        <input type="text" class="form-control form-control-custom" name="requestee_relationship_other" placeholder="e.g., Cousin">
+                                    </div>
+
                                 <?php else: ?>
                                     <input type="hidden" name="requestee_full_name" value="<?= htmlspecialchars($resident_info['full_name'] ?? 'N/A') ?>">
                                     <input type="hidden" name="requestee_relationship" value="Self">
                                 <?php endif; ?>
+
                                 <h5 class="text-info mt-5 mb-3 header-border pt-3"><i class="fas fa-list-alt mr-2"></i> Document Specific Fields</h5>
                                 
                                 <?php foreach($fields as $field): ?>
@@ -213,102 +188,46 @@ try {
                                         <label class="form-label"><?= htmlspecialchars($field['label']) ?></label>
                                         
                                         <?php 
-                                            // Auto-fill Logic for Name, Age, Purok
                                             $field_value = '';
                                             $is_readonly = '';
                                             $field_name = htmlspecialchars($field['field_name']);
 
+                                            // Auto-fill logic for 'Myself'
                                             if ($request_for === 'myself' && $resident_info) {
-                                                if ($field_name === 'name') {
-                                                    $field_value = htmlspecialchars($resident_info['full_name'] ?? '');
-                                                } elseif ($field_name === 'age') {
-                                                    $field_value = htmlspecialchars($resident_info['age'] ?? '');
-                                                } elseif ($field_name === 'purok') {
-                                                    $field_value = htmlspecialchars($resident_info['purok'] ?? '');
-                                                }
+                                                if ($field_name === 'name') $field_value = $resident_info['full_name'];
+                                                elseif ($field_name === 'age') $field_value = $resident_info['age'];
+                                                elseif ($field_name === 'purok') $field_value = $resident_info['purok'];
                                                 
-                                                if (!empty($field_value)) {
-                                                    $is_readonly = 'readonly';
-                                                }
+                                                if (!empty($field_value)) $is_readonly = 'readonly';
                                             }
                                         ?>
                                         
                                         <?php if ($field['field_type'] == 'select'): ?>
-                                             <?php 
-                                                 // Get options defined in PHP array at top
-                                                 $options = $select_options[$field_name] ?? [];
-                                             ?>
-                                             
-                                             <?php if (!empty($options)): ?>
-                                             <select 
-                                                class="form-control form-control-custom" 
-                                                name="<?= $field_name ?>"
-                                                required
-                                                <?= $is_readonly ?>
-                                                >
+                                             <select class="form-control form-control-custom" name="<?= $field_name ?>" required <?= $is_readonly ?>>
                                                 <option value="" disabled selected>Select option</option>
-                                                <?php foreach ($options as $option): ?>
-                                                <option value="<?= htmlspecialchars($option) ?>"
-                                                    <?= ($field_value == $option) ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($option) ?>
-                                                </option>
+                                                <?php foreach (($select_options[$field_name] ?? []) as $option): ?>
+                                                <option value="<?= $option ?>" <?= ($field_value == $option) ? 'selected' : '' ?>><?= $option ?></option>
                                                 <?php endforeach; ?>
                                              </select>
-                                             <?php else: ?>
-                                             <input 
-                                                type="text" 
-                                                class="form-control form-control-custom" 
-                                                name="<?= $field_name ?>" 
-                                                placeholder="Enter <?= htmlspecialchars($field['label']) ?>" 
-                                                value="<?= $field_value ?>"
-                                                <?= $is_readonly ?>
-                                                required>
-                                             <?php endif; ?>
 
                                         <?php elseif ($field['field_type'] == 'textarea'): ?>
-                                            <textarea 
-                                                class="form-control form-control-custom" 
-                                                name="<?= $field_name ?>" 
-                                                rows="3" 
-                                                placeholder="Enter <?= htmlspecialchars($field['label']) ?>" 
-                                                <?= $is_readonly ?>
-                                                required><?= $field_value ?></textarea>
+                                            <textarea class="form-control form-control-custom" name="<?= $field_name ?>" rows="3" <?= $is_readonly ?> required><?= $field_value ?></textarea>
                                         
                                         <?php elseif ($field['field_type'] == 'number'): ?>
-                                            <input 
-                                                type="number" 
-                                                class="form-control form-control-custom" 
-                                                name="<?= $field_name ?>" 
-                                                placeholder="Enter <?= htmlspecialchars($field['label']) ?>" 
-                                                value="<?= $field_value ?>"
-                                                <?= $is_readonly ?>
-                                                required>
+                                            <input type="number" class="form-control form-control-custom" name="<?= $field_name ?>" value="<?= $field_value ?>" <?= $is_readonly ?> required>
                                         
                                         <?php elseif ($field['field_type'] == 'date'): ?>
-                                            <input 
-                                                type="date" 
-                                                class="form-control form-control-custom" 
-                                                name="<?= $field_name ?>" 
-                                                value="<?= $field_value ?>"
-                                                <?= $is_readonly ?>
-                                                required>
+                                            <input type="date" class="form-control form-control-custom" name="<?= $field_name ?>" value="<?= $field_value ?>" <?= $is_readonly ?> required>
                                         
                                         <?php else: ?>
-                                            <input 
-                                                type="text" 
-                                                class="form-control form-control-custom" 
-                                                name="<?= $field_name ?>" 
-                                                placeholder="Enter <?= htmlspecialchars($field['label']) ?>" 
-                                                value="<?= $field_value ?>"
-                                                <?= $is_readonly ?>
-                                                required>
+                                            <input type="text" class="form-control form-control-custom" name="<?= $field_name ?>" value="<?= $field_value ?>" <?= $is_readonly ?> required>
                                         <?php endif; ?>
                                     </div>
                                 <?php endforeach; ?>
 
                                 <?php if(empty($fields)): ?>
                                     <div class="alert alert-info bg-transparent border-info text-info">
-                                        <i class="fas fa-info-circle mr-2"></i> No specific information is required for this document. Click submit to proceed.
+                                        <i class="fas fa-info-circle mr-2"></i> No specific information required. Click submit to proceed.
                                     </div>
                                 <?php endif; ?>
                                 
@@ -337,22 +256,18 @@ try {
 <script>
 $(document).ready(function() {
     
-    // --- Handle Relationship Dropdown visibility for 'Others' ---
+    // Toggle "Other" Relationship Field
     $('#requestee_relationship').on('change', function() {
-        const selectedValue = $(this).val();
-        const otherField = $('#other_relationship_field');
-        const otherInput = otherField.find('input');
-
-        if (selectedValue === 'Other') {
-            otherField.slideDown();
-            otherInput.prop('required', true); 
+        if ($(this).val() === 'Other') {
+            $('#other_relationship_field').slideDown();
+            $('#other_relationship_field input').prop('required', true); 
         } else {
-            otherField.slideUp();
-            otherInput.prop('required', false).val(''); 
+            $('#other_relationship_field').slideUp();
+            $('#other_relationship_field input').prop('required', false).val(''); 
         }
     });
 
-    // --- AJAX Form Submission Logic ---
+    // Submit Form
     $('#dynamicRequestForm').on('submit', function(e) {
         e.preventDefault();
         
@@ -362,44 +277,24 @@ $(document).ready(function() {
 
         btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
 
-        var formData = form.serialize();
-
         $.ajax({
             url: 'submit_certificate_request.php',
             type: 'POST',
-            data: formData,
+            data: form.serialize(),
             dataType: 'json',
             success: function(response) {
                 if (response.success) {
                     Swal.fire({
-                        icon: 'success',
-                        title: 'Success!',
-                        text: response.message,
-                        background: '#1c1f26',
-                        color: '#fff',
-                        confirmButtonColor: '#3b82f6'
-                    }).then(() => {
-                        window.location.href = 'certificate_request.php'; 
-                    });
+                        icon: 'success', title: 'Success!', text: response.message,
+                        background: '#1c1f26', color: '#fff', confirmButtonColor: '#3b82f6'
+                    }).then(() => { window.location.href = 'certificate_request.php'; });
                 } else {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error',
-                        text: response.message,
-                        background: '#1c1f26',
-                        color: '#fff'
-                    });
+                    Swal.fire({ icon: 'error', title: 'Error', text: response.message, background: '#1c1f26', color: '#fff' });
                     btn.prop('disabled', false).html(originalBtnText);
                 }
             },
             error: function() {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'System Error',
-                    text: 'Could not communicate with the server.',
-                    background: '#1c1f26',
-                    color: '#fff'
-                });
+                Swal.fire({ icon: 'error', title: 'System Error', text: 'Could not communicate with the server.', background: '#1c1f26', color: '#fff' });
                 btn.prop('disabled', false).html(originalBtnText);
             }
         });
