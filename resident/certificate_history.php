@@ -50,7 +50,7 @@ try {
             }
         }
 
-        // 5. LOAD REQUESTS (Ensuring cert_id is selected)
+        // 5. LOAD REQUESTS
         if ($is_verified) {
             $sql_req = "SELECT cert_id, request_code, type, purpose, status, created_at, document_id, submission_id
                         FROM certificate_requests 
@@ -65,7 +65,6 @@ try {
 } catch (PDOException $e) {
     $app_status = "Error: " . $e->getMessage();
 }
-
 ?>
 <!doctype html>
 <html>
@@ -80,8 +79,16 @@ try {
 <style>
     /* Dark Theme */
     :root { --bg-dark: #0F1115; --card-bg: #1C1F26; --text-main: #ffffff; --text-muted: #6c757d; --accent: #3b82f6; --border: #2d333b; }
+    
     body { background-color: var(--bg-dark); color: var(--text-main); font-family: 'Segoe UI'; }
-    .content-wrapper { background: var(--bg-dark) !important; }
+    
+    /* FIX: Added top padding so content doesn't hit the menu bar */
+    .content-wrapper { 
+        background: var(--bg-dark) !important; 
+        padding-top: 100px !important; 
+        min-height: 100vh;
+    }
+    
     .ui-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 30px; }
     
     /* Badges */
@@ -92,41 +99,43 @@ try {
     
     /* Table */
     .table-dark-mode { background: transparent; width: 100%; }
-    .table-dark-mode td, .table-dark-mode th { border-color: var(--border); color: var(--text-main); padding: 12px; vertical-align: middle; }
+    .table-dark-mode td, .table-dark-mode th { border-color: var(--border); color: var(--text-main); padding: 12px; vertical-align: middle; white-space: nowrap; }
     .table-dark-mode th { border-top: none; border-bottom: 2px solid var(--border); text-transform: uppercase; color: var(--text-muted); font-size: 0.85rem; }
     
     .locked-state { text-align: center; padding: 60px 20px; }
-    .btn-view-details { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid #3b82f6; padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; transition: 0.2s; }
+    .btn-view-details { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid #3b82f6; padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; transition: 0.2s; white-space: nowrap; }
     .btn-view-details:hover { background: #3b82f6; color: white; }
     .btn-cancel { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444; padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; transition: 0.2s; }
     .btn-cancel:hover { background: #ef4444; color: white; }
-    .btn-claim-disabled { background: #3d424b; color: #a1a1a1; border: 1px solid #3d424b; padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; cursor: not-allowed; }
-    .main-footer { background-color: var(--card-bg) !important; border-top: 1px solid var(--border); color: var(--text-muted) !important; }
-
+    .btn-claim-disabled { background: #3d424b; color: #a1a1a1; border: 1px solid #3d424b; padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; cursor: not-allowed; white-space: nowrap; }
+    
+    /* Modals */
     .modal-content { background-color: var(--card-bg); color: var(--text-main); border: 1px solid var(--border); }
     .modal-header { border-bottom: 1px solid var(--border); }
     .modal-footer { border-top: 1px solid var(--border); }
     .close { color: var(--text-muted); }
     .close:hover { color: var(--text-main); }
     
-    /* Custom Search Input Style */
-    .custom-search-input {
-        background-color: var(--bg-dark);
-        border: 1px solid var(--border);
-        color: var(--text-main);
-        border-radius: 4px;
-        padding: 5px 10px;
-    }
-    .custom-search-input:focus {
-        background-color: var(--bg-dark);
-        color: var(--text-main);
-        border-color: var(--accent);
-        outline: none;
-    }
-    .input-group-text {
-        background-color: var(--border);
-        border-color: var(--border);
-        color: var(--text-muted);
+    /* Custom Search Input */
+    .custom-search-input { background-color: var(--bg-dark); border: 1px solid var(--border); color: var(--text-main); border-radius: 4px; padding: 5px 10px; }
+    .custom-search-input:focus { background-color: var(--bg-dark); color: var(--text-main); border-color: var(--accent); outline: none; }
+    .input-group-text { background-color: var(--border); border-color: var(--border); color: var(--text-muted); }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .header-controls {
+            flex-direction: column;
+            width: 100%;
+            margin-top: 15px;
+            align-items: flex-start !important;
+        }
+        .header-controls .input-group {
+            width: 100% !important;
+            margin-bottom: 10px;
+        }
+        .header-controls .btn {
+            width: 100%;
+        }
     }
 </style>
 </head>
@@ -136,7 +145,7 @@ try {
 
   <div class="content-wrapper">
     <div class="content">
-      <div class="container-fluid pt-5">
+      <div class="container-fluid">
         <div class="ui-card container" style="max-width: 1100px;">
           
           <?php if ($is_verified): ?>
@@ -146,7 +155,7 @@ try {
                       <p class="text-muted m-0">Track your certificate status</p>
                   </div>
                   
-                  <div class="d-flex align-items-center mt-2 mt-md-0">
+                  <div class="d-flex align-items-center mt-2 mt-md-0 header-controls">
                       <div class="input-group input-group-sm mr-2" style="width: 200px;">
                           <input type="text" id="customSearch" class="form-control custom-search-input" placeholder="Search...">
                           <div class="input-group-append">
@@ -237,12 +246,7 @@ try {
       </div>
     </div>
   </div>
-  
-  <footer class="main-footer">
-    <div class="float-right d-none d-sm-block"></div>
-    <i class="fas fa-map-marker-alt mr-2"></i> <?php echo htmlspecialchars($postal_address); ?>
-  </footer>
-</div>
+  </div>
 
 <div class="modal fade" id="detailsModal" tabindex="-1" role="dialog" aria-labelledby="detailsModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg" role="document">
@@ -284,18 +288,18 @@ $(function(){
     if($('#historyTable').length && <?php echo count($my); ?> > 0){
         var table = $('#historyTable').DataTable({ 
             "order": [[3, 'desc']], 
-            "lengthChange": false, // Remove "Show X entries"
-            "info": false,         // Remove "Showing 1 to 7 of 7 entries"
-            "dom": 'rtp'           // Hide default search box (f), keep table (t) and pagination (p)
+            "lengthChange": false, 
+            "info": false, 
+            "dom": 'rtp',
+            "scrollX": true
         });
 
-        // Link Custom Search Input to DataTable
         $('#customSearch').on('keyup', function(){
             table.search(this.value).draw();
         });
     }
 
-    // --- VIEW DETAILS BUTTON LOGIC ---
+    // View Details Logic
     $('body').on('click', '.view-details-btn', function() {
         var reqCode = $(this).attr('data-req-code'); 
         var certId  = $(this).attr('data-cert-id'); 
@@ -340,7 +344,7 @@ $(function(){
         });
     });
 
-    // --- CANCEL CONFIRMATION BUTTON CLICK ---
+    // Cancel Button Logic
     $('body').on('click', '#confirmCancelBtn', function() {
         var certId = $(this).attr('data-cert-id'); 
         var btn = $(this);
