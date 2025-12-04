@@ -7,7 +7,7 @@ try {
     // --- 1. REDIRECT IF LOGGED IN ---
     if (isset($_SESSION['user_id']) && isset($_SESSION['user_type'])) {
         $user_id = $_SESSION['user_id'];
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE user_id = ?");
         $stmt->execute([$user_id]);
         $row = $stmt->fetch();
 
@@ -16,7 +16,12 @@ try {
             if ($account_type == 'admin') {
                 echo '<script>window.location.href="admin/dashboard.php";</script>';
                 exit();
+            } else if ($account_type == 'applicant') { 
+                // Applicants go to Resident Dashboard
+                echo '<script>window.location.href="resident/dashboard.php";</script>';
+                exit();
             } else {
+                // Residents go to Resident Dashboard
                 echo '<script>window.location.href="resident/dashboard.php";</script>';
                 exit();
             }
@@ -26,7 +31,7 @@ try {
     // --- 2. FETCH BARANGAY INFO ---
     $barangay = $municipality = $province = $image = $image_path = "";
     
-    $sql = "SELECT * FROM `barangay_information` LIMIT 1";
+    $sql = "SELECT * FROM barangay_information LIMIT 1";
     $stmt = $pdo->prepare($sql);
     $stmt->execute();
     
@@ -74,7 +79,6 @@ try {
         min-height: 100vh;
         display: flex;
         flex-direction: column;
-        /* We remove justify-content: center here to let flex-grow handle the spacing with the navbar */
     }
     
     /* Content Container to Center the Card */
@@ -86,7 +90,7 @@ try {
         padding: 20px;
     }
 
-    /* Navbar Styling (Copied from Index/Officials) */
+    /* Navbar Styling */
     .rightBar:hover{ border-bottom: 3px solid red; }
     
     /* Login Card Styling */
@@ -262,8 +266,6 @@ try {
 
 </div>
 
-<!-- asdasdas -->
-
 <script src="assets/plugins/jquery/jquery.min.js"></script>
 <script src="assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="assets/dist/js/adminlte.js"></script>
@@ -300,7 +302,9 @@ try {
                   html: '<b>Incorrect Username or Password</b>',
                   confirmButtonColor: '#000000'
                 });
-              } else if(data == 'admin' || data == 'secretary' || data == 'resident'){
+              } 
+              // ✅ UPDATED LOGIC: Allows 'applicant' to login
+              else if(data == 'admin' || data == 'resident' || data == 'applicant'){
                 Swal.fire({
                   title: '<strong class="text-success">SUCCESS</strong>',
                   type: 'success',
@@ -309,12 +313,15 @@ try {
                   allowOutsideClick: false,
                   timer: 1500
                 }).then(()=>{
-                  if(data == 'admin') window.location.href = 'admin/dashboard.php';
-                  else if(data == 'secretary') window.location.href = 'secretary/dashboard.php';
-                  else window.location.href = 'resident/dashboard.php';
+                  if(data == 'admin') {
+                      window.location.href = 'admin/dashboard.php';
+                  } else {
+                      // Redirects both Resident and Applicant to the resident dashboard
+                      window.location.href = 'resident/dashboard.php';
+                  }
                 });
               } else {
-                 console.log(data);
+                 console.log("Response:", data);
               }
           }
         });

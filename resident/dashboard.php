@@ -3,32 +3,33 @@ include_once '../db_connection.php';
 session_start();
 
 try{
-    if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] == 'resident'){
+    // --- 1. FIXED: Allow BOTH 'resident' AND 'applicant' to access this page ---
+    if(isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && 
+      ($_SESSION['user_type'] == 'resident' || $_SESSION['user_type'] == 'applicant')) {
 
         $user_id = $_SESSION['user_id'];
         
-        // --- 1. Fetch User Account Info (for login data) ---
+        // --- 2. Fetch User Account Info (for login data) ---
         $sql_user = "SELECT * FROM `users` WHERE `user_id` = :uid ";
         $stmt_user = $pdo->prepare($sql_user);
         $stmt_user->execute(['uid' => $user_id]);
         $row_user = $stmt_user->fetch(PDO::FETCH_ASSOC); 
         
         // Initialize display name variables
-        $resident_full_name = 'Resident';
+        $resident_full_name = 'Resident'; 
         $resident_id = 'N/A';
-        $user_type = 'resident';
+        $user_type = $_SESSION['user_type']; // Use session value
         
         // Check if user exists to avoid errors
         if ($row_user) {
-            // Username is still needed for the Account Details display
             $username = $row_user['username'];
-            $user_type = $row_user['user_type'];
+            // If we don't find a resident name later, use username as fallback
+            $resident_full_name = $username; 
         } else {
             $username = 'Unknown';
         }
 
-
-        // --- 2. CRITICAL FIX: Fetch Full Name and Resident ID ---
+        // --- 3. Fetch Full Name and Resident ID ---
         $sql_res = "SELECT 
                         resident_id, first_name, middle_name, last_name, suffix, image_path
                     FROM residence_information 
@@ -45,8 +46,10 @@ try{
             if (!empty($res_row['last_name'])) $name_parts[] = $res_row['last_name'];
             if (!empty($res_row['suffix'])) $name_parts[] = $res_row['suffix'];
             
-            // Set the full name for display (e.g., in the Welcome message)
-            $resident_full_name = implode(' ', $name_parts);
+            // Set the full name for display
+            if(!empty($name_parts)) {
+                $resident_full_name = implode(' ', $name_parts);
+            }
             
             // Overwrite default image path if available in residence_information
             if (!empty($res_row['image_path'])) {
@@ -54,20 +57,21 @@ try{
             }
         }
         
-        
-        // --- 3. Fetch Barangay Info (Original Step 2, moved) ---
+        // --- 4. Fetch Barangay Info ---
         $sql = "SELECT * FROM `barangay_information`";
         $stmt_brgy = $pdo->query($sql);
         $barangay = ''; 
         $image_logo = ''; 
-        // Note: You might want to fetch $image_logo here if it's in the barangay_information table
+        if($row_brgy = $stmt_brgy->fetch(PDO::FETCH_ASSOC)) {
+            $image_logo = $row_brgy['image'] ?? ''; 
+        }
 
-        // --- 4. Fetch Application Status (Original Step 3, now uses $resident_id) ---
-       $app_status = 'None';
-        $resident_exists = false; // NEW FLAG
+        // --- 5. Fetch Application Status ---
+        $app_status = 'None';
+        $resident_exists = false;
 
         if ($resident_id != 'N/A') {
-            $resident_exists = true; // Resident ID found in residence_information
+            $resident_exists = true; 
 
             // Check status using resident_id
             $sql_app = "SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1";
@@ -83,36 +87,33 @@ try{
         $badge_class = 'badge-danger';
         $status_text = 'Not Verified';
 
-        // A resident is verified if:
-        // 1. Their application status is 'Approved' (for self-registered users) OR
-        // 2. They have a record in residence_information but no application (Admin created/verified)
-        
+        // Verification Logic
         if (trim(strtolower($app_status)) == 'approved' || trim(strtolower($app_status)) == 'verified') {
             $is_verified = true;
             $badge_class = 'badge-success';
             $status_text = 'Verified';
             
         } elseif ($resident_exists && $app_status == 'None') {
-            // New condition for Admin-created residents (Resident exists but has no application)
+            // Admin created residents
             $is_verified = true;
             $badge_class = 'badge-success';
             $status_text = 'Verified (Admin)';
-            $app_status = 'N/A'; // Change display status to reflect no application was necessary
+            $app_status = 'N/A'; 
 
         } elseif (trim(strtolower($app_status)) == 'pending') {
             $badge_class = 'badge-warning';
             $status_text = 'Pending';
         }
-        // If $resident_id is 'N/A', verification remains 'Not Verified' (or handles registration prompt)
 
-    }else{
+    } else {
+        // If user is NOT resident AND NOT applicant, go to login
         echo '<script>window.location.href = "../login.php";</script>';
         exit;
     }
 
-}catch(PDOException $e){
+} catch(PDOException $e){
     echo "Database Error: " . $e->getMessage();
-}catch(Exception $e){
+} catch(Exception $e){
     echo "Error: " . $e->getMessage();
 }
 ?>
@@ -344,7 +345,7 @@ try{
 </head>
 <body class="hold-transition sidebar-mini layout-fixed layout-navbar-fixed">
 
-<div class="wrapper">
+  <div class="wrapper">
 
     <?php include_once __DIR__ . '/../includes/menu_bar.php'; ?>
 
@@ -360,7 +361,7 @@ try{
                         <i class="fas fa-landmark fa-3x mr-3" style="color: #58a6ff;"></i>
                     <?php endif; ?>
                     <div>
-                        <<h1>Welcome, <span><?= htmlspecialchars($resident_full_name) ?></span></h1>
+                        <h1>Welcome, <span><?= htmlspecialchars($resident_full_name) ?></span></h1>
                     </div>
                 </div>
                 <p>What would you like to do today?</p>
