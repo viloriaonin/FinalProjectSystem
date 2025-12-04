@@ -1,49 +1,51 @@
 <?php 
 // ourofficial.php
-include_once 'connection.php';
+include_once 'db_connection.php'; // Updated to use your PDO file
 session_start();
 
 // --- 1. SECURITY & REDIRECT CHECK ---
 if(isset($_SESSION['user_id']) && isset($_SESSION['user_type'])){
     $user_id = $_SESSION['user_id'];
     
+    // PDO: Prepare and Execute
     $sql = "SELECT user_type FROM users WHERE id = ?"; 
-    $stmt = $con->prepare($sql);
-    if($stmt) {
-        $stmt->bind_param('s', $user_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$user_id]);
+    $row = $stmt->fetch(); // PDO default is FETCH_ASSOC based on your db_connection
         
-        if($row = $result->fetch_assoc()){
-            $account_type = $row['user_type'];
-            
-            if ($account_type == 'admin') {
-                header('Location: admin/dashboard.php'); exit;
-            } elseif ($account_type == 'secretary') {
-                header('Location: secretary/dashboard.php'); exit;
-            } else {
-                header('Location: resident/dashboard.php'); exit;
-            }
+    if($row){
+        $account_type = $row['user_type'];
+        
+        if ($account_type == 'admin') {
+            header('Location: admin/dashboard.php'); exit;
+        } elseif ($account_type == 'secretary') {
+            header('Location: secretary/dashboard.php'); exit;
+        } else {
+            header('Location: resident/dashboard.php'); exit;
         }
-        $stmt->close();
     }
 }
 
 // --- 2. FETCH BARANGAY INFORMATION ---
-$sql_brgy = "SELECT * FROM `barangay_information` LIMIT 1";
-$query_brgy = $con->prepare($sql_brgy);
-if($query_brgy) {
-    $query_brgy->execute();
-    $result_brgy = $query_brgy->get_result();
-}
-
-// Set default values
+// Set default values first
 $barangay = "Barangay";
 $municipality = "Municipality";
 $province = "Province";
 $image = "default.png";
 
+$sql_brgy = "SELECT * FROM `barangay_information` LIMIT 1";
+$stmt_brgy = $pdo->prepare($sql_brgy);
+$stmt_brgy->execute();
+$row_brgy = $stmt_brgy->fetch();
 
+if($row_brgy) {
+    // Check if keys exist before assigning to avoid errors if columns have different names
+    if(isset($row_brgy['barangay_name'])) $barangay = $row_brgy['barangay_name'];
+    if(isset($row_brgy['municipality'])) $municipality = $row_brgy['municipality'];
+    if(isset($row_brgy['province'])) $province = $row_brgy['province'];
+    // Update the image if your DB has a logo column (e.g., 'image' or 'logo')
+    if(isset($row_brgy['image'])) $image = $row_brgy['image']; 
+}
 
 ?>
 <!DOCTYPE html>
@@ -91,8 +93,6 @@ $image = "default.png";
         font-size: 3rem;
         text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
     }
-
-/* asdasdas */
 
     /* All-in-One Image Container Styles */
     .org-chart-container {
@@ -173,8 +173,6 @@ $image = "default.png";
         </div>
     </div>
   </div>
-  
-
   
 </div>
 <script src="assets/plugins/jquery/jquery.min.js"></script>
