@@ -16,12 +16,7 @@ try {
             if ($account_type == 'admin') {
                 echo '<script>window.location.href="admin/dashboard.php";</script>';
                 exit();
-            } else if ($account_type == 'applicant') { 
-                // Applicants go to Resident Dashboard
-                echo '<script>window.location.href="resident/dashboard.php";</script>';
-                exit();
             } else {
-                // Residents go to Resident Dashboard
                 echo '<script>window.location.href="resident/dashboard.php";</script>';
                 exit();
             }
@@ -29,8 +24,9 @@ try {
     }
 
     // --- 2. FETCH BARANGAY INFO ---
-    $barangay = $municipality = $province = $image = $image_path = "";
-    
+    $barangay = "Barangay";
+    $image = "logo_1763225398.jpg";
+
     $sql = "SELECT * FROM barangay_information LIMIT 1";
     $stmt = $pdo->prepare($sql);
     $stmt->execute();
@@ -39,8 +35,8 @@ try {
         $barangay = $row['barangay'];
         $municipality = $row['municipality'];
         $province = $row['province'];
-        $image = $row['image'] ?? $row['images']; 
-        $image_path = $row['image_path'];
+        if (!empty($row['image'])) { $image = $row['image']; } 
+        elseif (!empty($row['images'])) { $image = $row['images']; }
     }
 
 } catch (Exception $e) {
@@ -61,38 +57,33 @@ try {
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 
   <style>
-    body { 
-        font-family: 'Poppins', sans-serif; 
-        margin: 0;
-        padding: 0;
-        height: 100vh;
-        overflow-x: hidden;
-        background-color: #000; /* Fallback */
-    }
+    body { font-family: 'Poppins', sans-serif; }
+    .rightBar:hover{ border-bottom: 3px solid red; }
 
-    /* Full Screen Background using photo1.png */
-    .login-wrapper {
+    /* CRITICAL: We apply the background image to the content-wrapper 
+       instead of the body, so the structure matches Ourofficial.php exactly.
+    */
+    .content-wrapper {
         background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.8)), url('assets/dist/img/photo1.png');
         background-repeat: no-repeat;
         background-size: cover;
         background-position: center;
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-    }
-    
-    /* Content Container to Center the Card */
-    .login-content {
-        flex: 1;
+        /* Force full height centering */
+        min-height: calc(100vh - 115px) !important; 
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 20px;
     }
 
-    /* Navbar Styling */
-    .rightBar:hover{ border-bottom: 3px solid red; }
-    
+    /* Footer Styling to match Ourofficial */
+    .main-footer {
+        margin-left: 0 !important;
+        border-top: 5px solid #000000;
+        background-color: #000000;
+        color: white;
+        text-align: center;
+    }
+
     /* Login Card Styling */
     .card-login {
         border: none;
@@ -102,6 +93,7 @@ try {
         overflow: hidden;
         max-width: 450px;
         width: 100%;
+        margin: auto; /* Centers in flex container */
     }
 
     .login-logo-img {
@@ -117,19 +109,7 @@ try {
         letter-spacing: 1px;
     }
 
-    /* Input Groups */
-    .input-group-text {
-        background-color: #f4f6f9;
-        border-color: #ced4da;
-        color: #000;
-    }
-    
-    .form-control:focus {
-        border-color: #000;
-        box-shadow: none;
-    }
-
-    /* Buttons */
+    /* Button Styles */
     .btn-black {
         background-color: #000000;
         border-color: #000000;
@@ -139,133 +119,110 @@ try {
         letter-spacing: 1px;
         transition: all 0.3s ease;
     }
-
     .btn-black:hover {
         background-color: #333333;
         border-color: #333333;
         color: #ffffff;
         transform: translateY(-2px);
     }
-
-    /* Links */
-    .link-black {
-        color: #333;
-        font-weight: 500;
-        transition: color 0.2s;
-    }
-    .link-black:hover {
-        color: #000;
-        text-decoration: underline;
-    }
-    
-    /* Footer */
-    .login-footer {
-        background-color: #000000;
-        color: rgba(255,255,255,0.7);
-        padding: 15px 0;
-        text-align: center;
-        font-size: 0.9rem;
-        width: 100%;
-        border-top: 1px solid #333;
-    }
+    .link-black { color: #333; font-weight: 500; }
+    .link-black:hover { color: #000; text-decoration: underline; }
   </style>
 </head>
 <body class="hold-transition layout-top-nav">
 
-<div class="login-wrapper">
+<div class="wrapper">
 
-    <nav class="main-header navbar navbar-expand-md" style="background-color: #000000; border:0;">
-        <div class="container">
-          <a href="index.php" class="navbar-brand">
-            <img src="assets/dist/img/<?= htmlspecialchars($image) ?>" alt="logo" class="brand-image img-circle" style="opacity: .8">
-            <span class="brand-text text-white" style="font-weight: 700">BARANGAY PORTAL</span>
-          </a>
+  <nav class="main-header navbar navbar-expand-md" style="background-color: #000000">
+    <div class="container">
+      <a href="index.php" class="navbar-brand">
+        <img src="assets/logo/<?= htmlspecialchars($image) ?>" alt="logo" class="brand-image img-circle">
+        <span class="brand-text text-white" style="font-weight: 700">BARANGAY PORTAL</span>
+      </a>
 
-          <button class="navbar-toggler order-1" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="fas fa-bars text-white"></span>
-          </button>
+      <button class="navbar-toggler order-1" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
 
-          <div class="collapse navbar-collapse order-3" id="navbarCollapse"></div>
+      <div class="collapse navbar-collapse order-3" id="navbarCollapse"></div>
 
-          <ul class="order-1 order-md-3 navbar-nav navbar-no-expand ml-auto">
-              <li class="nav-item">
-                <a href="index.php" class="nav-link text-white rightBar">HOME</a>
-              </li>
-              <li class="nav-item">
-                <a href="ourofficial.php" class="nav-link text-white rightBar"><i class="fas fa-users mr-1"></i> OUR OFFICIALS</a>
-              </li>
-              <li class="nav-item">
-                <a href="login.php" class="nav-link text-white rightBar" style="border-bottom: 3px solid red;"><i class="fas fa-user-alt mr-1"></i> LOGIN</a>
-              </li>
-          </ul>
-        </div>
-    </nav>
-
-    <div class="login-content">
-        <div class="container">
-            <div class="row justify-content-center">
-                <div class="col-md-6 col-lg-5">
-                    
-                    <form id="loginForm" method="post">
-                        <div class="card card-login">
-                            <div class="card-body p-5 text-center">
-                                
-                                <img src="assets/dist/img/<?= !empty($image) ? $image : 'default.png'; ?>" alt="logo" class="img-circle login-logo-img">
-                                
-                                <h3 class="login-title mb-1">Barangay Portal</h3>
-                                <p class="text-muted mb-4">Sign in to start your session</p>
-                                
-                                <div class="form-group mb-3">
-                                    <div class="input-group">
-                                        <div class="input-group-prepend">
-                                            <span class="input-group-text"><i class="fas fa-user"></i></span>
-                                        </div>
-                                        <input type="text" id="username" name="username" class="form-control" placeholder="Username or Resident ID">
+      <ul class="order-1 order-md-3 navbar-nav navbar-no-expand ml-auto">
+          <li class="nav-item">
+            <a href="index.php" class="nav-link text-white rightBar">HOME</a>
+          </li>
+          <li class="nav-item">
+            <a href="ourofficial.php" class="nav-link text-white rightBar">
+                <i class="fas fa-users mr-1"></i> OUR OFFICIALS
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="login.php" class="nav-link text-white rightBar" style="border-bottom: 3px solid red;">
+                <i class="fas fa-user-alt mr-1"></i> LOGIN
+            </a>
+          </li>
+      </ul>
+    </div>
+  </nav>
+  <div class="content-wrapper">
+    <div class="container">
+        
+        <div class="row justify-content-center">
+            <div class="col-md-6 col-lg-5">
+                <form id="loginForm" method="post">
+                    <div class="card card-login">
+                        <div class="card-body p-5 text-center">
+                            
+                            <img src="assets/dist/img/<?= !empty($image) ? $image : 'logo_1763225398.jpg'; ?>" alt="logo" class="img-circle login-logo-img">
+                            
+                            <h3 class="login-title mb-1">Barangay Portal</h3>
+                            <p class="text-muted mb-4">Sign in to start your session</p>
+                            
+                            <div class="form-group mb-3">
+                                <div class="input-group">
+                                    <div class="input-group-prepend">
+                                        <span class="input-group-text"><i class="fas fa-user"></i></span>
                                     </div>
+                                    <input type="text" id="username" name="username" class="form-control" placeholder="Username or Resident ID">
                                 </div>
-
-                                <div class="form-group mb-3">
-                                    <div class="input-group" id="show_hide_password">
-                                        <div class="input-group-prepend">
-                                            <span class="input-group-text"><i class="fas fa-lock"></i></span>
-                                        </div>
-                                        <input type="password" id="password" name="password" class="form-control" placeholder="Password" style="border-right: none;">
-                                        <div class="input-group-append">
-                                            <span class="input-group-text bg-white" style="border-left: none; cursor: pointer;">
-                                                <a href="#" class="text-dark"><i class="fas fa-eye-slash" aria-hidden="true"></i></a>
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="text-right mb-4">
-                                    <a href="forgot.php" class="link-black" style="font-size: 0.9rem;">Forgot Password?</a>
-                                </div>
-
-                                <button type="submit" class="btn btn-black btn-block mb-3 rounded-pill">SIGN IN</button>
-
-                                <p class="mb-0 text-muted">
-                                    Don’t have an account? 
-                                    <a href="register.php" class="link-black font-weight-bold">Register Here</a>
-                                </p>
-
                             </div>
-                        </div>
-                    </form>
 
-                </div>
+                            <div class="form-group mb-3">
+                                <div class="input-group" id="show_hide_password">
+                                    <div class="input-group-prepend">
+                                        <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                                    </div>
+                                    <input type="password" id="password" name="password" class="form-control" placeholder="Password" style="border-right: none;">
+                                    <div class="input-group-append">
+                                        <span class="input-group-text bg-white" style="border-left: none; cursor: pointer;">
+                                            <a href="#" class="text-dark"><i class="fas fa-eye-slash" aria-hidden="true"></i></a>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="text-right mb-4">
+                                <a href="forgot.php" class="link-black" style="font-size: 0.9rem;">Forgot Password?</a>
+                            </div>
+
+                            <button type="submit" class="btn btn-black btn-block mb-3 rounded-pill">SIGN IN</button>
+
+                            <p class="mb-0 text-muted">
+                                Don’t have an account? 
+                                <a href="register.php" class="link-black font-weight-bold">Register Here</a>
+                            </p>
+
+                        </div>
+                    </div>
+                </form>
             </div>
         </div>
+        </div></div><footer class="main-footer">
+    <div class="container">
+        <i class="fas fa-map-marker-alt mr-2"></i> <?= htmlspecialchars($barangay) ?>, <?= htmlspecialchars($municipality) ?>, <?= htmlspecialchars($province) ?>
     </div>
-
-    <footer class="login-footer">
-        <div class="container">
-            <i class="fas fa-map-marker-alt mr-2"></i> <?= htmlspecialchars($barangay) ?>, <?= htmlspecialchars($municipality) ?>, <?= htmlspecialchars($province) ?>
-        </div>
-    </footer>
+  </footer>
 
 </div>
-
 <script src="assets/plugins/jquery/jquery.min.js"></script>
 <script src="assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="assets/dist/js/adminlte.js"></script>
@@ -274,7 +231,7 @@ try {
 <script>
   $(document).ready(function() {
     
-    // --- LOGIN FORM SUBMISSION ---
+    // Login Submission
     $("#loginForm").submit(function(e){
       e.preventDefault();
       var username = $("#username").val();
@@ -294,7 +251,6 @@ try {
           data: $(this).serialize(),
           success:function(data){
               data = data.trim(); 
-              
               if(data == 'errorUsername' || data =='errorPassword'){
                 Swal.fire({
                   title: '<strong class="text-danger">ERROR</strong>',
@@ -303,7 +259,6 @@ try {
                   confirmButtonColor: '#000000'
                 });
               } 
-              // ✅ UPDATED LOGIC: Allows 'applicant' to login
               else if(data == 'admin' || data == 'resident' || data == 'applicant'){
                 Swal.fire({
                   title: '<strong class="text-success">SUCCESS</strong>',
@@ -316,7 +271,6 @@ try {
                   if(data == 'admin') {
                       window.location.href = 'admin/dashboard.php';
                   } else {
-                      // Redirects both Resident and Applicant to the resident dashboard
                       window.location.href = 'resident/dashboard.php';
                   }
                 });
@@ -328,12 +282,11 @@ try {
       }
     });
 
-    // --- PASSWORD VISIBILITY TOGGLE ---
+    // Toggle Password
     $("#show_hide_password a").on('click', function(event) {
         event.preventDefault();
         var input = $('#show_hide_password input');
         var icon = $('#show_hide_password i');
-
         if(input.attr("type") == "text"){
             input.attr('type', 'password');
             icon.addClass( "fa-eye-slash" );

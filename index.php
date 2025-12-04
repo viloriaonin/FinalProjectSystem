@@ -7,7 +7,6 @@ session_start();
 if(isset($_SESSION['user_id']) && isset($_SESSION['user_type'])){
     $user_id = $_SESSION['user_id'];
     
-    // Use $pdo from your db_connection.php
     $sql = "SELECT user_type FROM users WHERE user_id = :user_id"; 
     $stmt = $pdo->prepare($sql);
     $stmt->execute([':user_id' => $user_id]);
@@ -16,21 +15,16 @@ if(isset($_SESSION['user_id']) && isset($_SESSION['user_type'])){
         $account_type = $row['user_type'];
         
         if ($account_type == 'admin') {
-            header('Location: admin/dashboard.php');
-            exit;
+            header('Location: admin/dashboard.php'); exit;
         } elseif ($account_type == 'secretary') {
-            header('Location: secretary/dashboard.php');
-            exit;
+            header('Location: secretary/dashboard.php'); exit;
         } else {
-            header('Location: resident/dashboard.php');
-            exit;
+            header('Location: resident/dashboard.php'); exit;
         }
     }
 }
 
 // --- 2. CAROUSEL HELPER FUNCTIONS ---
-// (Moved to top so they are always available)
-
 function get_carousel_data($pdo){
     try {
         $sql = "SELECT * FROM carousel";
@@ -38,7 +32,7 @@ function get_carousel_data($pdo){
         $stmt->execute();
         return $stmt->fetchAll(); 
     } catch (PDOException $e) {
-        return []; // Return empty array on error
+        return []; 
     }
 }
 
@@ -59,7 +53,6 @@ function make_slides($data, $barangay_name){
     
     foreach($data as $row) {
         $active = ($count == 0) ? 'active' : '';
-        // Fallback for missing images
         $img_src = !empty($row["banner_image_path"]) ? htmlspecialchars($row["banner_image_path"]) : 'assets/dist/img/default_banner.jpg';
         
         $output .= '
@@ -77,11 +70,10 @@ function make_slides($data, $barangay_name){
 }
 
 // --- 3. FETCH BARANGAY INFORMATION ---
-// Default variables
 $barangay = "Barangay";
 $municipality = "Municipality";
 $province = "Province";
-$image = "default.png";
+$image = "logo_1763225398.jpg";
 
 try {
     $sql_brgy = "SELECT * FROM `barangay_information` LIMIT 1";
@@ -92,18 +84,14 @@ try {
         $barangay = $row_brgy['barangay'];
         $municipality = $row_brgy['municipality'];
         $province = $row_brgy['province'];
-        // Handle potential nulls
         $image = !empty($row_brgy['image']) ? $row_brgy['image'] : ($row_brgy['images'] ?? 'default.png'); 
-        $image_path = $row_brgy['image_path'] ?? '';
-        $id = $row_brgy['barangay_id'] ?? $row_brgy['id'] ?? null;
-    } // <--- FIXED: Added closing brace here
+    } 
 } catch (PDOException $e) {
-    // Silent fail, stick to defaults
+    // Silent fail
 }
 
 // --- 4. PREPARE CAROUSEL DATA ---
 $carousel_items = get_carousel_data($pdo);
-
 ?>
 
 <!DOCTYPE html>
@@ -122,18 +110,21 @@ $carousel_items = get_carousel_data($pdo);
     
     .rightBar:hover{ border-bottom: 3px solid red; }
 
-    /* --- SCROLLING FIXES --- */
+    /* Layout Fixes */
     .content-wrapper {
-        min-height: calc(100vh - 60px) !important; 
+        min-height: calc(100vh - 120px) !important; 
         height: auto !important; 
-        background-image: none;
+        background-color: #f4f6f9;
     }
     
+    /* Footer Styling */
     .main-footer {
         margin-left: 0 !important;
-        position: relative !important;
-        width: 100%;
-        z-index: 10;
+        border-top: 5px solid #000000;
+        background-color: #000000;
+        color: white;
+        padding: 1rem;
+        text-align: center;
     }
 
     /* Carousel */
@@ -151,7 +142,7 @@ $carousel_items = get_carousel_data($pdo);
       bottom: auto; top: 50%; transform: translateY(-50%); z-index: 3; text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
     }
     
-    /* General Section */
+    /* Section & Cards */
     .section-title {
         color: #000000; 
         font-weight: 700; margin-bottom: 30px; position: relative;
@@ -162,7 +153,6 @@ $carousel_items = get_carousel_data($pdo);
         margin: 10px auto 0;
     }
     
-    /* Service & Info Cards */
     .service-card {
         transition: all 0.3s ease; border: 0; box-shadow: 0 4px 15px rgba(0,0,0,0.05); height: 100%;
         background: #fff; border-radius: 10px;
@@ -171,48 +161,47 @@ $carousel_items = get_carousel_data($pdo);
         transform: translateY(-10px); box-shadow: 0 8px 30px rgba(0,0,0,0.1);
     }
     .service-card .card-body { padding: 2.5rem; }
-    
-    .service-card i { 
-        font-size: 3.5rem; 
-        color: #000000; 
-        margin-bottom: 1.5rem; 
-    }
-    
+    .service-card i { font-size: 3.5rem; color: #000000; margin-bottom: 1.5rem; }
     .service-card h5 { font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem; }
     .service-card p, .service-card li { color: #6c757d; }
-    .goals-list { text-align: left; display: inline-block; }
   </style>
 </head>
 <body class="hold-transition layout-top-nav">
 
-  <nav class="main-header navbar navbar-expand-md" style="background-color: #000000; border:0;">
-        <div class="container">
-          <a href="index.php" class="navbar-brand">
-            <img src="assets/dist/img/<?= htmlspecialchars($image) ?>" alt="logo" class="brand-image img-circle" style="opacity: .8">
-            <span class="brand-text text-white" style="font-weight: 700">BARANGAY PORTAL</span>
-          </a>
+<div class="wrapper">
 
-          <button class="navbar-toggler order-1" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="fas fa-bars text-white"></span>
-          </button>
+  <nav class="main-header navbar navbar-expand-md" style="background-color: #000000">
+    <div class="container">
+      <a href="index.php" class="navbar-brand">
+        <img src="assets/logo/<?= htmlspecialchars($image) ?>" alt="logo" class="brand-image img-circle">
+        <span class="brand-text text-white" style="font-weight: 700">BARANGAY PORTAL</span>
+      </a>
 
-          <div class="collapse navbar-collapse order-3" id="navbarCollapse"></div>
+      <button class="navbar-toggler order-1" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
 
-          <ul class="order-1 order-md-3 navbar-nav navbar-no-expand ml-auto">
-              <li class="nav-item">
-                <a href="index.php" class="nav-link text-white rightBar" style="border-bottom: 3px solid red;">HOME</a>
-              </li>
-              <li class="nav-item">
-                <a href="ourofficial.php" class="nav-link text-white rightBar"><i class="fas fa-users mr-1"></i> OUR OFFICIALS</a>
-              </li>
-              <li class="nav-item">
-                <a href="login.php" class="nav-link text-white rightBar"><i class="fas fa-user-alt mr-1"></i> LOGIN</a>
-              </li>
-          </ul>
-        </div>
-    </nav>
+      <div class="collapse navbar-collapse order-3" id="navbarCollapse"></div>
 
-    <div class="content-wrapper" >
+      <ul class="order-1 order-md-3 navbar-nav navbar-no-expand ml-auto">
+          <li class="nav-item">
+            <a href="index.php" class="nav-link text-white rightBar" style="border-bottom: 3px solid red;">HOME</a>
+          </li>
+          <li class="nav-item">
+            <a href="ourofficial.php" class="nav-link text-white rightBar">
+                <i class="fas fa-users mr-1"></i> OUR OFFICIALS
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="login.php" class="nav-link text-white rightBar">
+                <i class="fas fa-user-alt mr-1"></i> LOGIN
+            </a>
+          </li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="content-wrapper">
   
     <div id="heroCarousel" class="carousel slide" data-ride="carousel" data-interval="5000">
       <ol class="carousel-indicators">
@@ -252,7 +241,6 @@ $carousel_items = get_carousel_data($pdo);
         <div class="container">
             <h2 class="section-title text-center">Mission & Vision</h2>
             <div class="row">
-                
                 <div class="col-lg-6 mb-4">
                     <div class="card service-card h-100">
                         <div class="card-body text-center">
@@ -262,7 +250,6 @@ $carousel_items = get_carousel_data($pdo);
                         </div>
                     </div>
                 </div>
-                
                 <div class="col-lg-6 mb-4">
                     <div class="card service-card h-100">
                         <div class="card-body text-center">
@@ -272,7 +259,6 @@ $carousel_items = get_carousel_data($pdo);
                         </div>
                     </div>
                 </div>
-
                 <div class="col-lg-6 mb-4">
                     <div class="card service-card h-100">
                         <div class="card-body text-center">
@@ -282,7 +268,6 @@ $carousel_items = get_carousel_data($pdo);
                         </div>
                     </div>
                 </div>
-                
                 <div class="col-lg-6 mb-4">
                     <div class="card service-card h-100">
                         <div class="card-body text-center">
@@ -298,7 +283,6 @@ $carousel_items = get_carousel_data($pdo);
                         </div>
                     </div>
                 </div>
-
             </div>
         </div>
     </div>
@@ -330,7 +314,13 @@ $carousel_items = get_carousel_data($pdo);
     </div>
   
   </div>
+  <footer class="main-footer">
+    <div class="container">
+      <strong>Copyright &copy; <?= date('Y') ?> <a href="#" style="color: red;"><?= htmlspecialchars($barangay) ?></a>.</strong> All rights reserved.
+    </div>
+  </footer>
 
+</div>
 <script src="assets/plugins/jquery/jquery.min.js"></script>
 <script src="assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="assets/dist/js/adminlte.js"></script>

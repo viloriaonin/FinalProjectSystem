@@ -31,7 +31,7 @@ if(isset($_SESSION['user_id']) && isset($_SESSION['user_type'])){
 $barangay = "Barangay";
 $municipality = "Municipality";
 $province = "Province";
-$image = "default.png";
+$image = "logo_1763225398.jpg";
 
 $sql_brgy = "SELECT * FROM `barangay_information` LIMIT 1";
 $stmt_brgy = $pdo->prepare($sql_brgy);
@@ -117,7 +117,7 @@ if($row_brgy) {
   <nav class="main-header navbar navbar-expand-md " style="background-color: #000000">
     <div class="container">
       <a href="index.php" class="navbar-brand">
-        <img src="assets/dist/img/<?= htmlspecialchars($image) ?>" alt="logo" class="brand-image img-circle " >
+        <img src="assets/logo/<?= htmlspecialchars($image) ?>" alt="logo" class="brand-image img-circle " >
         <span class="brand-text text-white" style="font-weight: 700">BARANGAY PORTAL</span>
       </a>
 
