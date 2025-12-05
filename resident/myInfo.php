@@ -14,34 +14,25 @@ if(!isset($_SESSION['user_id']) || !isset($_SESSION['user_type']) || !in_array($
 // =============================================================
 if (isset($_SESSION['user_type']) && $_SESSION['user_type'] === 'applicant') {
     try {
-        // 1. Get Resident ID linked to this User
         $stmt_check_promo = $pdo->prepare("SELECT resident_id FROM residence_information WHERE user_id = :uid");
         $stmt_check_promo->execute(['uid' => $_SESSION['user_id']]);
         $promo_res = $stmt_check_promo->fetch(PDO::FETCH_ASSOC);
 
         if ($promo_res) {
-            // 2. Check the Latest Application Status
             $stmt_app_status = $pdo->prepare("SELECT status FROM residence_applications WHERE resident_id = :rid ORDER BY applicant_id DESC LIMIT 1");
             $stmt_app_status->execute(['rid' => $promo_res['resident_id']]);
             $app_status_row = $stmt_app_status->fetch(PDO::FETCH_ASSOC);
 
-            // 3. If Approved, Update Database and Session
             if ($app_status_row) {
                 $s = strtolower(trim($app_status_row['status']));
                 if ($s === 'approved' || $s === 'verified') {
-                    // Update DB
                     $update_role = $pdo->prepare("UPDATE users SET user_type = 'resident' WHERE user_id = :uid");
                     $update_role->execute(['uid' => $_SESSION['user_id']]);
-                    
-                    // Update Session
                     $_SESSION['user_type'] = 'resident';
                 }
             }
         }
-    } catch (Exception $e) {
-        // Silent fail (don't break page if this check fails)
-        error_log("Auto-promotion error: " . $e->getMessage());
-    }
+    } catch (Exception $e) { error_log("Auto-promotion error: " . $e->getMessage()); }
 }
 // =============================================================
 
@@ -76,7 +67,7 @@ try {
         if ($row_resident) {
             $has_record = true;
         } else {
-            // --- FIX START: FALLBACK FOR ADMIN-VERIFIED RESIDENTS ---
+            // --- FIX: FALLBACK FOR ADMIN-VERIFIED RESIDENTS ---
             // If no application exists, but user is a 'resident', fetch from residence_information
             if (isset($_SESSION['user_type']) && $_SESSION['user_type'] === 'resident') {
                 $stmt_info = $pdo->prepare("SELECT * FROM residence_information WHERE resident_id = :rid LIMIT 1");
@@ -87,18 +78,16 @@ try {
                     $has_record = true;
                     $row_resident = $info_row;
     
-                    // MAP FIELDS: residence_information uses different names for some columns compared to residence_applications
+                    // MAP FIELDS: residence_information uses different names for some columns
                     $row_resident['father_name'] = $info_row['fathers_name'] ?? '';
                     $row_resident['mother_name'] = $info_row['mothers_name'] ?? '';
                     $row_resident['guardian_name'] = $info_row['guardian'] ?? '';
-                    $row_resident['status'] = 'Verified (Admin)'; // Visual status
+                    $row_resident['status'] = 'Verified (Admin)'; 
                     
-                    // Ensure profile/ID paths are mapped if they exist in the info table
                     $row_resident['profile_image_path'] = $info_row['profile_image_path'] ?? '';
                     $row_resident['valid_id_path'] = $info_row['valid_id_path'] ?? '';
                 }
             }
-            // --- FIX END ---
         }
     }
 
@@ -133,7 +122,7 @@ try {
             }
         }
 
-        // 2. PREPARE INPUTS (UPPERCASE TEXT)
+        // 2. PREPARE INPUTS
         $params = [
             ':fname' => toUpper($_POST['first_name']), 
             ':mname' => toUpper($_POST['middle_name']), 
@@ -162,7 +151,6 @@ try {
             ':pwd' => $_POST['pwd'],
             ':pwd_type' => ($_POST['pwd'] === 'Yes') ? toUpper($_POST['pwd_type']) : '',
             
-            // Extended Parent Details
             ':f_occ' => toUpper($_POST['father_occupation'] ?? ''),
             ':f_age' => $_POST['father_age'] ?? 0,
             ':f_bday' => !empty($_POST['father_birthday']) ? $_POST['father_birthday'] : NULL,
@@ -172,7 +160,6 @@ try {
             ':m_bday' => !empty($_POST['mother_birthday']) ? $_POST['mother_birthday'] : NULL,
             ':m_educ' => $_POST['mother_education'] ?? '',
             
-            // Residency
             ':duration' => $_POST['residency_months'],
             ':years' => $_POST['years_of_living'] ?? '', 
             ':since' => !empty($_POST['resident_since']) ? $_POST['resident_since'] : NULL, 
@@ -183,14 +170,13 @@ try {
             ':rid' => $resident_id
         ];
 
-        // --- FIX START: ENSURE RECORD EXISTS BEFORE UPDATING ---
-        // If this is the first time an Admin-Verified user is saving, create the row first.
+        // --- FIX: ENSURE RECORD EXISTS BEFORE UPDATING ---
         $check_exist = $pdo->prepare("SELECT 1 FROM residence_applications WHERE resident_id = ?");
         $check_exist->execute([$resident_id]);
         if (!$check_exist->fetchColumn()) {
+            // Create empty row so update works
             $pdo->prepare("INSERT INTO residence_applications (resident_id, status) VALUES (?, 'Verified')")->execute([$resident_id]);
         }
-        // --- FIX END ---
 
         // 3. UPDATE SQL
         $sql1 = "UPDATE residence_applications SET 
@@ -215,40 +201,23 @@ try {
         
         if($stmt1->execute($params)){
             
-            // 4. SYNC SIBLINGS
+            // 4. SYNC SIBLINGS & CHILDREN (Code omitted for brevity, same as before)
             $pdo->prepare("DELETE FROM resident_siblings WHERE resident_id = ?")->execute([$resident_id]);
             if (isset($_POST['siblings']) && is_array($_POST['siblings'])) {
                 $stmtSib = $pdo->prepare("INSERT INTO resident_siblings (resident_id, name, age, birthday, civil_status, education, occupation) VALUES (?, ?, ?, ?, ?, ?, ?)");
                 foreach ($_POST['siblings'] as $sib) {
                     if (!empty($sib['name'])) { 
-                        $stmtSib->execute([
-                            $resident_id, 
-                            toUpper($sib['name']), 
-                            $sib['age'] ?? 0, 
-                            !empty($sib['birthday']) ? $sib['birthday'] : NULL, 
-                            $sib['civil_status'] ?? '', 
-                            toUpper($sib['education'] ?? ''), 
-                            toUpper($sib['occupation'] ?? '')
-                        ]);
+                        $stmtSib->execute([$resident_id, toUpper($sib['name']), $sib['age'] ?? 0, !empty($sib['birthday']) ? $sib['birthday'] : NULL, $sib['civil_status'] ?? '', toUpper($sib['education'] ?? ''), toUpper($sib['occupation'] ?? '')]);
                     }
                 }
             }
-
-            // 5. SYNC CHILDREN
+            
             $pdo->prepare("DELETE FROM resident_children WHERE resident_id = ?")->execute([$resident_id]);
             if (isset($_POST['children']) && is_array($_POST['children'])) {
                 $stmtChild = $pdo->prepare("INSERT INTO resident_children (resident_id, name, birthdate, age, civil_status, occupation, education) VALUES (?, ?, ?, ?, ?, ?, ?)");
                 foreach ($_POST['children'] as $child) {
                     if (!empty($child['name'])) {
-                        $stmtChild->execute([
-                            $resident_id, 
-                            toUpper($child['name']), 
-                            !empty($child['birthday']) ? $child['birthday'] : NULL, 
-                            $child['age'] ?? 0, 
-                            $child['civil_status'] ?? '', 
-                            toUpper($child['occupation'] ?? ''), 
-                            toUpper($child['education'] ?? '')
-                        ]);
+                        $stmtChild->execute([$resident_id, toUpper($child['name']), !empty($child['birthday']) ? $child['birthday'] : NULL, $child['age'] ?? 0, $child['civil_status'] ?? '', toUpper($child['occupation'] ?? ''), toUpper($child['education'] ?? '')]);
                     }
                 }
             }
@@ -651,6 +620,33 @@ function sel($key, $val, $arr) { return (isset($arr[$key]) && $arr[$key] == $val
           </div>
       </div>
   </div>
+
+  <div class="modal fade" id="otpUpdateModal" tabindex="-1" role="dialog" data-backdrop="static" data-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content" style="background-color: var(--card-bg); border: 1px solid var(--border-color); color:white;">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-shield-alt mr-2 text-warning"></i>Security Verification</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body text-center p-4">
+                <p>To save changes, please enter the 6-digit code sent to your mobile number.</p>
+                
+                <div class="form-group my-3">
+                    <input type="text" id="otp_input_update" class="form-control text-center font-weight-bold" 
+                           placeholder="• • • • • •" maxlength="6" 
+                           style="font-size: 24px; letter-spacing: 5px; color: #000;">
+                </div>
+                
+                <div id="otp_status_msg" class="text-muted small">Sending OTP...</div>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btn_confirm_otp">Verify & Update</button>
+            </div>
+        </div>
+    </div>
+  </div>
+
 </div>
 
 <script src="../assets/plugins/jquery/jquery.min.js"></script>
@@ -688,7 +684,7 @@ $(function(){
         }
     });
 
-    // --- NEW: RESIDENCY CALCULATION (YEARS & MONTHS) ---
+    // --- NEW: RESIDENCY CALCULATION ---
     function calculateResidency() {
       var startDateInput = $('#resident_since').val();
       var outputField = $('#years_of_living');
@@ -704,17 +700,14 @@ $(function(){
       var years = today.getFullYear() - startDate.getFullYear();
       var months = today.getMonth() - startDate.getMonth();
 
-      // Adjust if current month is before start month or same month but day hasn't passed
       if (months < 0 || (months === 0 && today.getDate() < startDate.getDate())) {
           years--;
           months += 12;
       }
-      // Adjust day overlap
       if (today.getDate() < startDate.getDate()) {
           months--;
       }
 
-      // Formatting
       var result = "";
       if (years < 0) {
           outputField.val("Date is in the future");
@@ -728,7 +721,6 @@ $(function(){
       outputField.val(result);
   }
 
-    // Trigger on change and on load (if editing)
     $('#resident_since').on('change', calculateResidency);
     if($('#resident_since').val()){ calculateResidency(); }
 
@@ -785,9 +777,8 @@ $(function(){
 
     $(document).on('click', '.remove-row', function(){ $(this).closest('tr').remove(); });
 
-    // --- 5. DATA PRE-FILL (From DB Tables) ---
+    // --- 5. DATA PRE-FILL ---
     <?php 
-        // Fetch Siblings
         if($resident_id){
             $stmtS = $pdo->prepare("SELECT * FROM resident_siblings WHERE resident_id = ?");
             $stmtS->execute([$resident_id]);
@@ -795,7 +786,6 @@ $(function(){
             echo "var savedSibs = " . json_encode($sibs) . ";";
             echo "if(savedSibs){ savedSibs.forEach(function(s){ addSiblingRow(s); }); }";
 
-            // Fetch Children
             $stmtC = $pdo->prepare("SELECT * FROM resident_children WHERE resident_id = ?");
             $stmtC->execute([$resident_id]);
             $kids = $stmtC->fetchAll(PDO::FETCH_ASSOC);
@@ -809,7 +799,6 @@ $(function(){
         if($('#gov_yes').is(':checked')){ $('#beneficiary_type_wrap').slideDown(); } 
         else { $('#beneficiary_type_wrap').slideUp(); $('#beneficiary_type').val(''); }
     });
-    // Trigger Gov check on load
     if($('input[name="gov_beneficiary"]:checked').val() == 'yes'){
         $('#beneficiary_type_wrap').show();
     }
@@ -824,6 +813,89 @@ $(function(){
     }
     $('#pwd_status').change(togglePwd);
     togglePwd();
+
+    // --- OTP LOGIC START ---
+    var formVerified = false; 
+
+    $('#myInfoForm').on('submit', function(e) {
+        if (formVerified === true) {
+            return true;
+        }
+
+        e.preventDefault(); 
+
+        var contactNum = $('input[name="contact_number"]').val(); 
+
+        if(!contactNum || contactNum.length !== 11) {
+            Swal.fire({icon: 'warning', title: 'Invalid Contact', text: 'Please enter a valid 11-digit mobile number first.', background: '#1c1f26', color: '#fff'});
+            return;
+        }
+
+        // Open Modal and Send OTP
+        $('#otpUpdateModal').modal('show');
+        $('#otp_input_update').val('');
+        $('#otp_status_msg').text('Sending OTP to ' + contactNum + '...').removeClass('text-danger').addClass('text-muted');
+        $('#btn_confirm_otp').prop('disabled', true);
+
+        $.ajax({
+            url: 'otp_process.php',
+            type: 'POST',
+            dataType: 'json',
+            data: { action: 'send_otp', contact: contactNum },
+            success: function(resp) {
+                if (resp.status === 'sent') {
+                    $('#otp_status_msg').text('OTP Sent! Check your phone.').addClass('text-success');
+                    $('#btn_confirm_otp').prop('disabled', false);
+                } else {
+                    $('#otp_status_msg').text(resp.message).addClass('text-danger');
+                }
+            },
+            error: function() {
+                $('#otp_status_msg').text('Error connecting to SMS server.').addClass('text-danger');
+            }
+        });
+    });
+
+    $('#btn_confirm_otp').click(function() {
+        var code = $('#otp_input_update').val();
+        
+        if(code.length !== 6) {
+            $('#otp_status_msg').text('Please enter 6 digits.').addClass('text-danger');
+            return;
+        }
+
+        var $btn = $(this);
+        $btn.prop('disabled', true).text('Verifying...');
+
+        $.ajax({
+            url: 'otp_process.php',
+            type: 'POST',
+            dataType: 'json',
+            data: { action: 'verify_otp', otp: code },
+            success: function(resp) {
+                if (resp.status === 'verified') {
+                    $('#otp_status_msg').text('Verified! Saving changes...').removeClass('text-danger').addClass('text-success');
+                    setTimeout(function() {
+                        $('#otpUpdateModal').modal('hide');
+                        formVerified = true; 
+                        $('#myInfoForm').submit(); 
+                    }, 1000);
+                } else {
+                    $('#otp_status_msg').text(resp.message).addClass('text-danger');
+                    $btn.prop('disabled', false).text('Verify & Update');
+                }
+            },
+            error: function() {
+                $('#otp_status_msg').text('Verification failed. Try again.').addClass('text-danger');
+                $btn.prop('disabled', false).text('Verify & Update');
+            }
+        });
+    });
+
+    $("#otp_input_update").on("input", function() {
+        this.value = this.value.replace(/[^0-9]/g, '');
+    });
+    // --- OTP LOGIC END ---
 
 });
 </script>
