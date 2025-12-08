@@ -36,15 +36,16 @@ try {
     $mail->isSMTP();
     $mail->Host       = 'smtp.gmail.com';
     $mail->SMTPAuth   = true;
-    $mail->Username   = 'vilorianino06@gmail.com'; 
-    $mail->Password   = 'nwoo mirg zpcd acwb'; // <--- PUT YOUR APP PASSWORD HERE
+    $mail->Username   = 'brgy.pinagkawitan@gmail.com'; 
+    $mail->Password   = 'nksu acfe xgyj hdpu'; // <--- PUT YOUR APP PASSWORD HERE
     $mail->SMTPSecure = 'tls';
     $mail->Port       = 587;
+    
 
     $mail->setFrom('vilorianino06@gmail.com', 'Barangay System');
     $mail->addAddress($receiverEmail);
     $mail->isHTML(true);
-    $mail->Subject = 'Your Verification Code';
+    $mail->Subject = 'Brgy. Pinagkawitan Portal';
     $mail->Body    = "<h3>Your OTP is: $otp</h3><p>Valid for 5 minutes.</p>";
 
     $mail->send();
