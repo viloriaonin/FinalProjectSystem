@@ -17,13 +17,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($_POST['action'] === 'send_otp') {
         $contact = trim($_POST['contact']);
         
-        // Basic validation
+        // 1. Basic format validation
         if(empty($contact) || strlen($contact) != 11 || substr($contact, 0, 2) != "09") {
             echo json_encode(['status' => 'error', 'message' => 'Invalid PH mobile number format. Format: 09xxxxxxxxx']);
             exit;
         }
 
-        // Generate OTP
+        // 2. [NEW] Check if number is ALREADY REGISTERED in Database
+        // This prevents sending OTPs to numbers that already have accounts.
+        try {
+            $stmt = $pdo->prepare("SELECT user_id FROM users WHERE contact_number = :contact");
+            $stmt->execute(['contact' => $contact]);
+            if ($stmt->rowCount() > 0) {
+                echo json_encode(['status' => 'error', 'message' => 'This phone number is already registered. Please login instead.']);
+                exit; // Stop execution here
+            }
+        } catch (PDOException $e) {
+            echo json_encode(['status' => 'error', 'message' => 'Database Error checking number.']);
+            exit;
+        }
+
+        // 3. Generate OTP
         $otp = rand(100000, 999999);
         
         // Save to Session
@@ -36,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $api_number = $contact; 
         $message = "Your Verification Code is: $otp";
 
-        // Send via cURL
+        // 4. Send via cURL
         $data = [
             'user' => $sms_user,
             'api_token' => $sms_token,
@@ -117,8 +131,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 exit;
             }
 
-            // 2. Insert new user
-            // CHANGE: Default to 'applicant' because a new user ID cannot be in residence_information yet.
+            // 2. Double check contact number (Security measure)
+            $stmt = $pdo->prepare("SELECT user_id FROM users WHERE contact_number = :contact");
+            $stmt->execute(['contact' => $contact_number]);
+            
+            if ($stmt->rowCount() > 0) {
+                echo json_encode(['status' => 'errorContact', 'message' => 'This phone number is already registered.']);
+                exit;
+            }
+
+            // 3. Insert new user
             $user_type = 'applicant'; 
             
             $sql = "INSERT INTO users (username, password, user_type, contact_number) VALUES (:username, :password, :type, :contact)";
@@ -147,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 // --- 2. CHECK LOGIN STATE ---
 if (isset($_SESSION['user_id']) && isset($_SESSION['user_type'])) {
-    // Redirect logic: Ensure your dashboard pages allow 'applicant' type or add a specific case for them
+    // Redirect logic
     $redirect = ($_SESSION['user_type'] == 'admin') ? 'admin/dashboard.php' : 'resident/dashboard.php';
     echo "<script>window.location.href='$redirect';</script>";
     exit;
@@ -367,9 +389,12 @@ $(document).ready(function(){
 
   // 1. Send OTP
   $('#btnGetOtp, #btnResendOtp').on('click', function(){
+    // Check if the button is already disabled (just in case)
+    if ($(this).is(':disabled')) return;
+
     var contact = $('#add_contact_number').val().trim();
     
-    // Basic JS validation (Ensures 11 digits starting with 09)
+    // Basic JS validation
     if (contact.length !== 11 || !contact.startsWith('09')) {
       Swal.fire({icon:'warning', title:'Invalid Number', text:'Please enter a valid 11-digit PH mobile number (09xxxxxxxxx).', confirmButtonColor: '#000'});
       return;
@@ -392,6 +417,7 @@ $(document).ready(function(){
           $('#btnGetOtp').prop('disabled', true);
           startResendCountdown();
         } else {
+          // Display the backend error (e.g., "Phone number already registered")
           Swal.fire({icon:'error', title:'Error', text: resp.message || 'Failed to send OTP.', confirmButtonColor: '#000'});
         }
       },
@@ -419,9 +445,13 @@ $(document).ready(function(){
         if (resp.status === 'verified') {
           Swal.fire({icon:'success', title:'Verified!', text:'You may now complete your registration.', confirmButtonColor: '#000', timer: 1500, showConfirmButton: false});
           
+          // Enable Register Button
           $('#btnRegister').prop('disabled', false).removeClass('btn-black').addClass('btn-success');
+          // Hide OTP Section
           $('#otpSection').slideUp();
+          // Change "Get OTP" button to "Verified" and Disable it
           $('#btnGetOtp').text('Verified').removeClass('btn-outline-dark').addClass('btn-success');
+          $('#btnGetOtp').prop('disabled', true); 
         } else {
           Swal.fire({icon:'error', title:'Invalid Code', text: resp.message, confirmButtonColor: '#000'});
         }
@@ -460,7 +490,7 @@ $(document).ready(function(){
             text:'You can now login or register another.', 
             confirmButtonColor: '#000'
           }).then(function(){
-            window.location.reload(); // <--- FIXED: Reloads the current page
+            window.location.reload(); 
           });
         } else {
             Swal.fire({icon:'error', title:'Error', text: resp.message || 'Registration failed.', confirmButtonColor: '#000'});
