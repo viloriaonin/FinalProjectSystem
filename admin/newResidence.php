@@ -454,11 +454,8 @@ try {
                         <label>How long as resident?</label>
                         <select name="add_residency_length" class="form-control force-upper">
                             <option disabled selected>SELECT</option>
-                            <option value="LESS THAN 1 YEAR">LESS THAN 1 YEAR</option>
-                            <option value="1-5 YEARS">1-5 YEARS</option>
-                            <option value="5-10 YEARS">5-10 YEARS</option>
-                            <option value="10+ YEARS">10+ YEARS</option>
-                            <option value="SINCE BIRTH">SINCE BIRTH</option>
+                            <option value="LESS THAN 6 MONTHS">LESS THAN 6 MONTHS</option>
+                            <option value="MORE THAN 6 MONTHS">MORE THAN 6 MONTHS</option>
                         </select>
                      </div>
 
@@ -467,7 +464,7 @@ try {
                         <input type="number" class="form-control" name="add_residence_since" id="add_residence_since" placeholder="E.G. 2010">
                      </div>
                      <div class="col-md-4 form-group">
-                        <label>Years of Living (Auto)</label>
+                        <label>Years of Living</label>
                         <input type="number" class="form-control" name="add_years_of_living" id="add_years_of_living" placeholder="E.G. 10">
                      </div>
                  </div>
@@ -495,9 +492,9 @@ try {
                                 <th>Name</th>
                                 <th style="width:130px;">Birthday</th>
                                 <th style="width:80px;">Age</th>
-                                <th>Grade</th>
                                 <th>Occupation</th>
-                                <th>Highest Education</th>
+                                <th>Educational Attainment</th>
+                                <th>Civil Status</th>
                                 <th style="width: 5%;">Action</th>
                             </tr>
                         </thead>
@@ -565,18 +562,18 @@ $(document).ready(function(){
     $('#add_mothers_bday').change(function(){ $('#add_mothers_age').val(calculateAge($(this).val())); });
 
     // --- RESIDENCY LOGIC ---
-    $('#add_residence_since').on('input', function(){
-        var startYear = parseInt($(this).val());
-        var currentYear = new Date().getFullYear();
-        if(startYear && startYear <= currentYear) { $('#add_years_of_living').val(currentYear - startYear); }
-        else { $('#add_years_of_living').val(''); }
-    });
-    $('#add_years_of_living').on('input', function(){
-        var years = parseInt($(this).val());
-        var currentYear = new Date().getFullYear();
-        if(years) { $('#add_residence_since').val(currentYear - years); }
-        else { $('#add_residence_since').val(''); }
-    });
+    // $('#add_residence_since').on('input', function(){
+    //     var startYear = parseInt($(this).val());
+    //     var currentYear = new Date().getFullYear();
+    //     if(startYear && startYear <= currentYear) { $('#add_years_of_living').val(currentYear - startYear); }
+    //     else { $('#add_years_of_living').val(''); }
+    // });
+    // $('#add_years_of_living').on('input', function(){
+    //     var years = parseInt($(this).val());
+    //     var currentYear = new Date().getFullYear();
+    //     if(years) { $('#add_residence_since').val(currentYear - years); }
+    //     else { $('#add_residence_since').val(''); }
+    // });
 
     // --- CHILDREN TABLE LOGIC ---
     $('#add_children_0_59').change(function(){
@@ -611,9 +608,11 @@ $(document).ready(function(){
         html += '<td><input type="text" name="add_sibling_name[]" class="form-control form-control-sm force-upper" placeholder="NAME"></td>';
         html += '<td><input type="date" name="add_sibling_bday[]" class="form-control form-control-sm"></td>';
         html += '<td><input type="number" name="add_sibling_age[]" class="form-control form-control-sm" placeholder="AGE" readonly></td>';
-        html += '<td><input type="text" name="add_sibling_grade[]" class="form-control form-control-sm force-upper" placeholder="GRADE"></td>';
         html += '<td><input type="text" name="add_sibling_occupation[]" class="form-control form-control-sm force-upper" placeholder="JOB"></td>';
-        html += '<td><select name="add_sibling_educ[]" class="form-control form-control-sm force-upper"><option>ELEMENTARY</option><option>HIGH SCHOOL</option><option>COLLEGE</option><option>NONE</option></select></td>';
+        html += '<td><select name="add_sibling_educ[]" class="form-control form-control-sm force-upper"><option>ELEMENTARY</option><option>HIGH SCHOOL</option><option>COLLEGE</option><option>NONE</option></select></td>';o
+         html += '<td><select name="add_sibling_civil[]" class="form-control form-control-sm force-upper"><option>SINGLE</option><option>MARRIED</option><option>WIDOWED</option></select></td>';
+        
+        
         html += '<td><button type="button" class="btn btn-danger btn-xs removeRow"><i class="fas fa-trash"></i></button></td>';
         html += '</tr>';
         $('#siblingsTable tbody').append(html);

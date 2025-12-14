@@ -264,7 +264,7 @@ try {
                         <input type="search" name="last_name" id="last_name" class="form-control"> 
                   </div>
                 </div>
-                <div class="col-sm-4">
+                <!-- <div class="col-sm-4">
                   <div class="input-group mb-3">
                     <div class="input-group-prepend">
                       <span class="input-group-text bg-indigo">VOTERS</span>
@@ -332,7 +332,7 @@ try {
                         <option value="NO">NO</option>
                       </select>
                   </div>
-                </div>
+                </div> -->
                 <div class="col-sm-4">
                   <div class="input-group mb-3">
                     <div class="input-group-prepend">

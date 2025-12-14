@@ -94,7 +94,7 @@ try {
   .card { background-color: #343a40; color: white; }
   .nav-link { color: #fff !important; }
   .nav-link:hover { background-color: #3f474e; }
-  .form-control, textarea { background-color: #343a40 !important; border: 1px solid #6c757d !important; color: white !important; }
+  .form-control, textarea { background-color: #343a40 !important; border: 1px solid #6c757d !important; color: white !important; resize: none; }
 </style>
 
 <div class="modal fade" id="showStatusRequestModal" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog">
@@ -233,7 +233,7 @@ try {
                 </div>
             </div>
             
-            <div class="card collapsed-card bg-danger mt-2">
+            <!-- <div class="card collapsed-card bg-danger mt-2">
               <div class="card-header">
                 <h3 class="card-title">Debug Data (Verify request_for here)</h3>
                 <div class="card-tools"><button type="button" class="btn btn-tool" data-card-widget="collapse"><i class="fas fa-plus"></i></button></div>
@@ -241,7 +241,7 @@ try {
               <div class="card-body" style="background: black; color: lime; font-family: monospace;">
                 <pre><?php print_r($form_data); ?></pre>
               </div>
-            </div>
+            </div> -->
             <div class="row mt-3">
               <div class="col-sm-12">
                 <div class="form-group">
@@ -261,15 +261,26 @@ try {
       </div>
 
       <div class="modal-footer d-flex justify-content-between" style="background-color: #343a40; border-top: 1px solid #4b545c;">
-        <?php if(isset($row['status']) && $row['status'] == 'Pending'){ ?>
-           <div id="actionButtons" class="d-flex w-100">
-               <button type="button" class="btn btn-outline-danger btn-flat elevation-1 px-4 mr-auto rejectRequest font-weight-bold"><i class="fas fa-times mr-1"></i> REJECT</button>
-               <button type="submit" class="btn btn-success btn-flat elevation-1 px-4 font-weight-bold" id="btnApprove"><i class="fas fa-check mr-1"></i> APPROVE</button>
-           </div>
-        <?php } ?>
-        <a href="generate_document.php?id=<?= $certificate_id ?>" target="_blank" class="btn btn-primary btn-block elevation-2 font-weight-bold" id="btnGenerate" style="<?= (isset($row['status']) && $row['status'] == 'Approved') ? 'display:block;' : 'display:none;' ?>"><i class="fas fa-print mr-2"></i> GENERATE DOCUMENT</a>
-        <button type="button" class="btn btn-secondary text-sm" data-dismiss="modal" id="btnClose" style="<?= (isset($row['status']) && $row['status'] == 'Pending') ? 'display:none;' : 'display:block;' ?>">Close</button>
-      </div>
+    <?php if(isset($row['status']) && $row['status'] == 'Pending'){ ?>
+       <div id="actionButtons" class="d-flex w-100">
+           <button type="button" class="btn btn-outline-danger btn-flat elevation-1 px-4 mr-auto rejectRequest font-weight-bold"><i class="fas fa-times mr-1"></i> REJECT</button>
+           <button type="submit" class="btn btn-success btn-flat elevation-1 px-4 font-weight-bold" id="btnApprove"><i class="fas fa-check mr-1"></i> APPROVE</button>
+       </div>
+    <?php } ?>
+    
+    <?php 
+        // Logic: If status is Approved, show "REGENERATE", otherwise "GENERATE"
+        // When first approved via AJAX, it shows "GENERATE" (because this PHP block ran before approval).
+        // When reopening the modal later, it shows "REGENERATE".
+        $btn_label = (isset($row['status']) && $row['status'] == 'Approved') ? 'REGENERATE DOCUMENT' : 'GENERATE DOCUMENT';
+    ?>
+
+    <a href="generate_document.php?id=<?= $certificate_id ?>" target="_blank" class="btn btn-primary btn-block elevation-2 font-weight-bold" id="btnGenerate" style="<?= (isset($row['status']) && $row['status'] == 'Approved') ? 'display:block;' : 'display:none;' ?>">
+        <i class="fas fa-print mr-2"></i> <?= $btn_label ?>
+    </a>
+
+    <button type="button" class="btn btn-secondary text-sm" data-dismiss="modal" id="btnClose" style="<?= (isset($row['status']) && $row['status'] == 'Pending') ? 'display:none;' : 'display:block;' ?>">Close</button>
+</div>
 
       </form>
     </div>

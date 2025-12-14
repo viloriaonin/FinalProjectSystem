@@ -165,11 +165,11 @@ try {
         $sib_names = $_POST['add_sibling_name'];
         $sib_ages = $_POST['add_sibling_age'];
         $sib_bdays = $_POST['add_sibling_bday'];
-        $sib_grades = $_POST['add_sibling_grade'];
+        $sib_grades = $_POST['add_sibling_civil'];
         $sib_educs = $_POST['add_sibling_educ'];
         $sib_occs  = $_POST['add_sibling_occupation']; // New
 
-        $sql_sib = "INSERT INTO resident_siblings (resident_id, name, age, birthday, grade, education, occupation) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        $sql_sib = "INSERT INTO resident_siblings (resident_id, name, age, birthday, civil_status, education, occupation) VALUES (?, ?, ?, ?, ?, ?, ?)";
         $stmt_sib = $pdo->prepare($sql_sib);
 
         for ($i = 0; $i < count($sib_names); $i++) {
@@ -227,7 +227,7 @@ try {
     // =========================================================
     // STEP 7: SEND SMS CREDENTIALS
     // =========================================================
-    $sms_message = "Welcome to Barangay Pinagkawitan! You have been successfully registered.\n\n";
+    $sms_message = "Welcome to Barangay Pinagkawitan! You have been successfully added as a resident.\n\n";
     $sms_message .= "Your Login Credentials:\n";
     $sms_message .= "Username: " . $generated_username . "\n";
     $sms_message .= "Pass: " . $generated_password . "\n\n";

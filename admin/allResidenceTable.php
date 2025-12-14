@@ -41,7 +41,7 @@ try {
     // --- 2. BUILD QUERY ---
     // We select from residence_information ONLY.
     // NOTE: Removed "WHERE archive = 'NO'" because 'archive' column doesn't exist.
-    $sqlBase = " FROM residence_information WHERE 1=1 "; 
+    $sqlBase = " FROM residence_information WHERE status = 'Active' ";
     $params = [];
 
     // Apply Filters

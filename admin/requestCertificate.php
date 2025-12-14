@@ -52,6 +52,11 @@ try {
         margin-bottom: 10px;
     }
 
+    /* Hides the search filter for DataTables */
+.dataTables_filter {
+    display: none !important;
+}
+
     /* Search & Length Inputs */
     .dataTables_wrapper .dataTables_filter input,
     .dataTables_wrapper .dataTables_length select {
@@ -261,8 +266,8 @@ try {
         "pagingType": "simple_numbers",
         
         "language": {
-             "search": "_INPUT_",
-             "searchPlaceholder": "Search records...",
+            //  "search": "_INPUT_",
+            //  "searchPlaceholder": "Search records...",
              "lengthMenu": "Show _MENU_ entries",
              "info": "Showing _START_ to _END_ of _TOTAL_ entries",
              "paginate": {

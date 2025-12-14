@@ -1,4 +1,5 @@
 <?php
+// unArchiveResidence.php
 include_once '../db_connection.php';
 session_start();
 
@@ -19,42 +20,55 @@ if (isset($_POST['resident_id'])) {
             throw new Exception("This resident ID ($id) already exists in the active list. Cannot restore.");
         }
 
-        // --- FIX FOR ERROR 1452 (Foreign Key) ---
-        // Check if the 'user_id' in the archive actually exists in the 'users' table.
-        // If the user account was deleted, we must set user_id to NULL before restoring.
-        
-        // A. Get the user_id from the archive
-        $stmtGetUid = $pdo->prepare("SELECT user_id FROM archivedResidence WHERE resident_id = :id");
-        $stmtGetUid->execute([':id' => $id]);
-        $archivedRow = $stmtGetUid->fetch(PDO::FETCH_ASSOC);
+        // 3. FETCH DATA from Archive
+        $stmtFetch = $pdo->prepare("SELECT * FROM archivedResidence WHERE resident_id = :id");
+        $stmtFetch->execute([':id' => $id]);
+        $row = $stmtFetch->fetch(PDO::FETCH_ASSOC);
 
-        if ($archivedRow && !empty($archivedRow['user_id'])) {
-            $uid = $archivedRow['user_id'];
-            
-            // B. Check if this user_id exists in the main users table
-            // Note: Adjust 'user_id' to 'id' if your users table primary key is named 'id'
+        if (!$row) {
+            throw new Exception("Resident record not found in archive.");
+        }
+
+        // --- FIX FOREIGN KEY (User ID) ---
+        if (!empty($row['user_id'])) {
+            $uid = $row['user_id'];
             $stmtCheckUser = $pdo->prepare("SELECT user_id FROM users WHERE user_id = :uid"); 
             $stmtCheckUser->execute([':uid' => $uid]);
 
+            // If user no longer exists, set user_id to NULL to prevent error
             if ($stmtCheckUser->rowCount() == 0) {
-                // C. User is missing! Break the link by setting it to NULL in the archive first
-                $updateNull = $pdo->prepare("UPDATE archivedResidence SET user_id = NULL WHERE resident_id = :id");
-                $updateNull->execute([':id' => $id]);
+                $row['user_id'] = null;
             }
         }
-        // ----------------------------------------
+        // ---------------------------------
 
-        // 3. Copy data FROM Archive TO Main Table
-        $sqlCopy = "INSERT INTO residence_information SELECT * FROM archivedResidence WHERE resident_id = :id";
-        $stmtCopy = $pdo->prepare($sqlCopy);
-        $stmtCopy->execute([':id' => $id]);
+        // --- PREPARE DATA FOR MAIN TABLE ---
+        
+        // A. Force STATUS to 'Active' so it shows up in the table
+        $row['status'] = 'Active';
 
-        // 4. Delete from Archive Table
+        // B. Handle 'residence_since' Format (Date vs Year)
+        // The main table expects an INT (Year), but archive might have a DATE.
+        if (isset($row['residence_since']) && !is_numeric($row['residence_since'])) {
+             // Extract just the year from the date string
+             $row['residence_since'] = date('Y', strtotime($row['residence_since']));
+        }
+
+        // 4. DYNAMIC INSERT (Matches columns perfectly)
+        $columns = array_keys($row);
+        $columnList = implode(", ", $columns);
+        $placeholders = ":" . implode(", :", $columns);
+
+        $sqlInsert = "INSERT INTO residence_information ($columnList) VALUES ($placeholders)";
+        $stmtInsert = $pdo->prepare($sqlInsert);
+        $stmtInsert->execute($row);
+
+        // 5. Delete from Archive Table
         $sqlDelete = "DELETE FROM archivedResidence WHERE resident_id = :id";
         $stmtDelete = $pdo->prepare($sqlDelete);
         $stmtDelete->execute([':id' => $id]);
 
-        // 5. Commit changes
+        // 6. Commit changes
         $pdo->commit();
 
         echo json_encode(['status' => 'success', 'message' => 'Resident restored successfully.']);
