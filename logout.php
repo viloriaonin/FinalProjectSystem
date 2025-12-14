@@ -25,6 +25,7 @@ if(isset($_SESSION['user_id'])) {
         $username = $row_user['username'] ?? 'Unknown';
         $status_activity_log = 'logout';
 
+        date_default_timezone_set('Asia/Manila');
         // 4. Insert Activity Log (Using PDO)
         $date_activity = date("j-n-Y g:i A"); 
         $message = $user_type_log . ': ' . $username . ' | LOGOUT';

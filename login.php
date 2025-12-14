@@ -172,7 +172,7 @@ try {
                     <div class="card card-login">
                         <div class="card-body p-5 text-center">
                             
-                            <img src="assets/dist/img/<?= !empty($image) ? $image : 'logo_1763225398.jpg'; ?>" alt="logo" class="img-circle login-logo-img">
+                            <img src="assets/logo/<?= !empty($image) ? $image : 'logo_1763225398.jpg'; ?>" alt="logo" class="img-circle login-logo-img">
                             
                             <h3 class="login-title mb-1">Barangay Portal</h3>
                             <p class="text-muted mb-4">Sign in to start your session</p>
@@ -182,7 +182,7 @@ try {
                                     <div class="input-group-prepend">
                                         <span class="input-group-text"><i class="fas fa-user"></i></span>
                                     </div>
-                                    <input type="text" id="username" name="username" class="form-control" placeholder="Username or Resident ID">
+                                    <input type="text" id="username" name="username" class="form-control" placeholder="Enter your Username">
                                 </div>
                             </div>
 
@@ -191,7 +191,7 @@ try {
                                     <div class="input-group-prepend">
                                         <span class="input-group-text"><i class="fas fa-lock"></i></span>
                                     </div>
-                                    <input type="password" id="password" name="password" class="form-control" placeholder="Password" style="border-right: none;">
+                                    <input type="password" id="password" name="password" class="form-control" placeholder="Enter Password" style="border-right: none;">
                                     <div class="input-group-append">
                                         <span class="input-group-text bg-white" style="border-left: none; cursor: pointer;">
                                             <a href="#" class="text-dark"><i class="fas fa-eye-slash" aria-hidden="true"></i></a>

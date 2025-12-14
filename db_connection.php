@@ -3,7 +3,7 @@
 // Define database credentials
 define("DB_USER", 'root');
 define("DB_PASSWORD", '');
-define("DB_NAME", 'barangy');
+define("DB_NAME", 'barangay');
 define("DB_HOST", 'localhost');
 
 try {
