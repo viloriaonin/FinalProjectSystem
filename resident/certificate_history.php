@@ -255,10 +255,10 @@ try {
             <div class="text-center py-5 text-muted"><i class="fas fa-spinner fa-spin mr-2"></i> Loading data...</div>
         </div>
       </div>
-      <div class="modal-footer">
+      <!-- <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
         <button type="button" class="btn btn-cancel" id="confirmCancelBtn" style="display:none;">Cancel Request</button>
-      </div>
+      </div> -->
     </div>
   </div>
 </div>

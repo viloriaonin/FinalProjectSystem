@@ -367,7 +367,7 @@ if(isset($_SESSION['user_id']) && isset($pdo)){
         <div class="profile-info">
             <strong><?= isset($first_name_user) ? htmlspecialchars($first_name_user) : 'User' ?></strong>
             
-            <div class="resident-id-badge">RESIDENT ID: <?= $display_res_id ?></div>
+            
             
             <div class="d-block">
                 <div class="status-text" style="color: <?= $verified_color ?>;">
@@ -423,25 +423,24 @@ if(isset($_SESSION['user_id']) && isset($pdo)){
         
         <?php
         // Brand Logo Logic
-        $brand_src = $menu_base . 'assets/logo/logo.png';
+        $brand_src = $menu_base . 'assets/logo/logo_1763225398.jpg';
         if (isset($image_path) && !empty($image_path)) {
             $brand_src = $image_path;
         } elseif (isset($image) && !empty($image)) {
             if (strpos($image, 'assets/') !== false || strpos($image, '/') === 0 || strpos($image, 'http') === 0) {
                 $brand_src = $image;
             } else {
-                $brand_src = $menu_base . 'assets/logo/' . ltrim($image, '/');
+                $brand_src = $menu_base . 'assets/logo/logo_1763225398.jpg' . ltrim($image, '/');
             }
         }
         ?>
         <a href="#" class="navbar-brand">
             <img src="<?= $brand_src ?>" alt="Logo" class="brand-image">
-            <span class="d-none d-sm-inline"><?= isset($barangay) ? $barangay : 'Barangay Portal' ?></span>
-            <span class="d-sm-none">Portal</span>
+            
+            <span class="font-weight-bold ml-2">Barangay Portal</span>
         </a>
     </div>
 </nav>
-
 <script>
 document.addEventListener('DOMContentLoaded', function(){
     

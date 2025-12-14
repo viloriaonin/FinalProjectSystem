@@ -331,6 +331,13 @@ function sel($key, $val, $arr) { return (isset($arr[$key]) && $arr[$key] == $val
       .btn-outline-warning:hover { background: #f39c12; color: #fff; }
       .locked-state { text-align: center; padding: 60px 20px; }
       input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.6); cursor: pointer; }
+
+      /* Fix for Read-only inputs in Dark Mode */
+.form-control:read-only, .form-control[readonly] {
+    background-color: var(--input-bg) !important;
+    color: var(--text-main) !important;
+    opacity: 1; 
+}
   </style>
 </head>
 

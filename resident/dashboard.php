@@ -414,9 +414,9 @@ try{
                             <h2 class="profile-name">
                                 <?= htmlspecialchars($resident_full_name) ?>
                             </h2>
-                            <div class="profile-role">
+                            <!-- <div class="profile-role">
                                 <?= ($user_type === 'applicant') ? 'Resident' : 'Resident' ?> ID: <span style="font-family: monospace;"><?= isset($resident_id) ? $resident_id : 'N/A' ?></span>
-                            </div>
+                            </div> -->
 
                             <div class="profile-status-badge <?= $badge_class ?> mt-2">
                                 <?php if($is_verified): ?>
