@@ -15,27 +15,27 @@ $reportTitle = "Master List of Residents"; // Default title
 
 try {
     // Build Query based on Filter
-    $sql = "SELECT * FROM residence_information";
+    $sql = "SELECT * FROM residence_information where status = 'Active'";
     
     switch ($filter) {
         case 'voters':
-            $sql .= " WHERE voter = 'Yes'";
+            $sql .= " AND voter = 'Yes'";
             $reportTitle = "List of Registered Voters";
             break;
         case 'non_voters':
-            $sql .= " WHERE voter = 'No'";
+            $sql .= " AND voter = 'No'";
             $reportTitle = "List of Non-Voters";
             break;
         case 'pwd':
-            $sql .= " WHERE pwd = 'Yes'";
+            $sql .= " AND pwd = 'Yes'";
             $reportTitle = "List of Persons with Disabilities (PWD)";
             break;
         case 'senior':
-            $sql .= " WHERE senior_citizen = 'Yes'";
+            $sql .= " AND senior_citizen = 'Yes'";
             $reportTitle = "List of Senior Citizens";
             break;
         case 'single_parent':
-            $sql .= " WHERE single_parent = 'Yes'";
+            $sql .= " AND single_parent = 'Yes'";
             $reportTitle = "List of Single Parents";
             break;
         default: // 'all'
@@ -198,6 +198,7 @@ try {
                 <div class="col-6 text-center">
                     <p>Prepared by:</p>
                     <br><br>
+                      <p>MR. EDDIE MENDANIA GANLIW</p>
                     <p class="font-weight-bold text-uppercase border-top d-inline-block pt-2 px-5">
                         Barangay Secretary
                     </p>
@@ -205,6 +206,7 @@ try {
                 <div class="col-6 text-center">
                     <p>Noted by:</p>
                     <br><br>
+                    <p>HON. JESUS ATIENZA</p>
                     <p class="font-weight-bold text-uppercase border-top d-inline-block pt-2 px-5">
                         Barangay Chairman
                     </p>
