@@ -1,10 +1,4 @@
-/*!
- * Flash export buttons for Buttons and DataTables.
- * 2015-2017 SpryMedia Ltd - datatables.net/license
- *
- * ZeroClipbaord - MIT license
- * Copyright (c) 2012 Joseph Huckaby
- */
+
 
 (function( factory ){
 	if ( typeof define === 'function' && define.amd ) {

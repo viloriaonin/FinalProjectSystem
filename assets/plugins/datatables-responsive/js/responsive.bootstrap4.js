@@ -1,6 +1,4 @@
-/*! Bootstrap 4 integration for DataTables' Responsive
- * ©2016 SpryMedia Ltd - datatables.net/license
- */
+
 
 (function( factory ){
 	if ( typeof define === 'function' && define.amd ) {

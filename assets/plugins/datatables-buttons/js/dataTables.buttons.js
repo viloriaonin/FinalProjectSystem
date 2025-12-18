@@ -1,6 +1,4 @@
-/*! Buttons for DataTables 1.7.0
- * ©2016-2021 SpryMedia Ltd - datatables.net/license
- */
+
 
 (function( factory ){
 	if ( typeof define === 'function' && define.amd ) {

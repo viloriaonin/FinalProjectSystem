@@ -1,7 +1,4 @@
-/*!
- * Column visibility buttons for Buttons and DataTables.
- * 2016 SpryMedia Ltd - datatables.net/license
- */
+
 
 (function( factory ){
 	if ( typeof define === 'function' && define.amd ) {
