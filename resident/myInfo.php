@@ -305,40 +305,180 @@ function sel($key, $val, $arr) { return (isset($arr[$key]) && $arr[$key] == $val
   <link rel="stylesheet" href="../assets/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="../assets/plugins/sweetalert2/css/sweetalert2.min.css">
 
-  <style>
-      /* --- PREMIUM DARK UI THEME --- */
-      :root { --bg-dark: #0F1115; --card-bg: #1C1F26; --input-bg: #0F1115; --border-color: #2D333B; --text-main: #FFFFFF; --text-muted: #9CA3AF; --accent-color: #3B82F6; --radius: 8px; }
-      body { background-color: var(--bg-dark); color: var(--text-main); font-family: 'Inter', sans-serif; }
-      .content-wrapper { background-color: var(--bg-dark) !important; }
-      .ui-card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 0; max-width: 1100px; margin: 0 auto; }
-      .ui-card-header { padding: 25px 30px; border-bottom: 1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; }
-      .ui-card-body { padding: 30px; }
-      .nav-tabs { border-bottom: 1px solid var(--border-color); margin-bottom: 30px; }
-      .nav-tabs .nav-link { color: var(--text-muted); border: none; background: transparent; padding: 12px 20px; font-weight: 500; }
-      .nav-tabs .nav-link.active { color: var(--accent-color); border-bottom: 2px solid var(--accent-color); }
-      .form-group label { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; }
-      .form-control { background-color: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 6px; height: 48px; }
-      .form-control:focus { border-color: var(--accent-color); background-color: var(--input-bg); color:white; }
-      select option { background-color: var(--card-bg); color: white; }
-      .input-group-text { background-color: #232730; border: 1px solid var(--border-color); color: var(--text-muted); }
-      .section-title { color: var(--accent-color); font-size: 1.1rem; font-weight: 600; margin-top: 15px; margin-bottom: 25px; padding-bottom: 10px; border-bottom: 1px dashed var(--border-color); }
-      .table-dark-custom { background: transparent; color: var(--text-main); }
-      .table-dark-custom th { border-bottom: 1px solid var(--border-color); color: var(--text-muted); border-top:none; }
-      .table-dark-custom td { border-top: 1px solid var(--border-color); }
-      .table-dark-custom input, .table-dark-custom select { height: 35px; font-size: 0.9rem; background: #232730; }
-      .btn-primary { background-color: var(--accent-color); border:none; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25); }
-      .btn-outline-warning { border-color: #f39c12; color: #f39c12; }
-      .btn-outline-warning:hover { background: #f39c12; color: #fff; }
-      .locked-state { text-align: center; padding: 60px 20px; }
-      input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.6); cursor: pointer; }
+ <style>
+/* === DPI-SAFE BOOTSTRAP OVERRIDES (NO LOGIC CHANGE) === */
+:root {
+    --bg-dark: #0F1115;
+    --card-bg: #1C1F26;
+    --input-bg: #0F1115;
+    --border-color: #2D333B;
+    --text-main: #FFFFFF;
+    --text-muted: #9CA3AF;
+    --accent-color: #3B82F6;
+    --radius: 8px;
+}
 
-      /* Fix for Read-only inputs in Dark Mode */
-.form-control:read-only, .form-control[readonly] {
+body {
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif;
+    font-size: clamp(14px, 1vw, 16px); /* DPI SAFE */
+}
+
+.content-wrapper {
+    background-color: var(--bg-dark) !important;
+}
+
+/* CARD — remove fixed width */
+.ui-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 0;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+.ui-card-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.ui-card-body {
+    padding: 20px;
+}
+
+/* TABS */
+.nav-tabs {
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 20px;
+}
+
+.nav-tabs .nav-link {
+    color: var(--text-muted);
+    border: none;
+    background: transparent;
+    padding: 10px 16px;
+    font-weight: 500;
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--accent-color);
+    border-bottom: 2px solid var(--accent-color);
+}
+
+/* FORMS — remove fixed heights */
+.form-group label {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.form-control {
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    border-radius: 6px;
+    height: auto;              /* KEY FIX */
+    min-height: 42px;
+    padding: .375rem .75rem;
+}
+
+.form-control:focus {
+    border-color: var(--accent-color);
+    background-color: var(--input-bg);
+    color: white;
+}
+
+.form-control:read-only,
+.form-control[readonly] {
     background-color: var(--input-bg) !important;
     color: var(--text-main) !important;
-    opacity: 1; 
+    opacity: 1;
 }
-  </style>
+
+select option {
+    background-color: var(--card-bg);
+    color: white;
+}
+
+.input-group-text {
+    background-color: #232730;
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+}
+
+/* SECTIONS */
+.section-title {
+    color: var(--accent-color);
+    font-size: 1rem;
+    font-weight: 600;
+    margin-top: 12px;
+    margin-bottom: 18px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--border-color);
+}
+
+/* TABLE */
+.table-dark-custom {
+    background: transparent;
+    color: var(--text-main);
+}
+
+.table-dark-custom th {
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-muted);
+    border-top: none;
+}
+
+.table-dark-custom td {
+    border-top: 1px solid var(--border-color);
+}
+
+.table-dark-custom input,
+.table-dark-custom select {
+    height: auto;              /* KEY FIX */
+    min-height: 34px;
+    font-size: 0.85rem;
+    background: #232730;
+}
+
+/* BUTTONS */
+.btn-primary {
+    background-color: var(--accent-color);
+    border: none;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}
+
+.btn-outline-warning {
+    border-color: #f39c12;
+    color: #f39c12;
+}
+
+.btn-outline-warning:hover {
+    background: #f39c12;
+    color: #fff;
+}
+
+/* LOCKED STATE */
+.locked-state {
+    text-align: center;
+    padding: 50px 20px;
+}
+
+/* DATE ICON */
+input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) opacity(0.6);
+    cursor: pointer;
+}
+</style>
+
 </head>
 
 <body class="hold-transition layout-top-nav">
